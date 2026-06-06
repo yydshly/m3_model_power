@@ -341,8 +341,15 @@ class CapabilityInvoker:
         if not ok:
             raise _minimax_error("lyrics-gen", error_type, status_msg, http_status or 200)
 
-        # lyrics 字段路径：优先 raw.lyrics，其次 data.lyrics
-        lyrics = raw.get("lyrics") or (raw.get("data") or {}).get("lyrics") if isinstance(raw.get("data"), dict) else None
+        # lyrics 字段路径：支持多路径解析
+        # 路径优先级：raw.lyrics > raw.data.lyrics > raw.data.text > raw.output
+        data = raw.get("data") if isinstance(raw.get("data"), dict) else None
+        lyrics = (
+            raw.get("lyrics")
+            or (data.get("lyrics") if data else None)
+            or (data.get("text") if data else None)
+            or raw.get("output")
+        )
         lyrics = lyrics or ""
 
         # lyrics 成功必须满足：base_resp.status_code==0 且 lyrics 非空

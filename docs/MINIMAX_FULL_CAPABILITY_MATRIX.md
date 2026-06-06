@@ -99,7 +99,59 @@ auth_or_token_mismatch
 
 ## TokenPlan Key 配置状态
 
-- `MINIMAX_API_KEY`: 已配置（用于 safe 验收）
-- `MINIMAX_TOKEN_PLAN_KEY`: **未配置**（native 多模态权益需此 Key）
+- `MINIMAX_API_KEY`: 已配置（SHA256 前8位和前后4位已脱敏）
+- `MINIMAX_TOKEN_PLAN_KEY`: **未配置**
 
 > TokenPlan Key 与普通 API Key 不可混用。native 多模态（tts-sync / image-t2i / music-gen 等）权益由 TokenPlan Key 提供，普通 API Key 仅能访问 chat 类能力。
+
+---
+
+## Native Key 对照矩阵（2026-06-06 probe）
+
+> 脚本：`backend/scripts/probe_model_level_support.py --scope low-cost`
+> probe 范围：tts-sync(speech-02-turbo) / image-t2i(image-01) / music-gen(music-2.6) / lyrics-gen
+
+### API Key vs TokenPlan Key 对照结果
+
+| 能力 | 模型 | API Key result | TokenPlan Key result | 诊断 |
+|---|---|---|---|---|
+| tts-sync | speech-02-turbo | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
+| image-t2i | image-01 | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
+| music-gen | music-2.6 | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
+| lyrics-gen | — | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
+
+### 对照结论
+
+| 场景 | 结论 | 状态 |
+|---|---|---|
+| API Key 1004，TokenPlan Key 成功 | native 多模态需要 TokenPlan Key | `token_plan_required` |
+| API Key 成功，TokenPlan Key 1004 | native 多模态当前走普通 API Key，权限需确认 | `api_key_required` |
+| 两者都 1004 | 账号权限、Key、套餐权益或账户余额仍需排查 | `both_keys_failed` |
+| TokenPlan Key 未配置 | 无法完成 TokenPlan native 多模态验收 | `token_plan_key_not_set` |
+
+**当前状态**：TokenPlan Key 未配置，所有 native 多模态 probe 返回 `auth_or_token_mismatch`，需配置 `MINIMAX_TOKEN_PLAN_KEY` 后重新验收。
+
+### 前端状态展示映射
+
+| probe_status | 前端显示 |
+|---|---|
+| `auth_or_token_mismatch` | 鉴权待排查 |
+| `token_plan_required` | 需 TokenPlan Key |
+| `api_key_required` | 需按量 API Key |
+| `both_keys_failed` | 两类 Key 均失败 |
+| `token_plan_key_not_set` | 缺少 TokenPlan Key |
+| `output_missing` | 响应解析待修正 |
+| `parser_mismatch` | 响应解析待修正 |
+
+---
+
+## lyrics-gen 多路径解析
+
+`lyrics-gen` 响应字段路径（按优先级）：
+
+1. `raw.lyrics`
+2. `raw.data.lyrics`
+3. `raw.data.text`
+4. `raw.output`
+
+如果 `base_resp.status_code == 0` 但上述路径均无歌词字段，标记为 `output_missing`，不判定 success。
