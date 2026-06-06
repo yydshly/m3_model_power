@@ -5,26 +5,21 @@
   - 解析后做引用校验：capability.category 必须存在
   - 对外只暴露不可变的 Pydantic 模型
   - FastAPI route 不直接读 YAML，统一走这里
+  - @lru_cache 保证只解析一次
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from ..contracts import CapabilitySpec, ModelSpec
+from .model_registry import ModelRegistry
+from .capability_registry import CapabilityRegistry
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent.parent.parent / "config"
-
-
-@dataclass
-class YAMLConfig:
-    """原始 YAML 解析结果（未转 Pydantic）。"""
-    categories: list[dict[str, Any]] = field(default_factory=list)
-    capabilities: list[dict[str, Any]] = field(default_factory=list)
-    models: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -37,37 +32,51 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def load_yaml_configs() -> YAMLConfig:
+def load_yaml_configs() -> dict[str, Any]:
     """加载 backend/config/capabilities.yaml 和 models.yaml，返回原始字典。"""
     caps_doc = _load_yaml(CONFIG_DIR / "capabilities.yaml")
     models_doc = _load_yaml(CONFIG_DIR / "models.yaml")
-
-    return YAMLConfig(
-        categories=caps_doc.get("categories", []),
-        capabilities=caps_doc.get("capabilities", []),
-        models=models_doc.get("models", []),
-    )
+    return {
+        "categories": caps_doc.get("categories", []),
+        "capabilities": caps_doc.get("capabilities", []),
+        "models": models_doc.get("models", []),
+    }
 
 
 def load_model_specs() -> list[ModelSpec]:
     """加载并转换为 ModelSpec 列表。"""
-    cfg = load_yaml_configs()
-    return [ModelSpec.model_validate(m) for m in cfg.models]
+    data = load_yaml_configs()
+    return [ModelSpec.model_validate(m) for m in data["models"]]
 
 
 def load_capability_specs() -> list[CapabilitySpec]:
     """加载并转换为 CapabilitySpec 列表（来自 capabilities.yaml）。
 
-    注意：capabilities.yaml 的字段与 CapabilitySpec 并非完全一一对应，
-    此处做字段映射以适配。
+    字段映射（capabilities.yaml → CapabilitySpec）：
+      id          → id
+      label       → name
+      category    → category
+      mm_path     → endpoint
+      method      → method
+      model_family → model_family  （新增）
+      protocols   → protocols      （新增）
+      streaming   → is_streaming
+      async_job  → is_async
+      multipart   → requires_upload
+      cost_level  → cost_level
+      doc_url     → doc_url
+      status      → status
     """
-    cfg = load_yaml_configs()
+    data = load_yaml_configs()
+    categories = data["categories"]
+    capabilities = data["capabilities"]
 
-    # 能力 YAML 字段 → CapabilitySpec 字段映射
-    specs: list[CapabilitySpec] = []
+    cat_ids = {c["id"] for c in categories}
     cap_ids: set[str] = set()
 
-    for raw in cfg.capabilities:
+    specs: list[CapabilitySpec] = []
+
+    for raw in capabilities:
         cap_id = raw["id"]
 
         # 引用校验
@@ -75,39 +84,18 @@ def load_capability_specs() -> list[CapabilitySpec]:
             raise ValueError(f"capability id 重复：{cap_id}")
         cap_ids.add(cap_id)
 
-        # category 引用 categories.yaml 中的 id 列表
-        cat_ids = {c["id"] for c in cfg.categories}
-        if raw.get("category") and raw["category"] not in cat_ids:
-            raise ValueError(f"capability {cap_id} 引用了不存在的 category：{raw['category']}")
+        cat = raw.get("category", "")
+        if cat and cat not in cat_ids:
+            raise ValueError(f"capability {cap_id} 引用了不存在的 category：{cat}")
 
-        # model_family 字段映射
-        model_family = raw.get("model_family") or None
-
-        # protocols 字段（capabilities.yaml 用 protocols 列表表示协议过滤）
-        protocols_raw = raw.get("protocols", [])
-        protocol = protocols_raw[0] if protocols_raw else "native"
-
-        # supported_models（来自 capabilities.yaml 逻辑 — 本轮留空，由 CapabilityRegistry 填充）
-        supported_models: list[str] = []
-
-        # endpoint = mm_path
-        endpoint = raw.get("mm_path", "")
-
-        # method
+        method_str = raw.get("method", "POST").upper()
         method_map = {"WS": "WS", "GET": "GET", "POST": "POST"}
-        method_str = raw.get("method", "POST")
-        method = method_map.get(method_str.upper(), "POST")
+        method = method_map.get(method_str, "POST")
 
-        # streaming / async
-        is_streaming = bool(raw.get("streaming", False))
-        is_async = bool(raw.get("async_job", False))
-
-        # cost_level
         cost_level_map = {"none": "none", "quota": "quota", "low": "low", "medium": "medium", "high": "high"}
         cost_level_str = raw.get("cost_level", "quota")
         cost_level = cost_level_map.get(cost_level_str, "quota")
 
-        # status
         status_map = {"implemented": "implemented", "planned": "planned", "unsupported": "unsupported"}
         status_str = raw.get("status", "planned")
         status = status_map.get(status_str, "planned")
@@ -115,14 +103,16 @@ def load_capability_specs() -> list[CapabilitySpec]:
         spec = CapabilitySpec(
             id=cap_id,
             name=raw.get("label", cap_id),
-            category=raw.get("category", ""),
-            endpoint=endpoint,
+            category=cat,
+            endpoint=raw.get("mm_path", ""),
             method=method,
-            protocol=protocol,
-            supported_models=supported_models,
+            protocol=raw.get("protocols", ["native"])[0] if raw.get("protocols") else "native",
+            model_family=raw.get("model_family") or None,
+            protocols=raw.get("protocols", []),
+            supported_models=[],
             default_model=None,
-            is_streaming=is_streaming,
-            is_async=is_async,
+            is_streaming=bool(raw.get("streaming", False)),
+            is_async=bool(raw.get("async_job", False)),
             requires_upload=bool(raw.get("multipart", False)),
             cost_level=cost_level,
             doc_url=raw.get("doc_url", ""),
@@ -131,3 +121,26 @@ def load_capability_specs() -> list[CapabilitySpec]:
         specs.append(spec)
 
     return specs
+
+
+# ── 单例缓存 ────────────────────────────────────────────────────────────────
+
+@lru_cache(maxsize=1)
+def get_model_registry() -> ModelRegistry:
+    """返回 ModelRegistry 单例（缓存）。"""
+    return ModelRegistry(load_model_specs())
+
+
+@lru_cache(maxsize=1)
+def get_capability_registry() -> CapabilityRegistry:
+    """返回 CapabilityRegistry 单例（缓存）。"""
+    return CapabilityRegistry(
+        capabilities=load_capability_specs(),
+        model_registry=get_model_registry(),
+    )
+
+
+def clear_registry_cache() -> None:
+    """清除 registry 缓存（测试/重载用）。"""
+    get_model_registry.cache_clear()
+    get_capability_registry.cache_clear()

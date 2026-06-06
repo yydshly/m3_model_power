@@ -50,6 +50,7 @@ from app.minimax_core.clients.openai import MiniMaxOpenAIClient
 from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
 from app.minimax_core.clients.native import MiniMaxNativeClient
 from app.minimax_core.clients.files import MiniMaxFilesClient
+from app.minimax_core.contracts import AssetRef
 RUNTIME_DIR = BACKEND / "runtime" / "capability_verification"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 DOCS_DIR = BACKEND.parent / "docs"
@@ -121,37 +122,6 @@ CAPABILITY_GROUPS = {
         "tts-async",
     ],
 }
-
-
-# ── HTTP 调用 ────────────────────────────────────────────────────────────────
-
-def _call(
-    method: str,
-    url: str,
-    headers: dict,
-    json_body: dict | None = None,
-    timeout: float = 30,
-) -> tuple[int, dict | None, str | None]:
-    """返回 (http_status, response_dict, error_message)。"""
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            if method == "GET":
-                resp = client.get(url, headers=headers)
-            elif method == "POST":
-                resp = client.post(url, headers=headers, json=json_body)
-            else:
-                return 400, None, f"unsupported method: {method}"
-            try:
-                data = resp.json()
-            except Exception:
-                data = None
-            return resp.status_code, data, None
-    except httpx.TimeoutException:
-        return 0, None, "timeout"
-    except httpx.ConnectError as exc:
-        return 0, None, f"connection_error: {exc}"
-    except Exception as exc:
-        return 0, None, str(exc)
 
 
 # ── 单个能力验收 ─────────────────────────────────────────────────────────────
@@ -287,111 +257,184 @@ def _verify_single(
 
 
 def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
-    """处理 medium 能力特有字段。
+    """处理 medium 能力结果，构建 AssetRef 并填充 result。
+
     语义规则：
-      - audio_returned: data.audio / data.audio_url 是否存在于响应中
-      - audio_payload_type: hex | url | unknown
-      - asset_saved: 音频/图片文件是否实际写入 runtime/assets/
+      - asset_saved:  音频/图片文件是否实际写入 runtime/assets/
       - asset_reference_saved: URL/引用是否记录（未下载文件）
+      - committed:     永远为 False（runtime 资产不提交 Git）
+
+    result 中统一新增 assets[] 字段（list[AssetRef]）。
     """
     runtime_dir = Path(__file__).resolve().parent.parent / "runtime" / "assets"
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
+    result["assets"] = []
+
     if cap_id == "tts-sync":
         result["output_type"] = "audio"
-        if data and isinstance(data, dict):
-            extra = data.get("extra_info") or {}
-            audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
-            data_dict = data.get("data") if isinstance(data.get("data"), dict) else None
-            audio_hex = data_dict.get("audio") if data_dict else None
-            result["audio_returned"] = bool(audio_hex)
-            result["audio_payload_type"] = "hex" if audio_hex else "unknown"
-            if audio_hex:
-                try:
-                    audio_bytes = bytes.fromhex(audio_hex)
-                    out_path = runtime_dir / f"tts_sync_sample.{audio_format}"
-                    out_path.write_bytes(audio_bytes)
-                    result["asset_saved"] = True
-                    result["asset_committed"] = False
-                    result["asset_path"] = str(out_path.relative_to(runtime_dir.parent.parent))
-                    result["asset_size"] = len(audio_bytes)
-                    if isinstance(extra, dict):
-                        result["audio_length"] = extra.get("audio_length")
-                        result["audio_sample_rate"] = extra.get("audio_sample_rate")
-                        result["audio_format"] = extra.get("audio_format") or audio_format
-                        result["usage_characters"] = extra.get("usage_characters")
-                    else:
-                        result["audio_format"] = audio_format
-                except Exception as e:
-                    result["asset_save_error"] = str(e)
-                    result["asset_saved"] = False
-            else:
-                result["audio_format"] = audio_format
+        if not (data and isinstance(data, dict)):
+            return
+
+        extra = data.get("extra_info") or {}
+        audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
+        data_dict = data.get("data") if isinstance(data.get("data"), dict) else None
+        audio_hex = data_dict.get("audio") if data_dict else None
+
+        if audio_hex:
+            audio_bytes = bytes.fromhex(audio_hex)
+            size_bytes = len(audio_bytes)
+            out_path = runtime_dir / f"tts_sync_sample.{audio_format}"
+            try:
+                out_path.write_bytes(audio_bytes)
+                asset_saved = True
+            except Exception as e:
+                result["asset_save_error"] = str(e)
+                asset_saved = False
+
+            ref = AssetRef(
+                type="audio",
+                format=audio_format,
+                path=str(out_path.relative_to(runtime_dir.parent.parent)) if asset_saved else None,
+                url=None,
+                size_bytes=size_bytes if asset_saved else None,
+                duration_ms=extra.get("audio_length") if isinstance(extra, dict) else None,
+                committed=False,
+            )
+            result["assets"] = [ref]
+            result["audio_returned"] = True
+            result["audio_payload_type"] = "hex"
+            result["audio_format"] = audio_format
+            result["audio_length"] = extra.get("audio_length") if isinstance(extra, dict) else None
+            result["audio_sample_rate"] = extra.get("audio_sample_rate") if isinstance(extra, dict) else None
+            result["usage_characters"] = extra.get("usage_characters") if isinstance(extra, dict) else None
+            result["asset_saved"] = asset_saved
+            result["asset_committed"] = False
+            result["asset_size"] = size_bytes if asset_saved else None
+        else:
+            result["audio_returned"] = False
+            result["audio_payload_type"] = "unknown"
+            result["audio_format"] = audio_format
 
     elif cap_id == "image-t2i":
         result["output_type"] = "image"
-        if data and isinstance(data, dict):
-            img_data = data.get("data") if isinstance(data.get("data"), dict) else None
-            image_urls = img_data.get("image_urls") if img_data else None
-            metadata = data.get("metadata") or {}
-            success_count = int(metadata.get("success_count", 0)) if metadata.get("success_count") else 0
-            failed_count = int(metadata.get("failed_count", 0)) if metadata.get("failed_count") else 0
-            result["image_urls_count"] = len(image_urls) if image_urls else 0
-            result["first_image_url_present"] = bool(image_urls and len(image_urls) > 0)
-            result["success_count"] = success_count
-            result["failed_count"] = failed_count
-            result["task_id"] = data.get("id") or data.get("trace_id")
-            result["audio_returned"] = bool(image_urls and len(image_urls) > 0)
+        if not (data and isinstance(data, dict)):
+            return
+
+        img_data = data.get("data") if isinstance(data.get("data"), dict) else None
+        image_urls = img_data.get("image_urls") if img_data else None
+        metadata = data.get("metadata") or {}
+        success_count = int(metadata.get("success_count", 0)) if metadata.get("success_count") else 0
+        failed_count = int(metadata.get("failed_count", 0)) if metadata.get("failed_count") else 0
+
+        result["image_urls_count"] = len(image_urls) if image_urls else 0
+        result["first_image_url_present"] = bool(image_urls and len(image_urls) > 0)
+        result["success_count"] = success_count
+        result["failed_count"] = failed_count
+        result["task_id"] = data.get("id") or data.get("trace_id")
+
+        if image_urls and len(image_urls) > 0:
+            first_url = image_urls[0]
+            ref = AssetRef(
+                type="image",
+                format=None,
+                path=None,
+                url=first_url,
+                size_bytes=None,
+                committed=False,
+            )
+            result["assets"] = [ref]
+            result["audio_returned"] = True
             result["audio_payload_type"] = "url"
-            if image_urls and len(image_urls) > 0:
-                result["asset_reference_saved"] = True
-                result["asset_committed"] = False
+            result["asset_saved"] = False
+            result["asset_reference_saved"] = True
+            result["asset_committed"] = False
+        else:
+            result["audio_returned"] = False
+            result["audio_payload_type"] = "unknown"
+            result["asset_saved"] = False
+            result["asset_reference_saved"] = False
 
     elif cap_id == "lyrics-gen":
         result["output_type"] = "text"
-        if data and isinstance(data, dict):
-            lyrics = data.get("lyrics") or ""
-            result["song_title"] = data.get("song_title") or ""
-            result["style_tags"] = data.get("style_tags") or ""
-            result["lyrics_preview"] = lyrics[:200] if lyrics else ""
-            result["audio_returned"] = bool(lyrics)
-            result["audio_payload_type"] = "text"
-            if lyrics:
-                result["asset_reference_saved"] = True
-                result["asset_committed"] = False
+        if not (data and isinstance(data, dict)):
+            return
+
+        lyrics = data.get("lyrics") or ""
+        result["song_title"] = data.get("song_title") or ""
+        result["style_tags"] = data.get("style_tags") or ""
+        result["lyrics_preview"] = lyrics[:200] if lyrics else ""
+        result["audio_returned"] = bool(lyrics)
+        result["audio_payload_type"] = "text"
+        # 歌词是纯文本，不走 AssetRef（AssetRef 面向二进制/URL 资产）
+        result["asset_saved"] = False
+        result["asset_reference_saved"] = bool(lyrics)
+        result["asset_committed"] = False
 
     elif cap_id == "music-gen":
         result["output_type"] = "music"
-        if data and isinstance(data, dict):
-            extra = data.get("extra_info") or {}
-            audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
-            img_data = data.get("data") if isinstance(data.get("data"), dict) else None
-            audio_url = img_data.get("audio_url") or img_data.get("music_url") if img_data else None
-            audio_hex = img_data.get("audio") if img_data else None
-            result["audio_returned"] = bool(audio_url or audio_hex)
-            result["audio_payload_type"] = "url" if audio_url else ("hex" if audio_hex else "unknown")
-            result["audio_url_present"] = bool(audio_url)
-            result["audio_hex_present"] = bool(audio_hex)
-            result["audio_format"] = audio_format
-            result["music_duration"] = extra.get("music_duration") if isinstance(extra, dict) else None
-            result["music_sample_rate"] = extra.get("music_sample_rate") if isinstance(extra, dict) else None
-            result["bitrate"] = extra.get("bitrate") if isinstance(extra, dict) else None
-            # 保存 hex 音频到磁盘
-            if audio_hex and not audio_url:
-                try:
-                    audio_bytes = bytes.fromhex(audio_hex)
-                    out_path = runtime_dir / f"music_gen_sample.{audio_format}"
-                    out_path.write_bytes(audio_bytes)
-                    result["asset_saved"] = True
-                    result["asset_committed"] = False
-                    result["asset_path"] = str(out_path.relative_to(runtime_dir.parent.parent))
-                    result["asset_size"] = len(audio_bytes)
-                except Exception as e:
-                    result["asset_save_error"] = str(e)
-                    result["asset_saved"] = False
-            elif audio_url:
-                result["asset_reference_saved"] = True
-                result["asset_committed"] = False
+        if not (data and isinstance(data, dict)):
+            return
+
+        extra = data.get("extra_info") or {}
+        audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
+        img_data = data.get("data") if isinstance(data.get("data"), dict) else None
+        audio_url = img_data.get("audio_url") or img_data.get("music_url") if img_data else None
+        audio_hex = img_data.get("audio") if img_data else None
+
+        result["audio_returned"] = bool(audio_url or audio_hex)
+        result["audio_payload_type"] = "url" if audio_url else ("hex" if audio_hex else "unknown")
+        result["audio_url_present"] = bool(audio_url)
+        result["audio_hex_present"] = bool(audio_hex)
+        result["audio_format"] = audio_format
+        result["music_duration"] = extra.get("music_duration") if isinstance(extra, dict) else None
+        result["music_sample_rate"] = extra.get("music_sample_rate") if isinstance(extra, dict) else None
+        result["bitrate"] = extra.get("bitrate") if isinstance(extra, dict) else None
+
+        if audio_url:
+            ref = AssetRef(
+                type="audio",
+                format=audio_format,
+                path=None,
+                url=audio_url,
+                size_bytes=None,
+                duration_ms=extra.get("music_duration") if isinstance(extra, dict) else None,
+                committed=False,
+            )
+            result["assets"] = [ref]
+            result["asset_saved"] = False
+            result["asset_reference_saved"] = True
+            result["asset_committed"] = False
+        elif audio_hex:
+            audio_bytes = bytes.fromhex(audio_hex)
+            size_bytes = len(audio_bytes)
+            out_path = runtime_dir / f"music_gen_sample.{audio_format}"
+            try:
+                out_path.write_bytes(audio_bytes)
+                asset_saved = True
+            except Exception as e:
+                result["asset_save_error"] = str(e)
+                asset_saved = False
+                size_bytes = None
+
+            ref = AssetRef(
+                type="audio",
+                format=audio_format,
+                path=str(out_path.relative_to(runtime_dir.parent.parent)) if asset_saved else None,
+                url=None,
+                size_bytes=size_bytes,
+                duration_ms=extra.get("music_duration") if isinstance(extra, dict) else None,
+                committed=False,
+            )
+            result["assets"] = [ref]
+            result["asset_saved"] = asset_saved
+            result["asset_reference_saved"] = False
+            result["asset_committed"] = False
+            result["asset_size"] = size_bytes
+        else:
+            result["asset_saved"] = False
+            result["asset_reference_saved"] = False
+
 
 
 def _check_response_shape(cap_id: str, data) -> bool:

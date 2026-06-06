@@ -56,14 +56,20 @@ class CapabilitySpec(BaseModel):
     """
     id: str = Field(..., description="唯一标识，前后端路由也走它")
     name: str = Field(..., description="中文名（capabilities.yaml label）")
-    category: str = Field(..., description="能力分类 id")
+    category: str = Field(..., description="能力分类 id（chat/voice/vision/music/files/models）")
     endpoint: str = Field(..., description="上游 MiniMax 路径，如 /v1/chat/completions")
     method: Literal["GET", "POST", "WS"] = Field(default="POST")
     protocol: Literal["openai", "anthropic", "responses", "native"] = Field(
         default="native")
+    model_family: str | None = Field(
+        default=None,
+        description="关联模型族：chat/speech/image/video/music；用于按 family 过滤模型")
+    protocols: list[str] = Field(
+        default_factory=list,
+        description="协议列表，用于过滤模型下拉，如 [openai], [anthropic], [responses]")
     supported_models: list[str] = Field(
         default_factory=list,
-        description="支持该能力的模型 id 列表；空表示不限制模型族")
+        description="支持该能力的模型 id 列表；空表示按 family 自动推断")
     default_model: str | None = Field(default=None)
     is_streaming: bool = Field(default=False)
     is_async: bool = Field(default=False, description="是否长任务（提交→轮询→下载）")
