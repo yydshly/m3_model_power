@@ -11,14 +11,17 @@ export function StatusBadge({ status }: { status: CapabilityStatus }) {
   return <span className={`inline-block px-2 py-0.5 text-xs rounded border ${s.cls}`}>{s.label}</span>
 }
 
-export function TierBadge({ tier }: { tier: 'flagship' | 'highspeed' | 'standard' | 'legacy' }) {
-  const map = {
+export function TierBadge({ tier }: { tier: 'flagship' | 'highspeed' | 'standard' | 'hd' | 'turbo' | 'legacy' | 'deprecated' }) {
+  const map: Record<string, { label: string; cls: string }> = {
     flagship: { label: '旗舰', cls: 'bg-indigo-100 text-indigo-700' },
     highspeed: { label: '极速档', cls: 'bg-emerald-100 text-emerald-700' },
     standard: { label: '标准', cls: 'bg-sky-100 text-sky-700' },
+    hd: { label: 'HD', cls: 'bg-purple-100 text-purple-700' },
+    turbo: { label: 'Turbo', cls: 'bg-orange-100 text-orange-700' },
     legacy: { label: '旧版', cls: 'bg-slate-100 text-slate-600' },
+    deprecated: { label: '废弃', cls: 'bg-red-100 text-red-700' },
   }
-  const s = map[tier]
+  const s = map[tier] ?? { label: tier, cls: 'bg-slate-100 text-slate-600' }
   return <span className={`inline-block px-1.5 py-0.5 text-[10px] rounded ${s.cls}`}>{s.label}</span>
 }
 

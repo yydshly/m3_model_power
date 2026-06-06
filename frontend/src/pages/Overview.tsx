@@ -29,6 +29,10 @@ export default function Overview() {
     unsupported: registry.capabilities.filter((c) => c.status === 'unsupported').length,
     models: registry.models.filter((m) => m.enabled).length,
     quota: registry.models.filter((m) => m.enabled && m.quota_eligible).length,
+    // 4-layer model status
+    officialCurrent: registry.models.filter((m) => m.official_current).length,
+    liveAvailable: registry.models.filter((m) => m.live_available === true).length,
+    legacyHidden: registry.models.filter((m) => m.enabled && !m.official_current).length,
   }
 
   return (
@@ -72,6 +76,19 @@ export default function Overview() {
           )}
         </div>
       </section>
+
+      {/* 4-layer model status */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">模型状态</h2>
+          <div className="grid grid-cols-4 gap-3">
+            <ModelStat label="官方当前" value={stats.officialCurrent} sub="official_current" tone="emerald" />
+            <ModelStat label="实际可用" value={stats.liveAvailable} sub="live=true 已验收" tone="indigo" />
+            <ModelStat label="本地配置" value={stats.models} sub="含历史兼容" tone="slate" />
+            <ModelStat label="历史/隐藏" value={stats.legacyHidden} sub="deprecated/legacy" tone="amber" />
+          </div>
+        </section>
+      )}
 
       {regErr && <div className="mt-6 text-sm text-red-600">无法加载能力图谱：{regErr}</div>}
 
@@ -127,6 +144,22 @@ function Stat({ label, value, tone = 'slate' }: { label: string; value: number; 
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className={`text-2xl font-semibold ${toneCls[tone]}`}>{value}</div>
       <div className="text-xs text-slate-500 mt-1">{label}</div>
+    </div>
+  )
+}
+
+function ModelStat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: string }) {
+  const toneCls: Record<string, string> = {
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    slate: 'border-slate-200 bg-slate-50 text-slate-700',
+  }
+  return (
+    <div className={`rounded-lg border px-4 py-3 text-center ${toneCls[tone]}`}>
+      <div className="text-2xl font-semibold">{value}</div>
+      <div className="text-xs font-medium mt-0.5">{label}</div>
+      <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
     </div>
   )
 }

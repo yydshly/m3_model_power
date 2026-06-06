@@ -40,6 +40,7 @@ class Capability(BaseModel):
     async_job: bool = False
     multipart: bool = False
     model_family: str | None = None
+    protocols: list[str] = Field(default_factory=list)  # 用于过滤模型下拉，如 [openai], [anthropic], [responses]
     tags: list[str] = Field(default_factory=list)
     example: dict = Field(default_factory=dict)
     notes: str = ""
@@ -50,14 +51,22 @@ class Capability(BaseModel):
 class Model(BaseModel):
     id: str
     label: str
-    family: str
-    tier: Literal["flagship", "highspeed", "standard", "legacy"] = "standard"
-    multimodal: bool = False
-    context: int | None = None
-    protocols: list[str] = Field(default_factory=list)
-    capabilities: list[str] = Field(default_factory=list)
-    note: str = ""
+    family: str  # chat | speech | image | video | music
+    tier: Literal["flagship", "highspeed", "standard", "hd", "turbo", "legacy", "deprecated"] = "standard"
+    official_current: bool = False
+    live_available: bool | None = None  # null = 未验收，true/false = 验收结果
+    subscription_expected: bool | None = None
     enabled: bool = True
+    context: int | None = None
+    input_modalities: list[str] = Field(default_factory=list)  # text | image | video | audio
+    output_modalities: list[str] = Field(default_factory=list)  # text | image | video | audio | music
+    protocols: list[str] = Field(default_factory=list)  # openai | anthropic | responses | native
+    capabilities: list[str] = Field(default_factory=list)  # 显式 capability id 列表
+    supports_tools: bool = False
+    supports_thinking: bool = False
+    thinking_can_disable: bool = False
+    cost_level: Literal["quota", "low", "medium", "high", "unknown"] = "unknown"
+    note: str = ""
     quota_eligible: bool = False  # true = 走 TokenPlanPlus 共享配额，false = 单独按用量计费
 
 
@@ -78,11 +87,19 @@ class Registry(BaseModel):
         for m in self.models:
             if not m.enabled:
                 continue
+            # 显式 capability 绑定
             if cap.id in m.capabilities:
                 out.append(m)
                 continue
+            # family 匹配（model_family 存在时）
             if cap.model_family and m.family == cap.model_family:
-                out.append(m)
+                # 若 capability 声明了 protocols，只返回协议兼容的模型
+                if cap.protocols:
+                    matching = [p for p in m.protocols if p in cap.protocols]
+                    if matching:
+                        out.append(m)
+                else:
+                    out.append(m)
         return out
 
 

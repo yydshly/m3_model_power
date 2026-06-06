@@ -44,13 +44,21 @@ export type Model = {
   id: string
   label: string
   family: string
-  tier: 'flagship' | 'highspeed' | 'standard' | 'legacy'
-  multimodal: boolean
+  tier: 'flagship' | 'highspeed' | 'standard' | 'hd' | 'turbo' | 'legacy' | 'deprecated'
+  official_current: boolean
+  live_available: boolean | null
+  subscription_expected: boolean | null
+  enabled: boolean
   context: number | null
+  input_modalities: string[]
+  output_modalities: string[]
   protocols: string[]
   capabilities: string[]
+  supports_tools: boolean
+  supports_thinking: boolean
+  thinking_can_disable: boolean
+  cost_level: 'quota' | 'low' | 'medium' | 'high' | 'unknown'
   note: string
-  enabled: boolean
   quota_eligible: boolean
 }
 

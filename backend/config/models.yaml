@@ -1,251 +1,655 @@
 # MiniMax 模型清单 —— 工作台所有"模型下拉"都从这里取。
 #
 # 字段：
-#   id              上游 model 字段实际值（API 调用直接用它）
-#   label           UI 显示名
-#   family          chat | speech | image | video | music
-#   capabilities    显式声明这个模型支持哪些 capability id；不写则按 family 自动匹配
-#   tier            flagship | highspeed | standard | legacy
-#                     ★ highspeed = TokenPlanPlus 极速档专属变体，走共享配额
-#   quota_eligible  true=走 TokenPlanPlus 配额；false=单独按 token 计费
-#                     ★ 这是订阅"极速版"的关键字段：调用 -highspeed 才能真正"吃配额"
-#   multimodal      是否支持图像/视频输入（仅 chat）
-#   context         最大上下文长度
-#   protocols       [openai, anthropic, responses]
-#   note            UI 提示文案
-#   enabled         false 则不显示
+#   id                  上游 model 字段实际值（API 调用直接用它）
+#   label               UI 显示名
+#   family              chat | speech | image | video | music
+#   tier                flagship | highspeed | standard | hd | turbo | legacy | deprecated
+#   official_current    官方当前文档是否列出该模型
+#   live_available      真实 API /v1/models 或 /anthropic/v1/models 是否返回（null=未验收）
+#   subscription_expected  用户订阅套餐是否覆盖该模型
+#   enabled             前端默认显示（false 则隐藏，可归入"历史兼容模型"折叠区）
+#   context             最大上下文长度（仅 chat 系列）
+#   input_modalities   输入模态：[text] | [text, image, video]
+#   output_modalities   输出模态：[text] | [text, image, video, audio, music]
+#   protocols           [openai] | [anthropic] | [openai, anthropic] | [openai, anthropic, responses]
+#   capabilities        显式声明这个模型支持哪些 capability id；空则按 family 自动匹配
+#   supports_tools      是否支持工具调用
+#   supports_thinking   是否支持 thinking block
+#   thinking_can_disable thinking 是否可关闭
+#   cost_level           quota | low | medium | high | unknown
+#   note                UI 提示文案
+#
+# 重要原则：
+#   official_current ≠ live_available ≠ subscription_expected，三类状态独立维护。
 
 models:
-  # ===================== 对话 / LLM =====================
 
-  # 极速档 —— TokenPlanPlus 月度 12 亿+ 配额覆盖
-  # 注意：highspeed 后缀只在文档明确列出的型号上加，不要从其他型号外推。
-  - id: MiniMax-M2.7-highspeed
-    label: MiniMax M2.7 (极速档)
-    family: chat
-    tier: highspeed
-    quota_eligible: true
-    multimodal: false
-    context: 245760
-    protocols: [openai]
-    note: ★ 极速档下的 M2.7 变体，走 TokenPlanPlus 共享配额（用户在 docs 中确认存在）。
-    enabled: true
+  # ===================== 对话 / LLM — 官方当前 =====================
+  # 官方文档：https://platform.minimaxi.com/docs/api-reference/text-anthropic-api
 
-  # 标准档 —— 按 token 单独计费，不吃极速档配额
   - id: MiniMax-M3
     label: MiniMax M3
     family: chat
     tier: flagship
-    quota_eligible: false
-    multimodal: true
-    context: 1000000
-    protocols: [openai, anthropic, responses]
-    note: 标准档 M3，按 token 单独计费。走极速档配额请用 MiniMax-M3-highspeed。
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    context: 1000000
+    input_modalities: [text, image, video]
+    output_modalities: [text]
+    protocols: [openai, anthropic, responses]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: true
+    cost_level: medium
+    note: 最新 M 系列语言模型，支持图像/视频输入；1M 上下文。
 
   - id: MiniMax-M2.7
     label: MiniMax M2.7
     family: chat
     tier: standard
-    quota_eligible: false
-    multimodal: false
-    context: 245760
-    protocols: [openai]
-    note: 标准档 M2.7，按 token 单独计费。
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: medium
+    note: 标准档 M2.7，仅文本输入。
+
+  - id: MiniMax-M2.7-highspeed
+    label: MiniMax M2.7 Highspeed
+    family: chat
+    tier: highspeed
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai, anthropic]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: quota
+    note: 极速档 M2.7，走 TokenPlanPlus 共享配额。
+
+  - id: MiniMax-M2.5
+    label: MiniMax M2.5
+    family: chat
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: medium
+    note: 标准档 M2.5，仅文本输入。
+
+  - id: MiniMax-M2.5-highspeed
+    label: MiniMax M2.5 Highspeed
+    family: chat
+    tier: highspeed
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai, anthropic]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: quota
+    note: 极速档 M2.5，走 TokenPlanPlus 共享配额。
+
+  - id: MiniMax-M2.1
+    label: MiniMax M2.1
+    family: chat
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: medium
+    note: 标准档 M2.1，仅文本输入。
+
+  - id: MiniMax-M2.1-highspeed
+    label: MiniMax M2.1 Highspeed
+    family: chat
+    tier: highspeed
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai, anthropic]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: quota
+    note: 极速档 M2.1，走 TokenPlanPlus 共享配额。
+
+  - id: MiniMax-M2
+    label: MiniMax M2
+    family: chat
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    context: 204800
+    input_modalities: [text]
+    output_modalities: [text]
+    protocols: [openai]
+    supports_tools: true
+    supports_thinking: true
+    thinking_can_disable: false
+    cost_level: medium
+    note: 标准档 M2，仅文本输入。
+
+  # ===================== 对话 / LLM — 历史兼容 =====================
 
   - id: abab6.5s-chat
     label: abab 6.5s
     family: chat
     tier: legacy
-    quota_eligible: false
-    multimodal: false
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
     context: 245760
+    input_modalities: [text]
+    output_modalities: [text]
     protocols: [openai]
-    note: 上一代旗舰，按 token 单独计费。
-    enabled: true
+    supports_tools: false
+    supports_thinking: false
+    thinking_can_disable: false
+    cost_level: unknown
+    note: 上一代旗舰，已不在官方当前文档中，保留兼容。
 
   - id: abab6.5-chat
     label: abab 6.5
     family: chat
     tier: legacy
-    quota_eligible: false
-    multimodal: false
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
     context: 8192
+    input_modalities: [text]
+    output_modalities: [text]
     protocols: [openai]
+    supports_tools: false
+    supports_thinking: false
+    thinking_can_disable: false
+    cost_level: unknown
     note: 历史版本，保留兼容。
-    enabled: true
 
   - id: abab6.5t-chat
     label: abab 6.5t
     family: chat
     tier: legacy
-    quota_eligible: false
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
     context: 8192
+    input_modalities: [text]
+    output_modalities: [text]
     protocols: [openai]
+    supports_tools: false
+    supports_thinking: false
+    thinking_can_disable: false
+    cost_level: unknown
     note: abab 6.5 变体。
-    enabled: true
 
   - id: abab6.5g-chat
     label: abab 6.5g
     family: chat
     tier: legacy
-    quota_eligible: false
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
     context: 8192
+    input_modalities: [text]
+    output_modalities: [text]
     protocols: [openai]
+    supports_tools: false
+    supports_thinking: false
+    thinking_can_disable: false
+    cost_level: unknown
     note: abab 6.5 变体。
-    enabled: true
 
-  # ===================== 语音 =====================
-  - id: speech-2.5-hd-preview
-    label: speech-2.5-hd (preview)
-    family: speech
-    tier: flagship
-    quota_eligible: false
-    note: 最新一代高保真，preview 阶段。
-    enabled: true
+  # ===================== 语音合成 — 官方当前 =====================
+  # 官方文档：https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
 
-  - id: speech-2.5-turbo-preview
-    label: speech-2.5-turbo (preview)
+  - id: speech-2.8-hd
+    label: speech-2.8-hd
     family: speech
-    tier: flagship
-    quota_eligible: false
-    note: 最新一代低延迟，preview 阶段。
+    tier: hd
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: medium
+    note: 最新一代高保真语音合成。
+
+  - id: speech-2.8-turbo
+    label: speech-2.8-turbo
+    family: speech
+    tier: turbo
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: low
+    note: 最新一代低延迟语音合成。
+
+  - id: speech-2.6-hd
+    label: speech-2.6-hd
+    family: speech
+    tier: hd
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: medium
+    note: 高保真语音合成。
+
+  - id: speech-2.6-turbo
+    label: speech-2.6-turbo
+    family: speech
+    tier: turbo
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: low
+    note: 低延迟语音合成。
 
   - id: speech-02-hd
     label: speech-02-hd
     family: speech
-    tier: standard
-    quota_eligible: false
-    note: 高保真合成，推荐用于成片/有声书。
+    tier: hd
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: medium
+    note: 高保真合成，推荐用于成片/有声书。
 
   - id: speech-02-turbo
     label: speech-02-turbo
     family: speech
-    tier: standard
-    quota_eligible: false
-    note: 低延迟优先，适合实时交互。
+    tier: turbo
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
+    cost_level: low
+    note: 低延迟优先，适合实时交互。
+
+  # ===================== 语音合成 — 历史兼容 =====================
 
   - id: speech-01-hd
     label: speech-01-hd
     family: speech
     tier: legacy
-    quota_eligible: false
-    note: 上一代高保真。
-    enabled: true
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    cost_level: unknown
+    note: 上一代高保真，已不在官方当前文档中。
 
   - id: speech-01-turbo
     label: speech-01-turbo
     family: speech
     tier: legacy
-    quota_eligible: false
-    note: 上一代低延迟。
-    enabled: true
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    cost_level: unknown
+    note: 上一代低延迟，已不在官方当前文档中。
 
   - id: speech-01-240228
     label: speech-01-240228
     family: speech
-    tier: legacy
-    quota_eligible: false
-    note: 早期版本，保留兼容。
+    tier: deprecated
+    official_current: false
+    live_available: null
+    subscription_expected: false
     enabled: false
+    input_modalities: [text]
+    output_modalities: [audio]
+    protocols: [native]
+    cost_level: unknown
+    note: 早期版本，已废弃。
 
-  # ===================== 图像 =====================
+  # ===================== 图像 — 官方当前 =====================
+  # 官方文档：https://platform.minimaxi.com/docs/api-reference/image-generation-t2i
+
   - id: image-01
     label: image-01
     family: image
     tier: flagship
-    quota_eligible: false
-    note: 文生图 / 图生图主力。
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    input_modalities: [text]
+    output_modalities: [image]
+    protocols: [native]
+    capabilities: [image-t2i, image-i2i]
+    cost_level: medium
+    note: 文生图 / 图生图主力，支持人物主体参考。
 
-  # ===================== 视频 =====================
-  - id: MiniMax-Hailuo-02
-    label: Hailuo 02
+  - id: image-01-live
+    label: image-01-live
+    family: image
+    tier: flagship
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text]
+    output_modalities: [image]
+    protocols: [native]
+    capabilities: [image-t2i, image-i2i]
+    cost_level: medium
+    note: 在 image-01 基础上额外支持多种画风设置。
+
+  # ===================== 视频 — 官方当前 =====================
+  # 官方文档：https://platform.minimaxi.com/docs/api-reference/video-generation-t2v
+
+  - id: MiniMax-Hailuo-2.3
+    label: MiniMax Hailuo 2.3
     family: video
     tier: flagship
-    quota_eligible: false
-    note: 最新视频模型，含 T2V/I2V/S2V。按时长 × 分辨率计费。
+    official_current: true
+    live_available: null
+    subscription_expected: true
     enabled: true
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
+    capabilities: [video-t2v, video-i2v, video-s2v]
+    cost_level: high
+    note: 全新视频生成模型，肢体动作、物理表现与指令遵循能力升级。
+
+  - id: MiniMax-Hailuo-2.3-Fast
+    label: MiniMax Hailuo 2.3 Fast
+    family: video
+    tier: highspeed
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
+    capabilities: [video-t2v, video-i2v, video-s2v]
+    cost_level: medium
+    note: 生成速度提升，以更高性价比兼顾画质与表现力。
+
+  - id: MiniMax-Hailuo-02
+    label: MiniMax Hailuo 02
+    family: video
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
+    capabilities: [video-t2v, video-i2v, video-s2v]
+    cost_level: high
+    note: 支持更高分辨率和更长时长。
+
+  # ===================== 视频 — 历史兼容 =====================
 
   - id: T2V-01
     label: T2V-01
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-t2v]
-    note: 上一代文生视频。
-    enabled: true
+    cost_level: unknown
+    note: 上一代文生视频，已不在官方当前文档中。
 
   - id: T2V-01-Director
     label: T2V-01-Director
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-t2v]
-    note: 文生视频导演版，含运镜指令。
-    enabled: true
+    cost_level: unknown
+    note: 文生视频导演版，含运镜指令，已不在官方当前文档中。
 
   - id: I2V-01
     label: I2V-01
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-i2v]
-    note: 上一代图生视频。
-    enabled: true
+    cost_level: unknown
+    note: 上一代图生视频，已不在官方当前文档中。
 
   - id: I2V-01-live
     label: I2V-01-live
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-i2v]
-    note: 2D 角色专用图生视频。
-    enabled: true
+    cost_level: unknown
+    note: 2D 角色专用图生视频，已不在官方当前文档中。
 
   - id: I2V-01-Director
     label: I2V-01-Director
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-i2v]
-    note: 图生视频导演版，含运镜指令。
-    enabled: true
+    cost_level: unknown
+    note: 图生视频导演版，含运镜指令，已不在官方当前文档中。
 
   - id: S2V-01
     label: S2V-01
     family: video
-    tier: standard
-    quota_eligible: false
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text, image]
+    output_modalities: [video]
+    protocols: [native]
     capabilities: [video-s2v]
-    note: 主体参考视频。
-    enabled: true
+    cost_level: unknown
+    note: 主体参考视频，已不在官方当前文档中。
 
   - id: video-01
     label: video-01
     family: video
-    tier: legacy
-    quota_eligible: false
-    note: 早期视频模型。
-    enabled: true
+    tier: deprecated
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [video]
+    protocols: [native]
+    cost_level: unknown
+    note: 早期视频模型，已废弃。
 
-  # ===================== 音乐 =====================
+  # ===================== 音乐 — 官方当前 =====================
+  # 官方文档：https://platform.minimaxi.com/docs/api-reference/music-generation
+
+  - id: music-2.6
+    label: music-2.6
+    family: music
+    tier: flagship
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-gen]
+    cost_level: medium
+    note: 最新音乐生成模型，支持输入音乐灵感和歌词，生成 AI 音乐。
+
+  - id: music-cover
+    label: music-cover
+    family: music
+    tier: flagship
+    official_current: true
+    live_available: null
+    subscription_expected: true
+    enabled: true
+    input_modalities: [text, audio]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-cover-prep]
+    cost_level: medium
+    note: 翻唱生成，从参考音频生成 AI 音乐。
+
+  - id: music-2.6-free
+    label: music-2.6-free
+    family: music
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-gen]
+    cost_level: low
+    note: 免费限速版，所有用户可用，单价更低但 RPM 也受限。
+
+  # ===================== 音乐 — 历史兼容 =====================
+
   - id: music-1.5
     label: music 1.5
     family: music
-    tier: flagship
-    quota_eligible: false
-    note: 音乐生成主力。
-    enabled: true
+    tier: legacy
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-gen]
+    cost_level: unknown
+    note: 上一代音乐模型，已不在官方当前文档中。
 
   - id: music-01
     label: music 01
     family: music
     tier: legacy
-    quota_eligible: false
-    note: 上一代音乐模型。
-    enabled: true
+    official_current: false
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-gen]
+    cost_level: unknown
+    note: 早期音乐模型，已不在官方当前文档中。
+
+  # ===================== 文件能力（无模型绑定）=====================
+  # 文件能力不绑定模型，capabilities.yaml 中 model_family 留空
+

@@ -65,6 +65,7 @@ capabilities:
     status: implemented
     streaming: true
     model_family: chat
+    protocols: [anthropic]
     tags: [anthropic, llm, multimodal]
     example:
       model: MiniMax-M3
@@ -83,6 +84,7 @@ capabilities:
     status: implemented
     streaming: true
     model_family: chat
+    protocols: [openai]
     tags: [openai, llm, multimodal]
     example:
       model: MiniMax-M3
@@ -103,6 +105,7 @@ capabilities:
     status: implemented
     streaming: true
     model_family: chat
+    protocols: [responses]
     tags: [responses, llm]
     example:
       model: MiniMax-M3
@@ -117,6 +120,7 @@ capabilities:
     mm_path: /v1/responses/input_tokens
     status: implemented
     model_family: chat
+    protocols: [responses]
     tags: [responses, token]
     example:
       model: MiniMax-M3
@@ -406,7 +410,7 @@ capabilities:
     cost_level: medium
     cost_note: 音乐生成按首计费。
     example:
-      model: music-1.5
+      model: music-2.6
       lyrics: "##夜空中最亮的星\n请指引我前行##"
       refer_voice: ""
       refer_instrumental: ""

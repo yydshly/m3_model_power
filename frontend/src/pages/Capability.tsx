@@ -23,8 +23,8 @@ export default function CapabilityPage() {
     if (id) {
       getModelsFor(id)
         .then((ms) => {
-          // 走配额 → 旗舰 → 标准 → 旧版排序，下拉第一个就是该用的
-          const order = { highspeed: 0, flagship: 1, standard: 2, legacy: 3 } as const
+          // 走配额 → 旗舰/HD → Turbo → 标准 → 旧版排序，下拉第一个就是该用的
+          const order: Record<string, number> = { highspeed: 0, flagship: 1, hd: 1, turbo: 2, standard: 3, legacy: 4, deprecated: 5 }
           ms.sort((a, b) => {
             if (a.quota_eligible !== b.quota_eligible) return a.quota_eligible ? -1 : 1
             return order[a.tier] - order[b.tier]
@@ -83,7 +83,7 @@ export default function CapabilityPage() {
                 <span className="font-medium">{m.label}</span>
                 <TierBadge tier={m.tier} />
                 <QuotaBadge eligible={m.quota_eligible} />
-                {m.multimodal && <span className="text-[10px] text-indigo-600">多模态</span>}
+                {(m.input_modalities?.includes('image') || m.input_modalities?.includes('video')) && <span className="text-[10px] text-indigo-600">多模态</span>}
               </span>
             ))}
           </div>
