@@ -6,7 +6,8 @@
   - 完成率
 
 聚合所有历史 probe 结果，不依赖单一 latest.json：
-  - capability_verification/latest.json（safe 级别最新运行）
+  - capability_verification/latest.json（最新运行结果）
+  - docs/MINIMAX_CAPABILITY_VERIFICATION_REPORT.md（历次验收报告，综合判断）
   - reports/tts_ws_probe_report.json（tts-ws WebSocket probe）
   - reports/model_level_probe_report.json（chat/tts-sync/image-t2i/music-gen model level）
   - Matrix 文档中明确记录的成功状态（tts-async full_async_flow, lyrics-gen medium 等）
@@ -27,7 +28,10 @@ from app.minimax_core.registry.loader import get_capability_registry
 
 
 def _load_from_latest_json() -> dict[str, dict]:
-    """从 capability_verification/latest.json 读取 safe 级别结果。"""
+    """从 capability_verification/latest.json 读取最新结果。
+
+    注意：latest.json 每次运行会被整体覆盖，不代表全量历史。
+    """
     vfile = BACKEND / "runtime" / "capability_verification" / "latest.json"
     if not vfile.exists():
         return {}
@@ -38,6 +42,37 @@ def _load_from_latest_json() -> dict[str, dict]:
         cid = r.get("capability_id")
         if cid and r.get("status") == "success":
             out[cid] = {"source": "latest.json", "status": "success", "level": r.get("level", "safe")}
+    return out
+
+
+def _load_from_verification_report() -> dict[str, dict]:
+    """从 docs/MINIMAX_CAPABILITY_VERIFICATION_REPORT.md 读取历次 success 记录。
+
+    解析 markdown 表格中 status=success 的能力，这些是经过实际 API 验证的。
+    注意：Verification Report 只记录最近一次 run 的结果，需要结合历史判断。
+    """
+    report_file = BACKEND.parent / "docs" / "MINIMAX_CAPABILITY_VERIFICATION_REPORT.md"
+    if not report_file.exists():
+        return {}
+    content = report_file.read_text(encoding="utf-8")
+
+    # 解析 markdown 表格：| capability_id | status | http | latency | ...
+    # 格式：| 能力 ID | 状态 | HTTP | 延迟(ms) | 模型 | 错误 |
+    out = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        # 跳过表头和分隔符行
+        if "能力 ID" in line or "---|---|" in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 3:
+            # parts[0] 是空（对齐）, parts[1] 是 capability ID, parts[2] 是 status
+            cap_id = parts[1].strip("` ")
+            status = parts[2].strip()
+            if cap_id and status == "success":
+                out[cap_id] = {"source": "MINIMAX_CAPABILITY_VERIFICATION_REPORT.md", "status": "success"}
     return out
 
 
@@ -75,8 +110,6 @@ def _check_matrix_doc_for_lyrics_gen() -> bool:
     if not doc.exists():
         return False
     content = doc.read_text(encoding="utf-8")
-    # lyrics-gen 在 section 5.9b 或 6.2 中标记为 medium 验收完成 / capability_level_verified
-    # 查找 lyrics-gen 条目
     return bool(
         re.search(r"`lyrics-gen`.*?(?:medium.?验收完成|capability_level_verified|success)", content, re.DOTALL)
         or re.search(r"lyrics-gen.*?验收完成", content)
@@ -99,20 +132,27 @@ def _aggregate_verified() -> dict[str, dict]:
     """从所有来源聚合已验收能力。返回 {capability_id: info}。"""
     verified = {}
 
-    # 1. latest.json (safe level)
-    verified.update(_load_from_latest_json())
+    # 1. Verification Report markdown（历次验收记录，权威来源）
+    for cid, info in _load_from_verification_report().items():
+        if cid not in verified:
+            verified[cid] = info
 
-    # 2. model_level_probe_report.json (chat/tts-sync/image-t2i/music-gen)
+    # 2. latest.json（最新运行结果，补充可能未写入报告的记录）
+    for cid, info in _load_from_latest_json().items():
+        if cid not in verified:
+            verified[cid] = info
+
+    # 3. model_level_probe_report.json（chat/tts-sync/image-t2i/music-gen）
     for cid, info in _load_from_model_level_probe().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 3. tts_ws_probe_report.json (tts-ws)
+    # 4. tts_ws_probe_report.json（tts-ws）
     for cid, info in _load_from_tts_ws_probe().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 4. Matrix 文档中明确记录的成功状态
+    # 5. Matrix 文档中明确记录的成功状态（tts-async, lyrics-gen）
     if _check_matrix_doc_for_lyrics_gen() and "lyrics-gen" not in verified:
         verified["lyrics-gen"] = {"source": "MINIMAX_FULL_CAPABILITY_MATRIX.md (section 5.9b/6.2)", "status": "success"}
 

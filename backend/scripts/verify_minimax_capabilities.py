@@ -53,6 +53,7 @@ from app.minimax_core.clients.native import MiniMaxNativeClient
 from app.minimax_core.clients.files import MiniMaxFilesClient
 from app.minimax_core.contracts import AssetRef, UnifiedErrorException, VerificationResult
 from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
+from app.config import settings
 
 # CapabilityInvoker 支持的能力列表（全量 safe + medium + tts-ws）
 _INVOKER_SUPPORTED = {
@@ -220,6 +221,7 @@ def _verify_single(
     cap_id: str,
     api_key: str,
     confirmations: dict | None = None,
+    file_id: str | None = None,
 ) -> dict:
     """使用 CapabilityInvoker 验收单个能力。"""
     confirmations = confirmations or {}
@@ -244,9 +246,17 @@ def _verify_single(
         "asset_committed": False,
     }
 
+    # multipart 上传走独立路径
+    if cap_id == "file-upload":
+        return _verify_via_multipart(cap_id, api_key, started_at, result, confirmations)
+
     # CapabilityInvoker 支持的能力走统一路径
     if cap_id in _INVOKER_SUPPORTED:
         return _verify_via_invoker(cap_id, api_key, started_at, result, confirmations)
+
+    # file-retrieve / file-content 走 files client
+    if cap_id in ("file-retrieve", "file-content"):
+        return _verify_via_files(cap_id, api_key, started_at, result, file_id)
 
     # 其余能力（models-* / high / video 等）走旧 client 路径
     return _verify_via_client(cap_id, api_key, started_at, result)
@@ -455,6 +465,135 @@ def _verify_via_client(cap_id: str, api_key: str, started_at: str, result: dict)
         _handle_medium_result(cap_id, data, result)
 
     return result
+
+
+# ── multipart 上传路径 ─────────────────────────────────────────────────────────
+
+_MULTIPART_TEST_CONTENT = b"MiniMax Token Plan file capability probe.\nThis is a safe test file.\n"
+
+
+def _verify_via_multipart(cap_id: str, api_key: str, started_at: str, result: dict, confirmations: dict) -> dict:
+    """通过 httpx multipart 上传验收 file-upload。"""
+    # RiskGate: file-upload 需要 confirm_asset_source
+    cap_op = next((c for c in _load_capabilities() if c.get("id") == cap_id), None)
+    if cap_op and not confirmations.get("confirm_asset_source"):
+        result.update({
+            "status": "risk_gate_blocked",
+            "error_message": "file-upload requires confirm_asset_source=true",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return result
+
+    # 从 capability example 中获取 purpose（file-upload 为 "retrieval"）
+    example_purpose = None
+    if cap_op and cap_op.get("example"):
+        example_purpose = cap_op["example"].get("purpose")
+
+    env = _load_env()
+    group_id = env.get("MINIMAX_GROUP_ID", "")
+    url = f"{settings.minimax_base_url}/v1/files/upload"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    params = {}
+    if group_id:
+        params["GroupId"] = group_id
+
+    t0 = time.monotonic()
+    try:
+        files = {"file": ("probe_file.txt", _MULTIPART_TEST_CONTENT, "text/plain")}
+        data: dict = {}
+        if example_purpose:
+            data["purpose"] = example_purpose
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(url, headers=headers, params=params, files=files, data=data)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        result["latency_ms"] = latency_ms
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        result["http_status"] = resp.status_code
+
+        if resp.status_code >= 400:
+            result["status"] = "failed"
+            try:
+                err_json = resp.json()
+                result["error_message"] = err_json.get("base_resp", {}).get("status_msg") or err_json.get("message") or resp.text[:200]
+            except ValueError:
+                result["error_message"] = resp.text[:200]
+            return result
+
+        json_data = resp.json()
+        base_resp = json_data.get("base_resp", {})
+        if base_resp.get("status_code") not in (None, 0, "0"):
+            result["status"] = "failed"
+            result["error_message"] = f"base_resp.status_code={base_resp.get('status_code')}: {base_resp.get('status_msg', '')}"
+            return result
+
+        # file-upload API returns {"file": {...}, "base_resp": {...}}
+        file_item = json_data.get("file", json_data)
+        result["status"] = "success"
+        result["response_shape_ok"] = True
+        result["file_id_present"] = bool(file_item.get("file_id"))
+        result["file_id"] = file_item.get("file_id")
+        result["file_size"] = file_item.get("bytes") or len(_MULTIPART_TEST_CONTENT)
+        result["mime_type"] = file_item.get("mime_type") or "text/plain"
+        return result
+
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+            "status": "failed",
+            "error_message": str(exc)[:200],
+        })
+        return result
+
+
+def _verify_via_files(cap_id: str, api_key: str, started_at: str, result: dict, file_id: str | None) -> dict:
+    """通过 MiniMaxFilesClient 验收 file-retrieve / file-content。"""
+    if not file_id:
+        result.update({
+            "status": "skipped",
+            "error_message": "file_id not provided (use --file-id)",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return result
+
+    files_client = MiniMaxFilesClient(api_key=api_key, timeout=30)
+    t0 = time.monotonic()
+    try:
+        if cap_id == "file-retrieve":
+            data = files_client.retrieve_file(file_id)
+        elif cap_id == "file-content":
+            content_bytes, ctype = files_client.retrieve_content(file_id)
+            data = {"content_length": len(content_bytes), "content_type": ctype}
+        else:
+            data = None
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        result["latency_ms"] = latency_ms
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        result["http_status"] = 200
+        result["status"] = "success"
+        result["response_shape_ok"] = True
+        result["file_id"] = file_id
+        if cap_id == "file-retrieve":
+            result["filename"] = data.get("filename") or data.get("name")
+            result["bytes"] = data.get("bytes")
+            result["purpose"] = data.get("purpose")
+        elif cap_id == "file-content":
+            result["content_present"] = True
+            result["content_length"] = data.get("content_length")
+        return result
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        err_msg = str(exc)
+        http_status = getattr(exc, "http_status", None)
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+            "http_status": http_status,
+            "status": "failed",
+            "error_message": err_msg[:200],
+        })
+        return result
 
 
 def _handle_tts_async_result(data: dict | None, result: dict) -> None:
@@ -811,6 +950,8 @@ def main() -> None:
                         help="tts-async 轮询间隔秒数（默认 2.0）")
     parser.add_argument("--capability",
                         help="只验收指定能力（如 tts-ws），与 --level 配合可精确指定单个能力")
+    parser.add_argument("--file-id",
+                        help="指定 file_id（用于 file-retrieve / file-content 验收）")
     args = parser.parse_args()
 
     # Diagnose mode
@@ -868,14 +1009,6 @@ def main() -> None:
         "poll_interval": float(args.poll_interval),
     }
 
-    # 决定调用哪些能力
-    if args.level == "safe":
-        cap_ids = CAPABILITY_GROUPS["safe"]
-    elif args.level == "medium":
-        cap_ids = CAPABILITY_GROUPS["medium"]  # 仅 medium，不包含 safe
-    else:
-        cap_ids = CAPABILITY_GROUPS["safe"] + CAPABILITY_GROUPS["medium"] + CAPABILITY_GROUPS["high"]
-
     capabilities = _load_capabilities()
     models = _load_models()
 
@@ -885,18 +1018,27 @@ def main() -> None:
     print(f"待验收能力数: {len(cap_ids)}")
     print("=" * 60)
 
+    # 链式 file_id：file-upload 成功后会将 file_id 存入此变量，供给后续 file-retrieve/file-content 使用
+    chained_file_id: str | None = args.file_id
+
     results: list[dict] = []
     for cap_id in cap_ids:
         cap_info = next((c for c in capabilities if c.get("id") == cap_id), None)
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        result = _verify_single(cap_id, api_key, confirmations)
+        result = _verify_single(cap_id, api_key, confirmations, file_id=chained_file_id)
         results.append(result)
+
+        # 如果是 file-upload 成功，提取 file_id 供后续 file-retrieve/file-content 使用
+        if cap_id == "file-upload" and result["status"] == "success" and result.get("file_id"):
+            chained_file_id = result["file_id"]
+            print(f"  (chained file_id: {chained_file_id})", end=" ")
 
         status_icon = {"success": "[OK]", "failed": "[FAIL]", "skipped": "-",
                        "unauthorized": "[WARN]", "quota_limited": "[WAIT]",
-                       "success_with_warning": "[WARN2]"}.get(result["status"], "?")
+                       "success_with_warning": "[WARN2]",
+                       "risk_gate_blocked": "[GATED]"}.get(result["status"], "?")
         print(f"{status_icon} {result['status']} ({result.get('latency_ms', '-')}ms)")
 
         if result.get("error_message"):
@@ -914,8 +1056,43 @@ def main() -> None:
     }
 
     out_path = RUNTIME_DIR / "latest.json"
+    # Merge mode: combine this run with existing latest.json (preserve cross-run history)
+    existing: dict = {}
+    if out_path.exists():
+        try:
+            with open(out_path, encoding="utf-8") as ef:
+                existing = json.load(ef)
+        except Exception:
+            existing = {}
+    merged = {r["capability_id"]: r for r in results}
+    for prev in existing.get("results", []):
+        pid = prev.get("capability_id")
+        if pid not in merged:
+            merged[pid] = prev
+    output["results"] = list(merged.values())
+    output["total"] = len(output["results"])
+    out_path = RUNTIME_DIR / "latest.json"
+    # Merge mode: combine this run with existing latest.json (preserve cross-run history)
+    existing: dict = {}
+    if out_path.exists():
+        try:
+            with open(out_path, encoding="utf-8") as ef:
+                existing = json.load(ef)
+        except Exception:
+            existing = {}
+    merged = {r["capability_id"]: r for r in results}
+    for prev in existing.get("results", []):
+        pid = prev.get("capability_id")
+        if pid not in merged:
+            merged[pid] = prev
+    output["results"] = list(merged.values())
+    output["total"] = len(output["results"])
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n[OK] 保存 {out_path.relative_to(BACKEND)}")
+    print("\r\n[OK] save " + str(out_path.relative_to(BACKEND)))
+
+
+
+
 
     md = _generate_markdown(results)
     md_path = DOCS_DIR / "MINIMAX_CAPABILITY_VERIFICATION_REPORT.md"

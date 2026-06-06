@@ -2,7 +2,7 @@
 
 > 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：修复验收记录聚合逻辑，report_scope_gap.py 从多个 JSON 来源 + Matrix 文档综合计算 verified 状态；tts-ws/tts-async/lyrics-gen 不再因 latest.json 覆盖而丢失；当前完成率 80%（16/20）；剩余 4 项均为素材型（image-i2i/file-upload/file-retrieve/file-content）。
+> 本轮更新：verify_minimax_capabilities.py 新增 file-upload multipart 上传支持、file-retrieve/file-content 验收、--file-id 参数、latest.json 合并写入（避免跨 run 覆盖）；file-upload/retrieve/content/file-list 4项全部 HTTP 200 验收成功；report_scope_gap.py 聚合源新增 Verification Report markdown；当前完成率 60%（12/20）；剩余 8 项待验收。
 
 ## 验收状态分层说明
 
@@ -42,7 +42,8 @@
 
 | 来源 | 内容 |
 |---|---|
-| `latest.json` | safe 级别最新运行（chat-*/models-*/file-list/voice-list 等 10 项） |
+| `latest.json` | 最新运行结果（merge 模式保留历史，file-upload/retrieve/content/file-list 本轮新增） |
+| `docs/MINIMAX_CAPABILITY_VERIFICATION_REPORT.md` | 历次验收 markdown 记录（chat-*/models-*/file-list/voice-list 前期成功） |
 | `model_level_probe_report.json` | chat/tts-sync/image-t2i/music-gen model-level probe |
 | `tts_ws_probe_report.json` | tts-ws WebSocket 流式 probe |
 | `MINIMAX_FULL_CAPABILITY_MATRIX.md` | tts-async (full_async_flow) 和 lyrics-gen (medium) 的权威状态记录 |
@@ -51,31 +52,31 @@
 
 ### in_scope 能力（20项）
 
-**已通过实际 Probe（16项）**：
+**已通过实际 Probe（12项）**：
 - chat-anthropic（model_level via /v1/models，4模型成功）
 - chat-openai（model_level via /v1/models，8模型成功）
-- chat-responses-create（Responses API，HTTP 200，2436ms）
-- chat-responses-tokens（Responses Token 估算，HTTP 200，296ms）
 - tts-sync（capability_level，6模型成功）
 - tts-ws（WS流式成功，924ms）
 - tts-async（full_async_flow，create→query→poll→download 全链路成功）
 - image-t2i（model_level via model_probe，2模型成功）
 - music-gen（capability_level via model_probe，音乐生成成功）
 - lyrics-gen（capability_level，无需模型，文本生成成功）
-- file-list（HTTP 200，281ms）
-- voice-list（HTTP 200，390ms）
-- models-openai-list（HTTP 200，860ms）
-- models-openai-retrieve（HTTP 200，250ms）
-- models-anthropic-list（HTTP 200，296ms）
-- models-anthropic-retrieve（HTTP 200，250ms）
+- file-upload（multipart/purpose=retrieval，HTTP 200，本轮新增）
+- file-list（HTTP 200，328ms）
+- file-retrieve（file_id 查询，HTTP 200，本轮新增）
+- file-content（file_id 内容读取，HTTP 200，本轮新增）
 
-**待验收（4项，均为素材型）**：
+**待验收（8项）**：
 - image-i2i（需参考图，requires_uploaded_asset）
-- file-upload（需上传文件，requires_uploaded_asset）
-- file-retrieve（无 probe 记录）
-- file-content（无 probe 记录）
+- chat-responses-create（Responses API，前期 safe 运行 HTTP 200，但 latest.json 被覆盖后需补录）
+- chat-responses-tokens（Responses Token 估算，前期 safe 运行 HTTP 200）
+- voice-list（音色列表，前期 safe 运行 HTTP 200）
+- models-openai-list（前期 safe 运行 HTTP 200）
+- models-openai-retrieve（前期 safe 运行 HTTP 200）
+- models-anthropic-list（前期 safe 运行 HTTP 200）
+- models-anthropic-retrieve（前期 safe 运行 HTTP 200）
 
-> 注：tts-ws/tts-async/lyrics-gen 在 latest.json 被 safe 运行覆盖后，通过 tts_ws_probe_report.json 和 Matrix 文档记录恢复为 verified。完成率以 report_scope_gap.py 多来源聚合结果（16/20=80%）为准。
+> 注：chat-responses-create/tokens、models-*、voice-list 在前几轮 safe 验收中已 HTTP 200 成功，但 latest.json 被后续运行覆盖，Verification Report 只记录最近一次 run。若需恢复这些记录，需要重新执行单个 --capability probe。
 
 ### warning_only 能力（7项）
 
@@ -545,9 +546,9 @@
 | **scope: in_scope** | **20** |
 | **scope: warning_only** | **7** |
 | **scope: out_of_scope** | **5** |
-| **in_scope 已通过 probe** | **16**（8 safe + 5 model_level + tts-ws WS + tts-async 全链路 + lyrics-gen medium） |
-| **in_scope 待验收** | **4**（均为素材型：image-i2i/file-upload/file-retrieve/file-content） |
-| **in_scope 验收完成率** | **80%**（16/20，基于多来源聚合结果） |
+| **in_scope 已通过 probe** | **12**（5 model_level + 1 WS + 2 Matrix doc + 4 file 本轮新增） |
+| **in_scope 待验收** | **8**（1 素材型 + 7 需补录 latest.json 覆盖前的成功记录） |
+| **in_scope 验收完成率** | **60%**（12/20，基于多来源聚合结果） |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |
 | normal_token_plan_test 能力数 | 20 |
@@ -571,10 +572,10 @@
 - `out_of_scope`（5 项）：视频生成，不纳入当前验收范围，不计入缺口
 
 **完成率计算**（基于 in_scope 20 项，多来源聚合）：
-- 已通过 probe：16 项（来自 latest.json + model_level_probe + tts_ws_probe + Matrix 文档记录）
-- 待验收：4 项（image-i2i/file-upload 需素材，file-content/file-retrieve 无 probe 记录）
-- 当前完成率：80%（16/20）
-- 注：tts-ws/tts-async/lyrics-gen 在 latest.json 被覆盖后仍通过 Matrix 文档和 probe 报告恢复为 verified
+- 已通过 probe：12 项（model_level_probe + tts_ws_probe + Matrix doc + file 本轮新增）
+- 待验收：8 项（image-i2i 需素材；其余 7 项前期已 HTTP 200 成功但 latest.json 被后续运行覆盖，需补录）
+- 当前完成率：60%（12/20）
+- 注：chat-responses-create/tokens、models-*、voice-list 在前期 safe 验收中已 HTTP 200 成功，但 latest.json 被覆盖；Verification Report 也只记录最近一次 run
 
 ## 9. 执行前确认门禁矩阵
 
