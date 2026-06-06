@@ -184,3 +184,43 @@ python scripts/sync_minimax_models.py
 - 所有调用通过后端 `/api/invoke/*` 代理
 - 日志中只显示 Key 前后脱敏字符（如 `sk-***abcd`），不打印完整 Key
 - `.env` 不提交到 Git（已在 `.gitignore` 中）
+
+## 项目长期定位
+
+本项目承担双重使命：
+
+### 1. MiniMax TokenPlanPlus 能力盘点与实测工作台
+
+通过 YAML 配置驱动、前端动态渲染的方式，完整展示用户订阅内所有可用 API 能力，并支持分层验收（safe / medium / high）。
+
+### 2. MiniMax 应用开发可复用能力底座
+
+`backend/app/minimax_core/` 是可供其他项目直接复用的核心模块：
+
+```python
+# 复用模型规格
+from app.minimax_core.contracts import ModelSpec, CapabilitySpec
+
+# 复用脱敏工具
+from app.minimax_core.guards import redact_key, redact_url
+
+# 复用验收结果结构
+from app.minimax_core.contracts import VerificationResult
+```
+
+**minimax_core 模块边界**：
+
+| 子模块 | 职责 |
+|---|---|
+| `contracts/specs.py` | ModelSpec、CapabilitySpec — 模型和能力规格定义 |
+| `contracts/response.py` | AssetRef、UnifiedResponse、UnifiedError — 统一响应结构 |
+| `contracts/verification.py` | VerificationResult — 验收结果结构 |
+| `guards/redaction.py` | redact_key / redact_url — 日志和响应脱敏 |
+
+minimax_core 不依赖工作台路由、前端页面或 services 层，可被其他 Python 项目直接 pip install 或复制使用。
+
+**架构原则**：
+
+- minimax_core 负责：模型注册、能力注册、协议选择、认证 header 构造、统一错误处理、统一资产处理、高成本保护、日志脱敏、验收结果结构
+- API 层（routers）只做：HTTP 入参解析、调用 core、返回 JSON、转换 HTTPException
+- scripts 负责：实际调用上游 API、解析响应、写入 runtime 报告
