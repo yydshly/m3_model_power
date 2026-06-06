@@ -1,223 +1,336 @@
-# MiniMax 能力全量覆盖矩阵
+# MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06
-> 数据来源：`backend/config/capabilities.yaml` + `backend/config/models.yaml`
-> 验收脚本：`backend/scripts/verify_minimax_capabilities.py`
+> 生成时间：2026-06-06T12:03:53Z
+> 本报告基于本地 registry 配置和已有 probe 结果生成。
 
----
+## 验收状态分层说明
 
-## Token Plan Only 验收原则
-
-本项目**默认只验收 TokenPlanPlus 极速版能力**：
-
-1. **默认 Key 是 `MINIMAX_TOKEN_PLAN_KEY`**，所有验收脚本均使用该 Key
-2. **`MINIMAX_API_KEY` 不参与默认验收**，仅在显式 `--key-source api-key` 时用于对照诊断
-3. 如果 `MINIMAX_TOKEN_PLAN_KEY` 未配置，native 多模态状态为 `token_plan_key_not_set`
-4. 之前 API Key 返回 1004 的记录仅作为诊断参考，**不作为 Token Plan 能力结论**
-5. 全量矩阵以 Token Plan Key 实测结果为唯一事实来源
-
-## Token Plan Key 配置状态（2026-06-06 更新）
-
-| Key | 配置状态 | 说明 |
+| 层级 | 状态名 | 含义 |
 |---|---|---|
-| `MINIMAX_TOKEN_PLAN_KEY` | ✅ 已配置（SHA256 前8位: `db892eeb`） | 用于 TokenPlan native 多模态验收 |
-| `MINIMAX_API_KEY` | 不存在 | Token Plan Only 模式 |
+| L1 | `official_current` | 官方当前文档中列出 |
+| L2 | `models_api_verified` | 通过 `/v1/models` 或 `/anthropic/v1/models` 发现（仅 chat 模型） |
+| L3 | `capability_level_verified` | 能力端点已实测可用，但仅测了一个模型，未逐项验证所有模型 |
+| L4 | `model_level_verified` | 具体模型已作为请求中 `model` 参数单独调用成功 |
+| — | `not_probed` | 尚未进行任何实测 |
+| — | `high_cost_pending` | 成本或风险较高，暂不执行（video / voice-clone / voice-design 等） |
+| — | `not_applicable` | 不需要模型（如 lyrics-gen / file-* / models-*） |
 
-**当前状态**：TokenPlan Key 已配置，native 多模态验收全部通过（4/4 success）。
+**重要说明**：
+- `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
+- `models_api_verified` ≠ `model_level_verified`
+- `capability_level_verified` ≠ 所有模型逐项验证
+- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
 
----
+## 1. Model Inventory Matrix
 
-## TokenPlan Native 验收结果（2026-06-06）
+共 39 个模型。
 
-### native-only 最小探针
+### 对话 / LLM
 
-| 能力 | 模型 | 结果 | 详情 |
-|---|---|---|---|
-| tts-sync | speech-02-turbo | ✅ success | base_resp.status_code=0, audio=14964B mp3 |
-| image-t2i | image-01 | ✅ success | base_resp.status_code=0, urls=1 |
-| music-gen | music-2.6 | ✅ success | base_resp.status_code=0, audio_url returned |
+| ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
+|---|---|---|---|---|---|---|---|---|---|
+| `MiniMax-M3` | flagship | ✓ | ✓ | ✓ | ✓ | 1,000,000 | text,image,video | openai,anthropic,responses | success |
+| `MiniMax-M2.7` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.7-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2.5` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.5-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2.1` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.1-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `abab6.5s-chat` | legacy | ✗ | — | ✗ | ✗ | 245,760 | text | openai | not_probed |
+| `abab6.5-chat` | legacy | ✗ | — | ✗ | ✗ | 8,192 | text | openai | not_probed |
+| `abab6.5t-chat` | legacy | ✗ | — | ✗ | ✗ | 8,192 | text | openai | not_probed |
+| `abab6.5g-chat` | legacy | ✗ | — | ✗ | ✗ | 8,192 | text | openai | not_probed |
 
-### medium 验收（CapabilityInvoker 路径）
+### 语音合成
 
-| 能力 | 结果 | error_type | 详情 |
-|---|---|---|---|
-| tts-sync | ✅ success | — | base_resp=0, audio present |
-| image-t2i | ✅ success | — | base_resp=0, image_urls non-empty |
-| lyrics-gen | ✅ success | — | base_resp=0, lyrics text returned |
-| music-gen | ✅ success | — | base_resp=0, audio_url present |
+| ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
+|---|---|---|---|---|---|---|---|---|---|
+| `speech-2.8-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-2.8-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-2.6-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-2.6-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-02-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-02-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `speech-01-hd` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
+| `speech-01-turbo` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
+| `speech-01-240228` | deprecated | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
 
-### 模型级 Probe 结果（speech 6 模型 + image 2 模型 + music-2.6）
+### 图像
 
-| 能力 | 模型数 | 成功 | 失败 |
-|---|---|---|---|
-| tts-sync | 6 (speech-2.8-hd/turbo, speech-2.6-hd/turbo, speech-02-hd/turbo) | 6 | 0 |
-| image-t2i | 2 (image-01, image-01-live) | 2 | 0 |
-| music-gen | 1 (music-2.6) | 1 | 0 |
+| ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
+|---|---|---|---|---|---|---|---|---|---|
+| `image-01` | flagship | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `image-01-live` | flagship | ✓ | — | ✓ | ✓ | — | text | native | success |
 
-**结论**：TokenPlan Plus native 多模态能力全部验收通过，无需进一步诊断。
+### 视频
 
----
+| ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
+|---|---|---|---|---|---|---|---|---|---|
+| `MiniMax-Hailuo-2.3` | flagship | ✓ | — | ✓ | ✓ | — | text,image | native | not_probed |
+| `MiniMax-Hailuo-2.3-Fast` | highspeed | ✓ | — | ✓ | ✓ | — | text,image | native | not_probed |
+| `MiniMax-Hailuo-02` | standard | ✓ | — | ✓ | ✓ | — | text,image | native | not_probed |
+| `T2V-01` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
+| `T2V-01-Director` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
+| `I2V-01` | legacy | ✗ | — | ✗ | ✗ | — | text,image | native | not_probed |
+| `I2V-01-live` | legacy | ✗ | — | ✗ | ✗ | — | text,image | native | not_probed |
+| `I2V-01-Director` | legacy | ✗ | — | ✗ | ✗ | — | text,image | native | not_probed |
+| `S2V-01` | legacy | ✗ | — | ✗ | ✗ | — | text,image | native | not_probed |
+| `video-01` | deprecated | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
 
-### ⚠️ 重要 Bug 修复：auth header 缺失
+### 音乐
 
-**问题**：上一轮 `MINIMAX_TOKEN_PLAN_KEY` 配置正确但 native API 仍返回 1004。
-**根因**：`MiniMaxBaseClient.request_json()` 方法构建 HTTP 请求时，`Authorization: Bearer <token>` header 被遗漏，导致请求无认证信息。
-**修复**：在 `base.py` 的 `request_json()` 中，将 `self.auth_header()` 的返回值合并到请求 headers 中。
-**验证**：修复后 tts-sync / image-t2i / music-gen 全部返回 `base_resp.status_code=0`。
+| ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
+|---|---|---|---|---|---|---|---|---|---|
+| `music-2.6` | flagship | ✓ | — | ✓ | ✓ | — | text | native | success |
+| `music-cover` | flagship | ✓ | — | ✓ | ✓ | — | text,audio | native | not_probed |
+| `music-2.6-free` | standard | ✓ | — | ✗ | ✗ | — | text | native | not_probed |
+| `music-cover-free` | standard | ✓ | — | ✗ | ✗ | — | text,audio | native | not_probed |
+| `music-1.5` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
+| `music-01` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
 
-### music-gen output_format=url 字段名修复
+## 2. Protocol Support Matrix
 
-**问题**：music-gen 响应中 `data.audio` 为 URL 字符串，但旧代码优先查找 `data.audio_url` / `data.music_url`。
-**修复**：新增 `audio_is_url` 检测逻辑，正确识别 `data.audio` 中的 URL。
+| model_id | openai_chat | anthropic_messages | responses | tool_use | thinking | thinking_disable | multimodal_input |
+|---|---|---|---|---|---|---|---|
+| `MiniMax-M3` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `MiniMax-M2.7` | ✓ | — | — | ✓ | ✓ | — | — |
+| `MiniMax-M2.7-highspeed` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `MiniMax-M2.5` | ✓ | — | — | ✓ | ✓ | — | — |
+| `MiniMax-M2.5-highspeed` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `MiniMax-M2.1` | ✓ | — | — | ✓ | ✓ | — | — |
+| `MiniMax-M2.1-highspeed` | ✓ | ✓ | — | ✓ | ✓ | — | — |
+| `MiniMax-M2` | ✓ | — | — | ✓ | ✓ | — | — |
+| `abab6.5s-chat` | ✓ | — | — | — | — | — | — |
+| `abab6.5-chat` | ✓ | — | — | — | — | — | — |
+| `abab6.5t-chat` | ✓ | — | — | — | — | — | — |
+| `abab6.5g-chat` | ✓ | — | — | — | — | — | — |
 
----
+## 2b. Probe Result Matrix
 
-## 重要说明：HTTP 200 ≠ MiniMax 业务成功
+| model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | output_present | error_type | last_probed_at |
+|---|---|---|---|---|---|---|---|---|---|
+| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1897.4 | True | — | 2026-06-06T11:27:14Z |
+| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 1163.7 | True | — | 2026-06-06T11:27:15Z |
+| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1340.1 | True | — | 2026-06-06T11:27:16Z |
+| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1435.8 | True | — | 2026-06-06T11:27:18Z |
+| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1014.7 | True | — | 2026-06-06T11:27:19Z |
+| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 1510.2 | True | — | 2026-06-06T11:27:20Z |
+| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1179.7 | True | — | 2026-06-06T11:27:21Z |
+| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 1844.0 | True | — | 2026-06-06T11:27:23Z |
+| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | success | 200 | 3595.2 | True | — | 2026-06-06T11:27:27Z |
+| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 2270.7 | True | — | 2026-06-06T11:27:29Z |
+| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 2596.0 | True | — | 2026-06-06T11:27:32Z |
+| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 3628.8 | True | — | 2026-06-06T11:27:35Z |
+| `speech-2.8-hd` | `tts-sync` | native | model_level | success | 200 | 920.4 | True | — | 2026-06-06T11:27:36Z |
+| `speech-2.8-turbo` | `tts-sync` | native | model_level | success | 200 | 914.1 | True | — | 2026-06-06T11:27:37Z |
+| `speech-2.6-hd` | `tts-sync` | native | model_level | success | 200 | 849.1 | True | — | 2026-06-06T11:27:38Z |
+| `speech-2.6-turbo` | `tts-sync` | native | model_level | success | 200 | 864.4 | True | — | 2026-06-06T11:27:39Z |
+| `speech-02-hd` | `tts-sync` | native | model_level | success | 200 | 862.2 | True | — | 2026-06-06T11:27:40Z |
+| `speech-02-turbo` | `tts-sync` | native | model_level | success | 200 | 877.5 | True | — | 2026-06-06T11:27:41Z |
+| `image-01` | `image-t2i` | native | model_level | success | 200 | 15112.7 | True | — | 2026-06-06T11:27:56Z |
+| `image-01-live` | `image-t2i` | native | model_level | success | 200 | 8023.5 | True | — | 2026-06-06T11:28:04Z |
+| `music-2.6` | `music-gen` | native | model_level | success | 200 | 33133.1 | True | — | 2026-06-06T11:28:37Z |
 
-MiniMax native API（tts-sync / image-t2i / lyrics-gen / music-gen / voice-list 等）使用 **HTTP 200 + 业务状态码** 双层状态体系：
+## 3. Capability Matrix
 
-```
-HTTP 200 (网络层成功)
-  └── base_resp.status_code == 0       ← 业务层真正成功
-  └── base_resp.status_code == 1004    ← 业务层失败：鉴权/Token 不匹配
-  └── base_resp.status_code == 其他    ← 业务层失败：其他错误
-```
+共 32 个能力。
 
-**验收必须检查 `base_resp.status_code`，不能仅凭 HTTP 200 判定 success。**
+| capability_id | name | category | requires_model | model_family | cost_level | status | supported_models | default_model | probe_status | probed_model | probe_scope |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `chat-anthropic` | Anthropic 兼容对话 | chat | ✓ | chat | quota | implemented | MiniMax-M3,MiniMax-M2.7-highspeed,MiniMax-M2.5-highspeed,MiniMax-M2.1-highspeed | MiniMax-M2.7-highspeed | not_probed | — | not_probed |
+| `chat-openai` | OpenAI 兼容对话 | chat | ✓ | chat | quota | implemented | MiniMax-M3,MiniMax-M2.7,MiniMax-M2.7-highspeed,MiniMax-M2.5,MiniMax-M2.5-highspeed,MiniMax-M2.1,MiniMax-M2.1-highspeed,MiniMax-M2 | MiniMax-M2.7-highspeed | not_probed | — | not_probed |
+| `chat-responses-create` | Responses API | chat | ✓ | chat | quota | implemented | MiniMax-M3 | MiniMax-M3 | not_probed | — | not_probed |
+| `chat-responses-tokens` | Responses Token 估算 | chat | ✓ | chat | quota | implemented | MiniMax-M3 | MiniMax-M3 | not_probed | — | not_probed |
+| `tts-sync` | T2A 同步 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | capability_level_verified | speech-02-turbo | capability_level |
+| `tts-ws` | T2A WebSocket 流式 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `tts-async` | T2A 异步长文本 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `voice-clone-upload-audio` | 克隆-上传音频 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `voice-clone-upload-prompt` | 克隆-上传 Prompt 文本 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `voice-clone-do` | 触发音色克隆 | voice | ✓ | — | high | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `voice-design` | 音色设计 | voice | ✓ | — | medium | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `voice-list` | 音色列表 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `voice-delete` | 删除音色 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `image-t2i` | 文生图 T2I | vision | ✓ | image | quota | implemented | image-01,image-01-live | image-01 | capability_level_verified | image-01 | capability_level |
+| `image-i2i` | 图生图 I2I | vision | ✓ | image | quota | implemented | image-01,image-01-live | image-01 | not_probed | — | not_probed |
+| `video-t2v` | 文生视频 T2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,T2V-01,T2V-01-Director | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
+| `video-i2v` | 图生视频 I2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,I2V-01,I2V-01-live,I2V-01-Director | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
+| `video-s2v` | 主体参考视频 S2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,S2V-01 | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
+| `video-query` | 视频任务查询 | vision | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `video-download` | 视频下载 | vision | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
+| `music-gen` | 音乐生成 | music | ✓ | music | medium | implemented | music-2.6,music-cover,music-2.6-free,music-cover-free,music-1.5,music-01 | music-2.6 | capability_level_verified | music-2.6 | capability_level |
+| `music-cover-prep` | 翻唱预处理 | music | ✓ | music | medium | implemented | music-2.6,music-cover,music-2.6-free,music-cover-free | music-2.6 | not_probed | — | not_probed |
+| `lyrics-gen` | 歌词生成 | music | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `file-upload` | 文件上传 | files | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `file-list` | 文件列表 | files | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `file-retrieve` | 文件详情 | files | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `file-content` | 文件内容下载 | files | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `file-delete` | 文件删除 | files | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `models-openai-list` | 模型列表 (OpenAI 协议) | models | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `models-openai-retrieve` | 模型详情 (OpenAI 协议) | models | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `models-anthropic-list` | 模型列表 (Anthropic 协议) | models | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
+| `models-anthropic-retrieve` | 模型详情 (Anthropic 协议) | models | 无需模型 | — | quota | implemented | — | — | not_applicable | — | not_applicable |
 
----
+## 4. Model-to-Capability Reverse Matrix
 
-## False Positive 修复记录
+### 对话 / LLM
 
-### 2026-06-06 修复
+**`MiniMax-M3`**: chat-anthropic, chat-openai, chat-responses-create, chat-responses-tokens
+**`MiniMax-M2.7`**: chat-openai
+**`MiniMax-M2.7-highspeed`**: chat-anthropic, chat-openai
+**`MiniMax-M2.5`**: chat-openai
+**`MiniMax-M2.5-highspeed`**: chat-anthropic, chat-openai
+**`MiniMax-M2.1`**: chat-openai
+**`MiniMax-M2.1-highspeed`**: chat-anthropic, chat-openai
+**`MiniMax-M2`**: chat-openai
+**`abab6.5s-chat`**: —
+**`abab6.5-chat`**: —
+**`abab6.5t-chat`**: —
+**`abab6.5g-chat`**: —
 
-**问题**：上一轮 `verify_minimax_capabilities.py --level medium` 显示 `4/4 success`，但实际 native API 返回：
-```
-base_resp.status_code=1004
-auth_or_token_mismatch
-```
+### 语音合成
 
-**根因**：
-1. `CapabilityInvoker._image_t2i` / `_lyrics_gen` / `_music_gen` / `_voice_list` 未检查 `base_resp.status_code`，直接返回 `UnifiedResponse(ok=True)`
-2. `verify` 脚本未防御 `response.ok=False` 的返回路径（只捕获了抛出的异常）
+**`speech-2.8-hd`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-2.8-turbo`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-2.6-hd`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-2.6-turbo`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-02-hd`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-02-turbo`**: tts-async, tts-sync, tts-ws, voice-clone-do, voice-design
+**`speech-01-hd`**: —
+**`speech-01-turbo`**: —
+**`speech-01-240228`**: —
 
-**修复内容**：
-1. `CapabilityInvoker` 新增 `parse_minimax_base_resp()` 统一解析函数
-2. `_image_t2i` / `_lyrics_gen` / `_music_gen` / `_voice_list` 全部检查 `base_resp.status_code`
-3. `UnifiedError` 数据类新增 `UnifiedErrorException` 抛出封装（`BaseModel` 无法继承 `BaseException`）
-4. `verify` 脚本防御 `response.ok=False` 路径，强制转换为 `failed`
-5. `1004` 统一归类为 `error_type=auth_or_token_mismatch`
+### 图像
 
-**验证结果**（2026-06-06 medium run）：
-| 能力 | 状态 | error_type | 实际错误 |
-|---|---|---|---|
-| tts-sync | failed | auth_or_token_mismatch | login fail: Please carry the API secret key... |
-| image-t2i | failed | auth_or_token_mismatch | login fail: Please carry the API secret key... |
-| lyrics-gen | failed | auth_or_token_mismatch | login fail: Please carry the API secret key... |
-| music-gen | failed | auth_or_token_mismatch | login fail: Please carry the API secret key... |
+**`image-01`**: image-i2i, image-t2i
+**`image-01-live`**: image-i2i, image-t2i
 
-**结论**：native 多模态（tts-sync / image-t2i / music-gen）因缺少 `MINIMAX_TOKEN_PLAN_KEY` 返回 1004 鉴权失败，不能判定为模型不可用。当前状态为 **auth_or_token_mismatch**，需配置 TokenPlan Key 才能完成验收。
+### 视频
 
----
+**`MiniMax-Hailuo-2.3`**: video-i2v, video-s2v, video-t2v
+**`MiniMax-Hailuo-2.3-Fast`**: video-i2v, video-s2v, video-t2v
+**`MiniMax-Hailuo-02`**: video-i2v, video-s2v, video-t2v
+**`T2V-01`**: video-t2v
+**`T2V-01-Director`**: video-t2v
+**`I2V-01`**: video-i2v
+**`I2V-01-live`**: video-i2v
+**`I2V-01-Director`**: video-i2v
+**`S2V-01`**: video-s2v
+**`video-01`**: —
 
-## native 能力 base_resp 状态码映射
+### 音乐
 
-| status_code | 含义 | error_type | 是否可重试 |
-|---|---|---|---|
-| 0 / "0" / null | 业务成功 | — | — |
-| 1004 | 鉴权 / Token 不匹配 | `auth_or_token_mismatch` | 否 |
-| 其他非零 | MiniMax 业务错误 | `minimax_api_error` | 否 |
+**`music-2.6`**: music-cover-prep, music-gen
+**`music-cover`**: music-cover-prep, music-gen
+**`music-2.6-free`**: music-cover-prep, music-gen
+**`music-cover-free`**: music-cover-prep, music-gen
+**`music-1.5`**: music-gen
+**`music-01`**: music-gen
 
----
+## 5. Gap Matrix
 
-## 能力 × 模型 覆盖矩阵
+### 5.1 official_current 但本地缺失
+（无）
 
-### 对话类（OpenAI / Anthropic / Responses 兼容）
+### 5.2 本地有但非 official_current（不含 legacy/deprecated）
+（无）
 
-| 能力 | 模型 | 协议 | 验证层级 |
-|---|---|---|---|
-| chat-openai | MiniMax-M3 / M2.7 / M2.5 / M2.1 等 | openai | model_level_verified |
-| chat-anthropic | MiniMax-M3 / M2.7-highspeed / M2.5-highspeed / M2.1-highspeed | anthropic | model_level_verified |
-| chat-responses-create | MiniMax-M3 | openai | capability_level_verified |
-| chat-responses-tokens | MiniMax-M3 | openai | capability_level_verified |
+### 5.3 官方 chat 模型未在 live OpenAI 中返回
+（无）
 
-### Native 多模态（需检查 base_resp.status_code）
+### 5.4 官方 chat 模型未在 live Anthropic 中返回（或协议不支持）
+- `MiniMax-M2`
+- `MiniMax-M2.7`
+- `MiniMax-M2.5`
+- `MiniMax-M2.1`
 
-| 能力 | 模型 | 验证层级 | 当前状态 | 说明 |
-|---|---|---|---|---|
-| tts-sync | speech-02-turbo 等 | capability_level_verified | **auth_or_token_mismatch** | 需 TokenPlan Key |
-| image-t2i | image-01 / image-01-live | capability_level_verified | **auth_or_token_mismatch** | 需 TokenPlan Key |
-| music-gen | music-2.6 | capability_level_verified | **auth_or_token_mismatch** | 需 TokenPlan Key |
-| lyrics-gen | — (无需模型) | capability_level_verified | **auth_or_token_mismatch** | 需 TokenPlan Key |
-| voice-list | — (无需模型) | capability_level_verified | **auth_or_token_mismatch** | 需 TokenPlan Key |
+### 5.5 无支持模型的能力（requires_model=true）
+- `voice-clone-upload-audio`
+- `voice-clone-upload-prompt`
+- `voice-list`
+- `voice-delete`
+- `video-query`
+- `video-download`
 
-### 高成本（high_cost_pending，未执行）
+### 5.6 无需模型的能力（requires_model=false）
+- `lyrics-gen`
+- `file-upload`
+- `file-list`
+- `file-retrieve`
+- `file-content`
+- `file-delete`
+- `models-openai-list`
+- `models-openai-retrieve`
+- `models-anthropic-list`
+- `models-anthropic-retrieve`
 
-| 能力 | 说明 |
+### 5.7 未验收的能力（status != implemented）
+（无）
+
+### 5.8 不适用于 /v1/models 的能力分类（file-*, models-*）
+- `file-upload`
+- `file-list`
+- `file-retrieve`
+- `file-content`
+- `file-delete`
+- `models-openai-list`
+- `models-openai-retrieve`
+- `models-anthropic-list`
+- `models-anthropic-retrieve`
+
+### 5.9 能力已验收但仅 capability_level（非 model_level）
+- `tts-sync`
+- `image-t2i`
+- `music-gen`
+
+### 5.10 模型未逐项 probe（capability_probe 且 status=unknown）
+- `speech-2.8-hd`
+- `speech-2.8-turbo`
+- `speech-2.6-hd`
+- `speech-2.6-turbo`
+- `speech-02-hd`
+- `speech-02-turbo`
+- `image-01`
+- `image-01-live`
+- `MiniMax-Hailuo-2.3`
+- `MiniMax-Hailuo-2.3-Fast`
+- `MiniMax-Hailuo-02`
+- `music-2.6`
+- `music-cover`
+
+### 5.11 高成本暂缓（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- `video-t2v`
+- `video-i2v`
+- `video-s2v`
+- `voice-clone-do`
+- `voice-design`
+- `tts-async`
+- `music-cover-prep`
+
+### 5.12 chat-openai 模型级 probe 失败
+（无）
+
+### 5.13 chat-anthropic 模型级 probe 失败
+（无）
+
+## 6. Summary Statistics
+
+| 维度 | 数量 |
 |---|---|
-| voice-clone-do | 高成本，待确认 |
-| voice-design | 高成本，待确认 |
-| video-t2v / i2v / s2v | 高成本，待确认 |
-| music-cover-prep | 高成本，待确认 |
-| tts-async | 高成本，待确认 |
+| 官方当前模型总数 | 23 |
+| 本地配置模型总数 | 39 |
+| live 可用 chat 模型数 | 8 |
+| music 模型总数（含变体） | 6 |
+| 已实测（非 legacy/deprecated）模型数 | 8 |
+| 未实测 official_current 模型数 | 15 |
+| capability_probe 待验收模型数 | 13 |
+| capability_level 验收能力数 | 3 |
+| model_level 已验收 chat 模型数（/v1/models） | 8 |
+| model_level probe 成功（本次） | 21 |
+| model_level probe 失败（本次） | 0 |
+| 能力总数 | 32 |
+| requires_model=false 能力数 | 10 |
+| file-*/models-* 能力数 | 9 |
 
 ---
-
-## TokenPlan Key 配置状态
-
-- `MINIMAX_API_KEY`: 已配置（SHA256 前8位和前后4位已脱敏）
-- `MINIMAX_TOKEN_PLAN_KEY`: **未配置**
-
-> TokenPlan Key 与普通 API Key 不可混用。native 多模态（tts-sync / image-t2i / music-gen 等）权益由 TokenPlan Key 提供，普通 API Key 仅能访问 chat 类能力。
-
----
-
-## Native Key 对照矩阵（2026-06-06 probe）
-
-> 脚本：`backend/scripts/probe_model_level_support.py --scope low-cost`
-> probe 范围：tts-sync(speech-02-turbo) / image-t2i(image-01) / music-gen(music-2.6) / lyrics-gen
-
-### API Key vs TokenPlan Key 对照结果
-
-| 能力 | 模型 | API Key result | TokenPlan Key result | 诊断 |
-|---|---|---|---|---|
-| tts-sync | speech-02-turbo | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
-| image-t2i | image-01 | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
-| music-gen | music-2.6 | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
-| lyrics-gen | — | `auth_or_token_mismatch` (1004) | `token_plan_key_not_set` | 需 TokenPlan Key |
-
-### 对照结论
-
-| 场景 | 结论 | 状态 |
-|---|---|---|
-| API Key 1004，TokenPlan Key 成功 | native 多模态需要 TokenPlan Key | `token_plan_required` |
-| API Key 成功，TokenPlan Key 1004 | native 多模态当前走普通 API Key，权限需确认 | `api_key_required` |
-| 两者都 1004 | 账号权限、Key、套餐权益或账户余额仍需排查 | `both_keys_failed` |
-| TokenPlan Key 未配置 | 无法完成 TokenPlan native 多模态验收 | `token_plan_key_not_set` |
-
-**当前状态**：TokenPlan Key 未配置，所有 native 多模态 probe 返回 `auth_or_token_mismatch`，需配置 `MINIMAX_TOKEN_PLAN_KEY` 后重新验收。
-
-### 前端状态展示映射
-
-| probe_status | 前端显示 |
-|---|---|
-| `auth_or_token_mismatch` | 鉴权待排查 |
-| `token_plan_required` | 需 TokenPlan Key |
-| `api_key_required` | 需按量 API Key |
-| `both_keys_failed` | 两类 Key 均失败 |
-| `token_plan_key_not_set` | 缺少 TokenPlan Key |
-| `output_missing` | 响应解析待修正 |
-| `parser_mismatch` | 响应解析待修正 |
-
----
-
-## lyrics-gen 多路径解析
-
-`lyrics-gen` 响应字段路径（按优先级）：
-
-1. `raw.lyrics`
-2. `raw.data.lyrics`
-3. `raw.data.text`
-4. `raw.output`
-
-如果 `base_resp.status_code == 0` 但上述路径均无歌词字段，标记为 `output_missing`，不判定 success。
+*本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*
