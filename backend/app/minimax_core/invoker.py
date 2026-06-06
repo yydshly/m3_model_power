@@ -12,9 +12,14 @@
   file-list / voice-list,
   models-openai-list / models-anthropic-list / models-openai-retrieve / models-anthropic-retrieve
 
-用法：
+用法（同步）：
     invoker = CapabilityInvoker(api_key="sk-...")
     result = invoker.invoke("tts-sync", {"model": "speech-02-turbo", ...})
+    # tts-ws 不支持 sync invoke()，请使用 invoke_async()
+
+用法（异步 / FastAPI）：
+    result = await invoker.invoke_async("tts-ws", {"model": "speech-02-turbo", ...})
+    # tts-ws 必须通过 invoke_async() 调用
 
 风险门禁：
     decision = invoker.invoke("tts-sync", {"model": "speech-02-turbo", ...},
@@ -194,7 +199,77 @@ class CapabilityInvoker:
         if capability_id == "tts-sync":
             return self._tts_sync(payload)
         if capability_id == "tts-ws":
-            return self._tts_ws(payload)
+            # tts-ws is async; sync callers should use asyncio.run(invoke_async(...)) at entry
+            raise NotImplementedCapability("tts-ws requires invoke_async() from async context")
+        if capability_id == "image-t2i":
+            return self._image_t2i(payload)
+        if capability_id == "lyrics-gen":
+            return self._lyrics_gen(payload)
+        if capability_id == "music-gen":
+            return self._music_gen(payload)
+        if capability_id == "file-list":
+            return self._file_list(payload)
+        if capability_id == "voice-list":
+            return self._voice_list(payload)
+        if capability_id == "models-openai-list":
+            return self._models_openai_list(payload)
+        if capability_id == "models-anthropic-list":
+            return self._models_anthropic_list(payload)
+        if capability_id == "models-openai-retrieve":
+            return self._models_openai_retrieve(payload)
+        if capability_id == "models-anthropic-retrieve":
+            return self._models_anthropic_retrieve(payload)
+
+        raise NotImplementedCapability(capability_id)
+
+    async def invoke_async(
+        self,
+        capability_id: str,
+        payload: dict | None = None,
+        confirmations: dict | None = None,
+    ) -> UnifiedResponse:
+        """异步统一调用入口，供 FastAPI async route 使用。
+
+        与 invoke() 逻辑一致，但 tts-ws 等 async 能力直接 await，
+        不会在已有 event loop 中调用 asyncio.run()。
+        """
+        payload = payload or {}
+        confirmations = confirmations or {}
+
+        # RiskGate 评估
+        decision = _evaluate_risk_gate(capability_id, confirmations, payload)
+        if not decision.allowed:
+            from .registry.loader import get_capability_registry
+
+            cap = get_capability_registry().by_id(capability_id)
+            cap_label = cap.name if cap else capability_id
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id=capability_id,
+                error_type="risk_gate_blocked",
+                error_code=None,
+                message=(
+                    f"Capability '{cap_label}' requires explicit confirmation before execution. "
+                    f"Required: {decision.required_confirmations}. "
+                    f"Reasons: {'; '.join(decision.blocked_reasons)}"
+                ),
+                http_status=403,
+                retryable=False,
+                redacted=True,
+            )
+
+        if capability_id == "chat-openai":
+            return self._chat_openai(payload)
+        if capability_id == "chat-anthropic":
+            return self._chat_anthropic(payload)
+        if capability_id == "chat-responses-create":
+            return self._chat_responses_create(payload)
+        if capability_id == "chat-responses-tokens":
+            return self._chat_responses_tokens(payload)
+        if capability_id == "tts-sync":
+            return self._tts_sync(payload)
+        if capability_id == "tts-ws":
+            return await self._tts_ws_async(payload)
         if capability_id == "image-t2i":
             return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
@@ -349,8 +424,10 @@ class CapabilityInvoker:
             raw=raw,
         )
 
-    def _tts_ws(self, payload: dict) -> UnifiedResponse:
-        """WebSocket 流式 TTS。
+    # ── TTS WebSocket ───────────────────────────────────────────────────────────
+
+    async def _tts_ws_async(self, payload: dict) -> UnifiedResponse:
+        """WebSocket 流式 TTS（async 版本，供 invoke_async 使用）。
 
         协议（已验证）：
           1. task_start（model / voice_setting / audio_setting，不含 text）
@@ -362,8 +439,7 @@ class CapabilityInvoker:
         失败时抛出 UnifiedErrorException。
         """
         try:
-            import asyncio as _asyncio
-            ws_result = _asyncio.run(self._native.tts_websocket(payload, timeout=60.0))
+            ws_result = await self._native.tts_websocket(payload, timeout=60.0)
         except NotImplementedError:
             raise UnifiedErrorException(
                 ok=False,

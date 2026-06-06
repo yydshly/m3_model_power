@@ -1,8 +1,8 @@
 # MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06T14:45:00Z
+> 生成时间：2026-06-06T15:10:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：tts-ws 已接入 minimax_core（MiniMaxNativeClient + CapabilityInvoker），返回 UnifiedResponse + AssetRef；probe_tts_ws.py 重构为复用 core client。
+> 本轮更新：tts-ws 已通过 invoke_async() 接入 FastAPI；CapabilityInvoker 分离 sync/async 调用边界；tts-ws WS 协议要点已文档化。
 
 ## 验收状态分层说明
 
@@ -337,7 +337,7 @@
 | `chat-responses-create` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `chat-responses-tokens` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `tts-sync` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | 消耗 TokenPlan 语音/字符额度 |
-| `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（speech-02-turbo，单轮9 chunk/13KB音频） | 消耗 TokenPlan 语音/字符额度；已用极短文本验证流式音频正常返回 |
+| `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（speech-02-turbo，9 chunk/13KB，verified_at=2026-06-06，task_started=true，task_finished=true，event_counts={task_continued:9}） | 消耗 TokenPlan 语音/字符额度；WS 协议：task_start→task_started→task_continue+task_finish→task_continued(audio hex)→task_finished；已通过 minimax_core invoke_async 验收 |
 | `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 长文本可能大量消耗额度 |
 | `voice-clone-upload-audio` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-upload-prompt` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |

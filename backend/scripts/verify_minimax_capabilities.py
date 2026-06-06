@@ -275,14 +275,25 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
 
 
 def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict, confirmations: dict) -> dict:
-    """通过 CapabilityInvoker 调用能力，主结果使用 VerificationResult 字段结构。"""
+    """通过 CapabilityInvoker 调用能力，主结果使用 VerificationResult 字段结构。
+
+    async 能力（tts-ws）：使用 asyncio.run(invoke_async()) 将 asyncio.run() 放在 CLI 入口层，
+    而不是 core invoker 内部。
+    """
     payload = _INVOKER_PAYLOADS.get(cap_id, {})
 
     invoker = CapabilityInvoker(api_key=api_key, timeout=180.0)
     t0 = time.monotonic()
 
+    # tts-ws 是原生 async 能力，在 CLI 层使用 asyncio.run() 调用 invoke_async()
+    _is_async_capability = (cap_id == "tts-ws")
+
     try:
-        response = invoker.invoke(cap_id, payload, confirmations=confirmations)
+        if _is_async_capability:
+            import asyncio as _asyncio
+            response = _asyncio.run(invoker.invoke_async(cap_id, payload, confirmations=confirmations))
+        else:
+            response = invoker.invoke(cap_id, payload, confirmations=confirmations)
         latency_ms = int((time.monotonic() - t0) * 1000)
         ended_at = datetime.now(timezone.utc).isoformat()
 
@@ -302,7 +313,7 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
             )
 
         # medium 能力特有字段（从 response.assets 统一填充）
-        is_medium = cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen")
+        is_medium = cap_id in ("tts-sync", "tts-ws", "image-t2i", "lyrics-gen", "music-gen")
 
         result.update({
             "latency_ms": latency_ms,
