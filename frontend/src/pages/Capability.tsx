@@ -533,7 +533,14 @@ export default function CapabilityPage() {
             <AsyncVideoPanel cap={cap} models={models} />
           )}
           {effectiveMode === 'invoke' && cap.has_handler && !(cap.async_job && cap.category === 'vision') && cap.id !== 'tts-ws' && (
-            <InvokePanel cap={cap} models={models} defaultPayload={cap.example} />
+            <InvokePanel
+              cap={cap}
+              models={models}
+              defaultPayload={cap.example}
+              confirmations={confirmations}
+              riskCheckResult={riskCheckResult}
+              setRiskCheckResult={setRiskCheckResult}
+            />
           )}
           {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} />}
           {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} />}

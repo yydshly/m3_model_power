@@ -148,16 +148,22 @@ export async function getModelsFor(capId: string): Promise<Model[]> {
   return r.json()
 }
 
-export type InvokeResult = { ok: true; data: unknown } | { error: string; message: string; status?: number }
+export type InvokeResult = { ok: true; data: unknown } | { error: string; message: string; status?: number; blocked_reasons?: string[]; required_confirmations?: string[]; warnings?: string[] }
 
-export async function invoke(capId: string, payload: Record<string, unknown>): Promise<InvokeResult> {
+export async function invoke(
+  capId: string,
+  payload: Record<string, unknown>,
+  confirmations?: Record<string, boolean>,
+): Promise<InvokeResult> {
+  const body: Record<string, unknown> = { payload }
+  if (confirmations) body.confirmations = confirmations
   const r = await fetch(`/api/invoke/${capId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
   const data = await r.json().catch(() => ({}))
-  if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status }
+  if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status, blocked_reasons: data.blocked_reasons, required_confirmations: data.required_confirmations, warnings: data.warnings }
   return data
 }
 

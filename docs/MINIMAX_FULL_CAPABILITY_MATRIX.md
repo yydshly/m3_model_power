@@ -596,18 +596,27 @@ Content-Type: application/json
 | `confirm_existing_task` | 我确认已提供已有任务 ID / 文件 ID |
 | `confirm_quota` | 我确认文本长度超过默认阈值，允许消耗更多额度 |
 
-### 10.5 本轮测试结论
+### 10.5 前端 UI 门禁机制
 
-| capability | 无确认时 allowed | 需要确认项 |
+1. **确认 checkbox**：Capability 页面展示所需确认项的 checkbox，与 InvokePanel 共享同一份 `confirmations` 状态
+2. **Dry Run 按钮**：未全部勾选确认项时禁用，显示"请先完成执行前确认"
+3. **真实调用按钮**：未全部勾选确认项时禁用，且对于 `requires_existing_task=true` 能力，无 `task_id`/`file_id` 时也禁用
+4. **RiskGate 结果展示**：InvokePanel 内展示 RiskGate 检查结果，包括 allowed 状态、阻断原因、需要确认项、警告
+5. **tts-async 字符数展示**：显示当前字符数、默认测试阈值、二次确认阈值、硬阻断阈值
+6. **existing_task_only 输入**：video-query / video-download 展示 `task_id`/`file_id` 输入框，自动填充 JSON body
+
+### 10.6 本轮测试结论
+
+| capability | 无确认时 Invoke 按钮 | 需要确认项 |
 |---|---|---|
-| `tts-sync` | `true` | 无 |
-| `voice-design` | `false` | `confirm_paid` |
-| `video-t2v` | `false` | `confirm_high_cost`, `confirm_long_running` |
-| `file-delete` | `false` | `confirm_destructive` |
-| `tts-async`（2000字） | `false` | `confirm_quota` |
-| `video-query`（无 task_id） | `false` | `confirm_existing_task` |
+| `tts-sync` | 默认允许 | 无 |
+| `voice-design` | 禁用（需 confirm_paid） | `confirm_paid` |
+| `video-t2v` | 禁用（需 confirm_paid + confirm_high_cost + confirm_long_running） | `confirm_high_cost`, `confirm_long_running`, `confirm_paid` |
+| `file-delete` | 禁用（需 confirm_destructive） | `confirm_destructive` |
+| `tts-async`（2000字） | 禁用（需 confirm_quota） | `confirm_quota` |
+| `video-query`（无 task_id） | 禁用（需 task_id + confirm_existing_task） | `confirm_existing_task` |
 
-**本轮仅做 dry-run / risk-check，不执行任何高成本、删除、上传、tts-async、video、voice-clone 能力。**
+**本轮真实调用按钮也接入 RiskGate 确认门禁，未确认的风险能力不会发起 invoke 请求。仅做 dry-run / risk-check，不执行任何高成本、删除、上传、tts-async、video、voice-clone 能力。**
 
 ---
 *本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*

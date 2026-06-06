@@ -25,10 +25,12 @@ curl -X POST http://localhost:8000/api/capabilities/{cap_id}/risk-check \
 ### 带确认的执行调用
 
 ```bash
-# 正式调用（RiskGate 仍会核验）
+# 正式调用（RiskGate 仍会核验，未确认的风险能力会被阻断）
 curl -X POST http://localhost:8000/api/invoke/{cap_id} \
   -H "Content-Type: application/json" \
   -d '{"payload": {}, "confirmations": {"confirm_paid": true}}'
 ```
 
 确认项包括：`confirm_paid`, `confirm_high_cost`, `confirm_destructive`, `confirm_asset_source`, `confirm_long_running`, `confirm_existing_task`, `confirm_quota`。
+
+**注意**：前端真实调用按钮也受 RiskGate 门禁控制，未满足确认项时按钮禁用。
