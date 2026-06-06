@@ -69,7 +69,7 @@ frontend/
 | 分类 | 接口 |
 |---|---|
 | 对话 | chat-anthropic / chat-openai / chat-responses-create / chat-responses-tokens（含 SSE 流式） |
-| 语音 | tts-sync / tts-ws（WS 反向代理） / tts-async / voice-list / voice-delete / voice-design / voice-clone-do |
+| 语音 | tts-sync / tts-ws（WS 反向代理，已验收） / tts-async（异步，已验收） / voice-list / voice-delete / voice-design / voice-clone-do |
 | 语音上传 | voice-clone-upload-audio / voice-clone-upload-prompt（multipart） |
 | 视觉-图像 | image-t2i / image-i2i（image-01 / image-01-live） |
 | 视觉-视频 | video-t2v / video-i2v / video-s2v / video-query / video-download（Hailuo 2.3 系列） |
@@ -87,6 +87,25 @@ frontend/
 4. 全部接收完后收到 `task_finished`
 
 **调用约定**：FastAPI async route 应使用 `await invoker.invoke_async("tts-ws", payload)`；CLI 脚本使用 `asyncio.run(invoke_async(...))` 在入口处封装。
+
+### tts-async quota guard
+
+> 已接入 `minimax_core` + `CapabilityInvoker.invoke_async()` + RiskGate quota guard
+
+字符数保护规则：
+- `<=300` 字：默认允许，无需确认
+- `301~1000` 字：warnning，不阻断
+- `>1000` 字：需 `confirm_quota=true`，否则被 RiskGate `risk_gate_blocked` 拦截
+- `>5000` 字：无 `confirm_quota=true` 硬阻断
+
+CLI 示例：
+```bash
+# 短文本验证（自动通过 RiskGate）
+python scripts/verify_minimax_capabilities.py --level medium --capability tts-async --confirm-cost
+
+# 长文本验证（需显式 --confirm-cost）
+python scripts/verify_minimax_capabilities.py --level medium --capability tts-async --confirm-cost --confirm-quota
+```
 
 ## 官方当前模型（official_current: true）
 
@@ -159,7 +178,7 @@ highspeed 档位走 TokenPlanPlus 共享配额（`cost_level: quota`）。
 - `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
 - `models_api_verified` ≠ `model_level_verified`
 - `capability_level_verified` ≠ 所有模型逐项验证
-- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / music-cover-prep）
 - 本轮已对 8 个 chat 模型完成 `chat-openai` 模型级逐项 probe，全部成功
 - `chat-anthropic` 在 `max_tokens=4` 时返回 thinking block 而非 text，探针参数需调整
 - TTS/Image/Music 非 "失败"，而是探针参数（短文本/无参考图）下未产生可检测输出

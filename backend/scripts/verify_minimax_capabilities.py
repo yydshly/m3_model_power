@@ -57,7 +57,7 @@ from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
 # CapabilityInvoker 支持的能力列表（全量 safe + medium + tts-ws）
 _INVOKER_SUPPORTED = {
     "chat-openai", "chat-anthropic", "chat-responses-create",
-    "chat-responses-tokens", "tts-sync", "tts-ws", "image-t2i",
+    "chat-responses-tokens", "tts-sync", "tts-ws", "tts-async", "image-t2i",
     "lyrics-gen", "music-gen", "file-list", "voice-list",
     "models-openai-list", "models-anthropic-list",
     "models-openai-retrieve", "models-anthropic-retrieve",
@@ -198,6 +198,7 @@ CAPABILITY_GROUPS = {
     "medium": [
         "tts-sync",
         "tts-ws",
+        "tts-async",
         "image-t2i",
         "lyrics-gen",
         "music-gen",
@@ -209,7 +210,6 @@ CAPABILITY_GROUPS = {
         "video-i2v",
         "video-s2v",
         "music-cover-prep",
-        "tts-async",
     ],
 }
 
@@ -262,6 +262,7 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
     "chat-responses-tokens":  {"model": "MiniMax-M3", "input": "Hi"},
     "tts-sync":               {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},
     "tts-ws":                 {"model": "speech-02-turbo", "text": "OK", "voice_id": "female-tianmei", "speed": 1.0, "sample_rate": 32000, "audio_format": "mp3"},
+    "tts-async":             {"model": "speech-02-turbo", "text": "你好，这是异步语音合成测试。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},
     "image-t2i":              {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},
     "lyrics-gen":             {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},
     "music-gen":              {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},
@@ -285,8 +286,8 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
     invoker = CapabilityInvoker(api_key=api_key, timeout=180.0)
     t0 = time.monotonic()
 
-    # tts-ws 是原生 async 能力，在 CLI 层使用 asyncio.run() 调用 invoke_async()
-    _is_async_capability = (cap_id == "tts-ws")
+    # tts-ws 和 tts-async 是原生 async 能力，在 CLI 层使用 asyncio.run() 调用 invoke_async()
+    _is_async_capability = (cap_id in {"tts-ws", "tts-async"})
 
     try:
         if _is_async_capability:

@@ -13,7 +13,7 @@ import os
 import httpx
 from typing import Any
 
-from ..contracts import UnifiedError
+from ..contracts import UnifiedError, UnifiedErrorException
 from ..guards import redact_key
 
 
@@ -44,12 +44,13 @@ class MiniMaxBaseClient:
             return self._api_key
         key = os.environ.get("MINIMAX_TOKEN_PLAN_KEY") or os.environ.get("MINIMAX_API_KEY", "")
         if not key:
-            raise UnifiedError(
+            raise UnifiedErrorException(
                 capability_id="",
                 error_type="unauthorized",
                 message="MINIMAX_TOKEN_PLAN_KEY / MINIMAX_API_KEY 均未配置，请检查 backend/.env",
                 http_status=500,
                 retryable=False,
+                redacted=True,
             )
         return key
 
@@ -184,3 +185,74 @@ class MiniMaxBaseClient:
             http_status=resp.status_code,
             retryable=resp.status_code >= 500 or resp.status_code == 429,
         )
+
+    async def request_json_async(
+        self,
+        method: str,
+        path: str,
+        *,
+        headers: dict | None = None,
+        json: dict | None = None,
+        params: dict | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        """异步版 request_json — 返回解析后的响应字典。"""
+        url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
+        timeout = timeout if timeout is not None else self._timeout
+
+        extra: dict[str, str] = dict(headers) if headers else {}
+        extra.update(self.auth_header())
+        if json is not None:
+            extra["Content-Type"] = "application/json"
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                if method.upper() == "GET":
+                    resp = await client.get(url, headers=extra, params=self._with_group(params))
+                elif method.upper() == "POST":
+                    resp = await client.post(
+                        url,
+                        headers=extra,
+                        params=self._with_group(params),
+                        json=json,
+                    )
+                else:
+                    raise UnifiedError(
+                        capability_id="",
+                        error_type="invalid_params",
+                        message=f"Unsupported HTTP method: {method}",
+                        http_status=400,
+                        retryable=False,
+                    )
+
+                if resp.status_code >= 400:
+                    self._raise_error(resp)
+
+                return resp.json()
+
+        except UnifiedError:
+            raise
+        except httpx.TimeoutException:
+            raise UnifiedError(
+                capability_id="",
+                error_type="timeout",
+                message=f"Request timeout after {timeout}s",
+                http_status=None,
+                retryable=True,
+            )
+        except httpx.ConnectError as exc:
+            raise UnifiedError(
+                capability_id="",
+                error_type="network_error",
+                message=f"Connection error: {exc}",
+                http_status=None,
+                retryable=True,
+            )
+        except Exception as exc:
+            raise UnifiedError(
+                capability_id="",
+                error_type="upstream_error",
+                message=f"Unexpected error: {exc}",
+                http_status=None,
+                retryable=False,
+            )

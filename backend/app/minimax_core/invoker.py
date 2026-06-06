@@ -270,6 +270,8 @@ class CapabilityInvoker:
             return self._tts_sync(payload)
         if capability_id == "tts-ws":
             return await self._tts_ws_async(payload)
+        if capability_id == "tts-async":
+            return await self._tts_async_http(payload)
         if capability_id == "image-t2i":
             return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
@@ -545,6 +547,62 @@ class CapabilityInvoker:
                 "task_started": "task_started" in events,
                 "task_finished": "task_finished" in events or "task_done" in events,
             },
+        )
+
+    # ── TTS Async ─────────────────────────────────────────────────────────────
+
+    async def _tts_async_http(self, payload: dict) -> UnifiedResponse:
+        """tts-async — 异步 TTS，提交任务后返回 task_id。
+
+        RiskGate 已在 invoke_async() 入口统一评估（字符数 quota guard）。
+        """
+        try:
+            raw = await self._native.tts_async_http(payload)
+        except Exception as exc:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-async",
+                error_type="upstream_error",
+                error_code=None,
+                message=str(exc),
+                http_status=500,
+                retryable=False,
+                redacted=True,
+            )
+
+        # 检查 MiniMax 业务状态码
+        ok, error_type, status_msg, http_status = parse_minimax_base_resp(raw)
+        if not ok:
+            raise _minimax_error("tts-async", error_type, status_msg, http_status or 200)
+
+        # 异步任务返回 task_id
+        task_id = raw.get("task_id") or raw.get("data", {}).get("task_id") if isinstance(raw.get("data"), dict) else None
+        extra = raw.get("extra_info") or {}
+        audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
+
+        assets: list[AssetRef] = []
+        if task_id:
+            assets.append(AssetRef(
+                type="audio",
+                format=audio_format,
+                path=None,
+                url=None,
+                size_bytes=None,
+                committed=False,
+            ))
+
+        return UnifiedResponse(
+            ok=True,
+            capability_id="tts-async",
+            model=payload.get("model"),
+            output_type="audio",
+            text=None,
+            assets=assets,
+            task={"task_id": task_id},
+            usage={
+                "text_length": len(payload.get("text", "")),
+            },
+            raw=raw,
         )
 
     # ── Image ────────────────────────────────────────────────────────────────

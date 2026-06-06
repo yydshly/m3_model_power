@@ -1,8 +1,8 @@
 # MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06T15:10:00Z
+> 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：tts-ws 已通过 invoke_async() 接入 FastAPI；CapabilityInvoker 分离 sync/async 调用边界；tts-ws WS 协议要点已文档化。
+> 本轮更新：tts-async 已接入 CapabilityInvoker.invoke_async() + RiskGate quota guard；1350字未确认时被 risk_gate_blocked 拦截；短文本(9字)正常通过。
 
 ## 验收状态分层说明
 
@@ -145,7 +145,7 @@
 | `chat-responses-tokens` | Responses Token 估算 | chat | ✓ | chat | quota | implemented | MiniMax-M3 | MiniMax-M3 | not_probed | — | not_probed |
 | `tts-sync` | T2A 同步 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | capability_level_verified | speech-02-turbo | capability_level |
 | `tts-ws` | T2A WebSocket 流式 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-02-turbo | capability_level_verified | speech-02-turbo | capability_level |
-| `tts-async` | T2A 异步长文本 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `tts-async` | T2A 异步长文本 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-02-turbo | capability_level_verified | speech-02-turbo | capability_level |
 | `voice-clone-upload-audio` | 克隆-上传音频 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
 | `voice-clone-upload-prompt` | 克隆-上传 Prompt 文本 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
 | `voice-clone-do` | 触发音色克隆 | voice | ✓ | — | high | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
@@ -299,13 +299,12 @@
 - `music-2.6`
 - `music-cover`
 
-### 5.11 高成本暂缓（video / voice-clone / voice-design / tts-async / music-cover-prep）
+### 5.11 高成本暂缓（video / voice-clone / voice-design / music-cover-prep）
 - `video-t2v`
 - `video-i2v`
 - `video-s2v`
 - `voice-clone-do`
 - `voice-design`
-- `tts-async`
 - `music-cover-prep`
 
 ### 5.12 chat-openai 模型级 probe 失败
@@ -338,7 +337,7 @@
 | `chat-responses-tokens` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `tts-sync` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | 消耗 TokenPlan 语音/字符额度 |
 | `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（speech-02-turbo，9 chunk/13KB，verified_at=2026-06-06，task_started=true，task_finished=true，event_counts={task_continued:9}） | 消耗 TokenPlan 语音/字符额度；WS 协议：task_start→task_started→task_continue+task_finish→task_continued(audio hex)→task_finished；已通过 minimax_core invoke_async 验收 |
-| `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 长文本可能大量消耗额度 |
+| `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（1350字未confirm_quota时被risk_gate_blocked拦截；9字短文本正常通过） | 消耗 TokenPlan 语音/字符额度；字符数保护：<=300字允许默认测试；>1000字需confirm_quota；>5000字无确认硬阻断；已通过invoke_async验收 |
 | `voice-clone-upload-audio` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-upload-prompt` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-do` | paid_confirm_required | ✓ | ✓ | ✓ | ✓ | ✓ | pending_explicit_confirmation | 音色克隆官方价 9.9 元/音色 |

@@ -34,6 +34,13 @@ class MiniMaxNativeClient(MiniMaxBaseClient):
         """POST /v1/t2a_v2 — 文本转语音同步接口。"""
         return self.request_json("POST", "/t2a_v2", json=payload, timeout=30)
 
+    async def tts_async_http(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """POST /v1/t2a_async_v2 — 文本转语音异步接口（长文本）。
+
+        提交任务后返回 task_id，音频通过轮询任务状态获取。
+        """
+        return await self.request_json_async("POST", "/t2a_async_v2", json=payload, timeout=30)
+
     async def tts_websocket(
         self,
         payload: dict[str, Any],
