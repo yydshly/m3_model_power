@@ -2,7 +2,7 @@
 
 > 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：tts-async quota guard 收口；>5000 字默认硬阻断，plain confirm_quota 无法绕过，需未来 confirm_very_large_quota；6 场景 inline 测试全部通过（A✅B✅C✅D✅E✅F✅）。
+> 本轮更新：RiskGate 变更后回归验收完成；safe 10/10 ✅；medium 6/6 ✅（tts-async full flow: task_id✅ query✅ poll✅ download✅ asset_saved✅ full_async_flow_verified✅ 54272 bytes）；未执行 high/video/voice-clone/delete/upload/music-cover-prep。
 
 ## 验收状态分层说明
 
