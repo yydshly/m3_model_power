@@ -1,0 +1,552 @@
+# MiniMax 能力图谱 —— 此文件是工作台的"事实来源"。
+# 新增 / 隐藏 / 上线一项能力：改这里就够，不需要改前端代码。
+#
+# 字段说明：
+#   id           前后端唯一 key，路由也走它
+#   category     归到哪个分类（见下方 categories）
+#   label / desc 用户看到的中文名 / 简介
+#   doc_url      官方文档地址
+#   method       HTTP 方法（信息用，handler 自己决定怎么发）
+#   mm_path      上游 MiniMax 路径（信息用 + 默认 handler 用）
+#   status       implemented | planned | unsupported
+#   streaming    是否流式（前端会给"流式调用"入口）
+#   async_job    是否长任务（提交→轮询→下载）
+#   multipart    是否需要 multipart 上传（前端给出文件选择器）
+#   model_family 关联模型族（用于过滤模型下拉），可选
+#   tags         任意标签
+#   example      默认请求体（前端 InvokePanel 的初始 JSON）
+#   notes        给用户看的额外说明（如限制、依赖）
+#   cost_level   none | quota | low | medium | high
+#                  quota = 共享 token 额度（极速档每月 12 亿+）
+#                  low/medium/high = 单独计费，按使用量额外扣费
+#   cost_note    给用户看的费用提示文案（中文）
+
+categories:
+  - id: chat
+    label: 对话
+    emoji: 💬
+    desc: 三套兼容协议 + Responses + Token 估算
+    order: 1
+  - id: voice
+    label: 语音
+    emoji: 🎙️
+    desc: 文本转语音同步/异步/流式 + 音色克隆/设计/管理
+    order: 2
+  - id: vision
+    label: 视觉
+    emoji: 🖼️
+    desc: 图像生成（文/图）+ 视频生成（文/图/主体）
+    order: 3
+  - id: music
+    label: 音乐
+    emoji: 🎵
+    desc: 歌词生成 + 音乐生成 + 翻唱预处理
+    order: 4
+  - id: files
+    label: 资产
+    emoji: 📁
+    desc: 文件上传 / 列表 / 详情 / 内容 / 删除
+    order: 5
+  - id: models
+    label: 模型
+    emoji: 🧠
+    desc: OpenAI / Anthropic 两套模型清单
+    order: 6
+
+capabilities:
+  # ===================== 对话 =====================
+  - id: chat-anthropic
+    category: chat
+    label: Anthropic 兼容对话
+    desc: POST /anthropic/v1/messages，可直接给 Claude Code / Cursor 用
+    doc_url: https://platform.minimaxi.com/docs/api-reference/text-anthropic-api
+    method: POST
+    mm_path: /anthropic/v1/messages
+    status: implemented
+    streaming: true
+    model_family: chat
+    tags: [anthropic, llm, multimodal]
+    example:
+      model: MiniMax-M3
+      max_tokens: 1024
+      messages:
+        - role: user
+          content: "用一句话介绍你自己"
+
+  - id: chat-openai
+    category: chat
+    label: OpenAI 兼容对话
+    desc: POST /v1/chat/completions，兼容 OpenAI SDK 现有生态
+    doc_url: https://platform.minimaxi.com/docs/api-reference/text-openai-api
+    method: POST
+    mm_path: /v1/chat/completions
+    status: implemented
+    streaming: true
+    model_family: chat
+    tags: [openai, llm, multimodal]
+    example:
+      model: MiniMax-M3
+      messages:
+        - role: system
+          content: "你是一个有帮助的助手"
+        - role: user
+          content: "用一句话介绍你自己"
+      temperature: 0.7
+
+  - id: chat-responses-create
+    category: chat
+    label: Responses API
+    desc: POST /v1/responses，新一代结构化输出协议
+    doc_url: https://platform.minimaxi.com/docs/api-reference/responses-create
+    method: POST
+    mm_path: /v1/responses
+    status: implemented
+    streaming: true
+    model_family: chat
+    tags: [responses, llm]
+    example:
+      model: MiniMax-M3
+      input: "请用一句话介绍 MiniMax"
+
+  - id: chat-responses-tokens
+    category: chat
+    label: Responses Token 估算
+    desc: 提交 input 估算 token 数，便于规划月度预算
+    doc_url: https://platform.minimaxi.com/docs/api-reference/responses-input-tokens
+    method: POST
+    mm_path: /v1/responses/input_tokens
+    status: implemented
+    model_family: chat
+    tags: [responses, token]
+    example:
+      model: MiniMax-M3
+      input: "请用一句话介绍 MiniMax"
+
+  # ===================== 语音 =====================
+  - id: tts-sync
+    category: voice
+    label: T2A 同步
+    desc: 文本转语音，一次请求返回完整音频
+    doc_url: https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
+    method: POST
+    mm_path: /v1/t2a_v2
+    status: implemented
+    model_family: speech
+    tags: [tts]
+    example:
+      model: speech-02-hd
+      text: "你好，欢迎使用 MiniMax 语音合成"
+      voice_setting:
+        voice_id: female-shaonv
+        speed: 1.0
+        vol: 1.0
+        pitch: 0
+      audio_setting:
+        sample_rate: 32000
+        bitrate: 128000
+        format: mp3
+        channel: 1
+
+  - id: tts-ws
+    category: voice
+    label: T2A WebSocket 流式
+    desc: 边合成边播放，低延迟。后端走 /api/ws/tts-ws 反向代理
+    doc_url: https://platform.minimaxi.com/docs/api-reference/speech-t2a-websocket
+    method: WS
+    mm_path: /ws/v1/t2a_v2
+    status: implemented
+    streaming: true
+    model_family: speech
+    tags: [tts, stream]
+    notes: 前端 WS 客户端在 /cap/tts-ws 详情页，发送 task_start / task_continue 等事件
+    example:
+      event: task_start
+      model: speech-02-turbo
+      voice_setting:
+        voice_id: female-shaonv
+        speed: 1.0
+      audio_setting:
+        sample_rate: 32000
+        format: mp3
+
+  - id: tts-async
+    category: voice
+    label: T2A 异步长文本
+    desc: 提交长文本任务，轮询完成后下载
+    doc_url: https://platform.minimaxi.com/docs/api-reference/speech-t2a-async-create
+    method: POST
+    mm_path: /v1/t2a_async_v2
+    status: implemented
+    async_job: true
+    model_family: speech
+    tags: [tts, long]
+    example:
+      model: speech-02-hd
+      text: "（长文本，超过 5000 字时建议使用异步接口）"
+      voice_setting:
+        voice_id: female-shaonv
+      audio_setting:
+        format: mp3
+
+  - id: voice-clone-upload-audio
+    category: voice
+    label: 克隆-上传音频
+    desc: 上传参考音频，得到 file_id 供下一步克隆使用
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-cloning-uploadcloneaudio
+    method: POST
+    mm_path: /v1/files/upload
+    status: implemented
+    multipart: true
+    tags: [voice-clone, upload]
+    cost_level: quota
+    cost_note: 上传本身不计费；后续 voice-clone-do 训练会单独计费。
+    example:
+      purpose: voice_clone
+
+  - id: voice-clone-upload-prompt
+    category: voice
+    label: 克隆-上传 Prompt 文本
+    desc: 上传与参考音频对齐的文本
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-cloning-uploadprompt
+    method: POST
+    mm_path: /v1/files/upload
+    status: implemented
+    multipart: true
+    tags: [voice-clone, upload]
+    example:
+      purpose: prompt_audio
+
+  - id: voice-clone-do
+    category: voice
+    label: 触发音色克隆
+    desc: 用上一步的 file_id 训练新音色
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-cloning-clone
+    method: POST
+    mm_path: /v1/voice_clone
+    status: implemented
+    tags: [voice-clone]
+    cost_level: high
+    cost_note: 单独计费！每次克隆训练按官方价目扣费（且按账号配额限制可保留的克隆音色数）。调用前请确认 voice_id 命名稳定。
+    example:
+      file_id: 0
+      voice_id: "my_clone_001"
+      need_noise_reduction: false
+      need_volume_normalization: false
+
+  - id: voice-design
+    category: voice
+    label: 音色设计
+    desc: 用文字描述生成全新音色
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-design-design
+    method: POST
+    mm_path: /v1/voice_design
+    status: implemented
+    tags: [voice-design]
+    cost_level: medium
+    cost_note: 单独计费！每次设计生成扣费，建议先小步试 preview_text。
+    example:
+      prompt: "一位温柔成熟的女性主播，声音明亮"
+      preview_text: "你好，这是一段试听文本"
+
+  - id: voice-list
+    category: voice
+    label: 音色列表
+    desc: 查询账户下系统/克隆/设计音色
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-management-get
+    method: POST
+    mm_path: /v1/get_voice
+    status: implemented
+    tags: [voice-mgmt]
+    example:
+      voice_type: all
+
+  - id: voice-delete
+    category: voice
+    label: 删除音色
+    desc: 删除指定 voice_id
+    doc_url: https://platform.minimaxi.com/docs/api-reference/voice-management-delete
+    method: POST
+    mm_path: /v1/delete_voice
+    status: implemented
+    tags: [voice-mgmt]
+    example:
+      voice_type: voice_cloning
+      voice_id: "my_clone_001"
+
+  # ===================== 视觉 - 图像 =====================
+  - id: image-t2i
+    category: vision
+    label: 文生图 T2I
+    desc: 文本提示词生成图像
+    doc_url: https://platform.minimaxi.com/docs/api-reference/image-generation-t2i
+    method: POST
+    mm_path: /v1/image_generation
+    status: implemented
+    model_family: image
+    tags: [image, t2i]
+    example:
+      model: image-01
+      prompt: "一只在樱花树下打盹的橘猫，电影感光影"
+      aspect_ratio: "16:9"
+      n: 1
+      prompt_optimizer: true
+
+  - id: image-i2i
+    category: vision
+    label: 图生图 I2I
+    desc: 参考图 + 提示词生成新图
+    doc_url: https://platform.minimaxi.com/docs/api-reference/image-generation-i2i
+    method: POST
+    mm_path: /v1/image_generation
+    status: implemented
+    model_family: image
+    tags: [image, i2i]
+    example:
+      model: image-01
+      prompt: "把这张图变成水彩风格"
+      subject_reference:
+        - type: character
+          image_file: "https://example.com/ref.jpg"
+      n: 1
+
+  # ===================== 视觉 - 视频 =====================
+  - id: video-t2v
+    category: vision
+    label: 文生视频 T2V
+    desc: 文本提示词生成视频
+    doc_url: https://platform.minimaxi.com/docs/api-reference/video-generation-t2v
+    method: POST
+    mm_path: /v1/video_generation
+    status: implemented
+    async_job: true
+    model_family: video
+    tags: [video, t2v]
+    cost_level: high
+    cost_note: 视频生成按时长 × 分辨率单独计费，单价较高，谨慎调用。
+    example:
+      model: MiniMax-Hailuo-02
+      prompt: "一只柴犬在海边奔跑，阳光明媚"
+      duration: 6
+      resolution: "1080P"
+
+  - id: video-i2v
+    category: vision
+    label: 图生视频 I2V
+    desc: 首帧图 + 提示词生成视频
+    doc_url: https://platform.minimaxi.com/docs/api-reference/video-generation-i2v
+    method: POST
+    mm_path: /v1/video_generation
+    status: implemented
+    async_job: true
+    model_family: video
+    tags: [video, i2v]
+    cost_level: high
+    cost_note: 视频生成单独计费，单价较高。
+    example:
+      model: MiniMax-Hailuo-02
+      prompt: "让画面中的人物挥手"
+      first_frame_image: "https://example.com/first.jpg"
+      duration: 6
+
+  - id: video-s2v
+    category: vision
+    label: 主体参考视频 S2V
+    desc: 参考主体（人/物）生成视频
+    doc_url: https://platform.minimaxi.com/docs/api-reference/video-generation-s2v
+    method: POST
+    mm_path: /v1/video_generation
+    status: implemented
+    async_job: true
+    model_family: video
+    tags: [video, s2v]
+    cost_level: high
+    cost_note: 视频生成单独计费，单价较高。
+    example:
+      model: MiniMax-Hailuo-02
+      prompt: "这位角色在公园里散步"
+      subject_reference:
+        - type: character
+          image: ["https://example.com/subject.jpg"]
+
+  - id: video-query
+    category: vision
+    label: 视频任务查询
+    desc: 轮询任务状态
+    doc_url: https://platform.minimaxi.com/docs/api-reference/video-generation-query
+    method: GET
+    mm_path: /v1/query/video_generation
+    status: implemented
+    tags: [video, query]
+    example:
+      task_id: ""
+
+  - id: video-download
+    category: vision
+    label: 视频下载
+    desc: 任务完成后取视频内容（返回 file_id 后再用 file-content 拉取）
+    doc_url: https://platform.minimaxi.com/docs/api-reference/video-generation-download
+    method: GET
+    mm_path: /v1/files/retrieve
+    status: implemented
+    tags: [video, download]
+    example:
+      file_id: ""
+
+  # ===================== 音乐 =====================
+  - id: music-gen
+    category: music
+    label: 音乐生成
+    desc: 歌词 + 风格描述 → 完整音乐
+    doc_url: https://platform.minimaxi.com/docs/api-reference/music-generation
+    method: POST
+    mm_path: /v1/music_generation
+    status: implemented
+    model_family: music
+    tags: [music]
+    cost_level: medium
+    cost_note: 音乐生成按首计费。
+    example:
+      model: music-1.5
+      lyrics: "##夜空中最亮的星\n请指引我前行##"
+      refer_voice: ""
+      refer_instrumental: ""
+      audio_setting:
+        sample_rate: 44100
+        bitrate: 256000
+        format: mp3
+
+  - id: music-cover-prep
+    category: music
+    label: 翻唱预处理
+    desc: 上传原曲，分离人声/伴奏
+    doc_url: https://platform.minimaxi.com/docs/api-reference/music-cover-preprocess
+    method: POST
+    mm_path: /v1/music_cover/preprocess
+    status: implemented
+    multipart: true
+    model_family: music
+    tags: [music, cover]
+    cost_level: medium
+    cost_note: 翻唱预处理按曲计费。
+    example:
+      purpose: song
+
+  - id: lyrics-gen
+    category: music
+    label: 歌词生成
+    desc: 主题 → 结构化歌词
+    doc_url: https://platform.minimaxi.com/docs/api-reference/lyrics-generation
+    method: POST
+    mm_path: /v1/lyrics_generation
+    status: implemented
+    tags: [lyrics]
+    example:
+      prompt: "写一首关于夏夜星空的流行歌，有副歌"
+
+  # ===================== 资产 =====================
+  - id: file-upload
+    category: files
+    label: 文件上传
+    desc: 上传文件，得到 file_id（被多个能力引用）
+    doc_url: https://platform.minimaxi.com/docs/api-reference/file-management-upload
+    method: POST
+    mm_path: /v1/files/upload
+    status: implemented
+    multipart: true
+    tags: [files]
+    example:
+      purpose: retrieval
+
+  - id: file-list
+    category: files
+    label: 文件列表
+    desc: 列出账户下文件
+    doc_url: https://platform.minimaxi.com/docs/api-reference/file-management-list
+    method: GET
+    mm_path: /v1/files/list
+    status: implemented
+    tags: [files]
+    example: {}
+
+  - id: file-retrieve
+    category: files
+    label: 文件详情
+    desc: 根据 file_id 查询元数据
+    doc_url: https://platform.minimaxi.com/docs/api-reference/file-management-retrieve
+    method: GET
+    mm_path: /v1/files/retrieve
+    status: implemented
+    tags: [files]
+    example:
+      file_id: ""
+
+  - id: file-content
+    category: files
+    label: 文件内容下载
+    desc: 拉取 file_id 的二进制内容（前端走 /api/download/{cap_id}）
+    doc_url: https://platform.minimaxi.com/docs/api-reference/file-management-retrieve-content
+    method: GET
+    mm_path: /v1/files/retrieve_content
+    status: implemented
+    tags: [files, download]
+    example:
+      file_id: ""
+
+  - id: file-delete
+    category: files
+    label: 文件删除
+    desc: 删除 file_id
+    doc_url: https://platform.minimaxi.com/docs/api-reference/file-management-delete
+    method: POST
+    mm_path: /v1/files/delete
+    status: implemented
+    tags: [files]
+    example:
+      file_id: ""
+
+  # ===================== 模型 =====================
+  - id: models-openai-list
+    category: models
+    label: 模型列表 (OpenAI 协议)
+    desc: GET /v1/models
+    doc_url: https://platform.minimaxi.com/docs/api-reference/models/openai/list-models
+    method: GET
+    mm_path: /v1/models
+    status: implemented
+    tags: [models, openai]
+    example: {}
+
+  - id: models-openai-retrieve
+    category: models
+    label: 模型详情 (OpenAI 协议)
+    desc: GET /v1/models/{model}
+    doc_url: https://platform.minimaxi.com/docs/api-reference/models/openai/retrieve-model
+    method: GET
+    mm_path: /v1/models/{model}
+    status: implemented
+    tags: [models, openai]
+    example:
+      model: MiniMax-M3
+
+  - id: models-anthropic-list
+    category: models
+    label: 模型列表 (Anthropic 协议)
+    desc: GET /anthropic/v1/models
+    doc_url: https://platform.minimaxi.com/docs/api-reference/models/anthropic/list-models
+    method: GET
+    mm_path: /anthropic/v1/models
+    status: implemented
+    tags: [models, anthropic]
+    example: {}
+
+  - id: models-anthropic-retrieve
+    category: models
+    label: 模型详情 (Anthropic 协议)
+    desc: GET /anthropic/v1/models/{model}
+    doc_url: https://platform.minimaxi.com/docs/api-reference/models/anthropic/retrieve-model
+    method: GET
+    mm_path: /anthropic/v1/models/{model}
+    status: implemented
+    tags: [models, anthropic]
+    example:
+      model: MiniMax-M3

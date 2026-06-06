@@ -1,0 +1,251 @@
+# MiniMax 模型清单 —— 工作台所有"模型下拉"都从这里取。
+#
+# 字段：
+#   id              上游 model 字段实际值（API 调用直接用它）
+#   label           UI 显示名
+#   family          chat | speech | image | video | music
+#   capabilities    显式声明这个模型支持哪些 capability id；不写则按 family 自动匹配
+#   tier            flagship | highspeed | standard | legacy
+#                     ★ highspeed = TokenPlanPlus 极速档专属变体，走共享配额
+#   quota_eligible  true=走 TokenPlanPlus 配额；false=单独按 token 计费
+#                     ★ 这是订阅"极速版"的关键字段：调用 -highspeed 才能真正"吃配额"
+#   multimodal      是否支持图像/视频输入（仅 chat）
+#   context         最大上下文长度
+#   protocols       [openai, anthropic, responses]
+#   note            UI 提示文案
+#   enabled         false 则不显示
+
+models:
+  # ===================== 对话 / LLM =====================
+
+  # 极速档 —— TokenPlanPlus 月度 12 亿+ 配额覆盖
+  # 注意：highspeed 后缀只在文档明确列出的型号上加，不要从其他型号外推。
+  - id: MiniMax-M2.7-highspeed
+    label: MiniMax M2.7 (极速档)
+    family: chat
+    tier: highspeed
+    quota_eligible: true
+    multimodal: false
+    context: 245760
+    protocols: [openai]
+    note: ★ 极速档下的 M2.7 变体，走 TokenPlanPlus 共享配额（用户在 docs 中确认存在）。
+    enabled: true
+
+  # 标准档 —— 按 token 单独计费，不吃极速档配额
+  - id: MiniMax-M3
+    label: MiniMax M3
+    family: chat
+    tier: flagship
+    quota_eligible: false
+    multimodal: true
+    context: 1000000
+    protocols: [openai, anthropic, responses]
+    note: 标准档 M3，按 token 单独计费。走极速档配额请用 MiniMax-M3-highspeed。
+    enabled: true
+
+  - id: MiniMax-M2.7
+    label: MiniMax M2.7
+    family: chat
+    tier: standard
+    quota_eligible: false
+    multimodal: false
+    context: 245760
+    protocols: [openai]
+    note: 标准档 M2.7，按 token 单独计费。
+    enabled: true
+
+  - id: abab6.5s-chat
+    label: abab 6.5s
+    family: chat
+    tier: legacy
+    quota_eligible: false
+    multimodal: false
+    context: 245760
+    protocols: [openai]
+    note: 上一代旗舰，按 token 单独计费。
+    enabled: true
+
+  - id: abab6.5-chat
+    label: abab 6.5
+    family: chat
+    tier: legacy
+    quota_eligible: false
+    multimodal: false
+    context: 8192
+    protocols: [openai]
+    note: 历史版本，保留兼容。
+    enabled: true
+
+  - id: abab6.5t-chat
+    label: abab 6.5t
+    family: chat
+    tier: legacy
+    quota_eligible: false
+    context: 8192
+    protocols: [openai]
+    note: abab 6.5 变体。
+    enabled: true
+
+  - id: abab6.5g-chat
+    label: abab 6.5g
+    family: chat
+    tier: legacy
+    quota_eligible: false
+    context: 8192
+    protocols: [openai]
+    note: abab 6.5 变体。
+    enabled: true
+
+  # ===================== 语音 =====================
+  - id: speech-2.5-hd-preview
+    label: speech-2.5-hd (preview)
+    family: speech
+    tier: flagship
+    quota_eligible: false
+    note: 最新一代高保真，preview 阶段。
+    enabled: true
+
+  - id: speech-2.5-turbo-preview
+    label: speech-2.5-turbo (preview)
+    family: speech
+    tier: flagship
+    quota_eligible: false
+    note: 最新一代低延迟，preview 阶段。
+    enabled: true
+
+  - id: speech-02-hd
+    label: speech-02-hd
+    family: speech
+    tier: standard
+    quota_eligible: false
+    note: 高保真合成，推荐用于成片/有声书。
+    enabled: true
+
+  - id: speech-02-turbo
+    label: speech-02-turbo
+    family: speech
+    tier: standard
+    quota_eligible: false
+    note: 低延迟优先，适合实时交互。
+    enabled: true
+
+  - id: speech-01-hd
+    label: speech-01-hd
+    family: speech
+    tier: legacy
+    quota_eligible: false
+    note: 上一代高保真。
+    enabled: true
+
+  - id: speech-01-turbo
+    label: speech-01-turbo
+    family: speech
+    tier: legacy
+    quota_eligible: false
+    note: 上一代低延迟。
+    enabled: true
+
+  - id: speech-01-240228
+    label: speech-01-240228
+    family: speech
+    tier: legacy
+    quota_eligible: false
+    note: 早期版本，保留兼容。
+    enabled: false
+
+  # ===================== 图像 =====================
+  - id: image-01
+    label: image-01
+    family: image
+    tier: flagship
+    quota_eligible: false
+    note: 文生图 / 图生图主力。
+    enabled: true
+
+  # ===================== 视频 =====================
+  - id: MiniMax-Hailuo-02
+    label: Hailuo 02
+    family: video
+    tier: flagship
+    quota_eligible: false
+    note: 最新视频模型，含 T2V/I2V/S2V。按时长 × 分辨率计费。
+    enabled: true
+
+  - id: T2V-01
+    label: T2V-01
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-t2v]
+    note: 上一代文生视频。
+    enabled: true
+
+  - id: T2V-01-Director
+    label: T2V-01-Director
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-t2v]
+    note: 文生视频导演版，含运镜指令。
+    enabled: true
+
+  - id: I2V-01
+    label: I2V-01
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-i2v]
+    note: 上一代图生视频。
+    enabled: true
+
+  - id: I2V-01-live
+    label: I2V-01-live
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-i2v]
+    note: 2D 角色专用图生视频。
+    enabled: true
+
+  - id: I2V-01-Director
+    label: I2V-01-Director
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-i2v]
+    note: 图生视频导演版，含运镜指令。
+    enabled: true
+
+  - id: S2V-01
+    label: S2V-01
+    family: video
+    tier: standard
+    quota_eligible: false
+    capabilities: [video-s2v]
+    note: 主体参考视频。
+    enabled: true
+
+  - id: video-01
+    label: video-01
+    family: video
+    tier: legacy
+    quota_eligible: false
+    note: 早期视频模型。
+    enabled: true
+
+  # ===================== 音乐 =====================
+  - id: music-1.5
+    label: music 1.5
+    family: music
+    tier: flagship
+    quota_eligible: false
+    note: 音乐生成主力。
+    enabled: true
+
+  - id: music-01
+    label: music 01
+    family: music
+    tier: legacy
+    quota_eligible: false
+    note: 上一代音乐模型。
+    enabled: true
