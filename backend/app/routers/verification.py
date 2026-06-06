@@ -27,11 +27,15 @@ def _load_index() -> dict:
 
 @router.get("/summary")
 async def summary() -> dict:
-    """Return scope-gap summary counts from the aggregate verification index."""
-    idx = _load_index()
-    caps = idx.get("capabilities", {})
+    """Return scope-gap summary counts from the aggregate verification index.
 
-    # Also load capability specs to get scope_policy for each cap
+    Iterates over ALL capabilities in the registry (not just those present
+    in the index) so that in-scope capabilities without any index record
+    are correctly counted as unverified.
+    """
+    idx = _load_index()
+    index_caps = idx.get("capabilities", {})
+
     from ..minimax_core.registry.loader import get_capability_registry
 
     cap_reg = get_capability_registry()
@@ -41,20 +45,18 @@ async def summary() -> dict:
     in_scope_unverified = 0
     in_scope_unverified_ids: list[str] = []
 
-    for cap_id, record in caps.items():
-        cap_spec = cap_reg.by_id(cap_id)
-        if cap_spec is None:
-            continue
+    for cap_spec in cap_reg.all():
         sp = cap_spec.scope_policy
-        if not sp.count_in_completion_rate:
+        if sp.current_scope != "in_scope" or not sp.count_in_completion_rate:
             continue
-        if sp.current_scope == "in_scope":
-            in_scope_total += 1
-            if record.get("verified"):
-                in_scope_verified += 1
-            else:
-                in_scope_unverified += 1
-                in_scope_unverified_ids.append(cap_id)
+
+        in_scope_total += 1
+        record = index_caps.get(cap_spec.id)
+        if record and record.get("verified"):
+            in_scope_verified += 1
+        else:
+            in_scope_unverified += 1
+            in_scope_unverified_ids.append(cap_spec.id)
 
     total = in_scope_total
     completion_rate = (in_scope_verified / total * 100) if total > 0 else 0.0

@@ -123,15 +123,52 @@ function ConfirmationsEditor({
   )
 }
 
+// ── Hint components ───────────────────────────────────────────────────
+
+function TtsAsyncHint({ text }: { text: string }) {
+  const len = text.length
+  let level: 'ok' | 'warning' | 'quota' | 'blocked' = 'ok'
+  let note = `当前 ${len} 字符，≤300 默认允许`
+  if (len > 5000) { level = 'blocked'; note = `当前 ${len} 字符，>5000 禁止默认执行` }
+  else if (len > 1000) { level = 'quota'; note = `当前 ${len} 字符，1001~5000 需要 confirm_quota` }
+  else if (len > 300) { level = 'warning'; note = `当前 ${len} 字符，301~1000 warning` }
+
+  const cls = level === 'ok' ? 'text-green-700 bg-green-50 border-green-200'
+    : level === 'warning' ? 'text-yellow-700 bg-yellow-50 border-yellow-200'
+    : level === 'quota' ? 'text-orange-700 bg-orange-50 border-orange-200'
+    : 'text-red-700 bg-red-50 border-red-200'
+  return <div className={`text-xs px-2 py-1 rounded border ${cls}`}>{note}</div>
+}
+
+function RequiresExistingTaskHint() {
+  return (
+    <div className="text-xs px-2 py-1 rounded border border-orange-200 bg-orange-50 text-orange-700">
+      payload 中必须包含 task_id 或 file_id
+    </div>
+  )
+}
+
+function ImageI2IHint() {
+  return (
+    <div className="text-xs px-2 py-1 rounded border border-purple-200 bg-purple-50 text-purple-700">
+      必须包含 img_url 或 reference image 参数，并勾选 confirm_asset_source
+    </div>
+  )
+}
+
 // ── Risk Check Panel ──────────────────────────────────────────────────
 
 function RiskCheckPanel({
   cap,
+  payload,
+  onPayloadChange,
   confirmations,
   onConfirmationsChange,
   onClose,
 }: {
   cap: Capability
+  payload: string
+  onPayloadChange: (v: string) => void
   confirmations: Record<string, boolean>
   onConfirmationsChange: (c: Record<string, boolean>) => void
   onClose: () => void
@@ -141,12 +178,17 @@ function RiskCheckPanel({
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  let parsedPayload: object = {}
+  let payloadErr: string | null = null
+  try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
+
   const runCheck = async () => {
+    if (payloadErr) { setErr(payloadErr); return }
     setLoading(true)
     setErr(null)
     setResult(null)
     try {
-      const r = await riskCheck(cap.id, {}, confirmations)
+      const r = await riskCheck(cap.id, parsedPayload as Record<string, unknown>, confirmations)
       setResult(r)
     } catch (e: any) {
       setErr(e.message)
@@ -162,6 +204,16 @@ function RiskCheckPanel({
         <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800">✕ 关闭</button>
       </div>
 
+      {cap.id === 'tts-async' && (
+        <div className="mb-3"><TtsAsyncHint text={typeof parsedPayload === 'object' && parsedPayload !== null && 'text' in parsedPayload ? String((parsedPayload as any).text ?? '') : ''} /></div>
+      )}
+      {cap.operation_policy?.requires_existing_task && (
+        <div className="mb-3"><RequiresExistingTaskHint /></div>
+      )}
+      {cap.id === 'image-i2i' && (
+        <div className="mb-3"><ImageI2IHint /></div>
+      )}
+
       {required.length > 0 && (
         <div className="mb-3">
           <p className="text-xs text-slate-500 mb-1">Required confirmations:</p>
@@ -169,9 +221,20 @@ function RiskCheckPanel({
         </div>
       )}
 
+      <div className="mb-3">
+        <p className="text-xs text-slate-500 mb-1">Payload (JSON):</p>
+        <textarea
+          value={payload}
+          onChange={(e) => onPayloadChange(e.target.value)}
+          rows={6}
+          className={`w-full font-mono text-xs border rounded p-2 ${payloadErr ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
+        />
+        {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
+      </div>
+
       <button
         onClick={runCheck}
-        disabled={loading}
+        disabled={loading || !!payloadErr}
         className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50"
       >
         {loading ? '检查中…' : 'Run Risk Check'}
@@ -205,11 +268,15 @@ function RiskCheckPanel({
 
 function InvokePanel({
   cap,
+  payload,
+  onPayloadChange,
   confirmations,
   onConfirmationsChange,
   onClose,
 }: {
   cap: Capability
+  payload: string
+  onPayloadChange: (v: string) => void
   confirmations: Record<string, boolean>
   onConfirmationsChange: (c: Record<string, boolean>) => void
   onClose: () => void
@@ -217,19 +284,21 @@ function InvokePanel({
   const required = getRequiredConfirmations(cap)
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
 
-  const defaultPayload = cap.example ?? {}
-  const [payload, setPayload] = useState<string>(JSON.stringify(defaultPayload, null, 2))
   const [result, setResult] = useState<object | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
+  let parsedPayload: object = {}
+  let payloadErr: string | null = null
+  try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
+
   const runInvoke = async () => {
+    if (payloadErr) { setErr(payloadErr); return }
     setLoading(true)
     setErr(null)
     setResult(null)
     try {
-      const parsed = JSON.parse(payload)
-      const res = await invoke(cap.id, parsed, confirmations)
+      const res = await invoke(cap.id, parsedPayload as Record<string, unknown>, confirmations)
       if ('error' in res) {
         setErr(`${res.error}: ${res.message}`)
         if ('blocked_reasons' in res) setResult(res)
@@ -256,6 +325,16 @@ function InvokePanel({
         </div>
       )}
 
+      {cap.id === 'tts-async' && (
+        <div className="mb-3"><TtsAsyncHint text={typeof parsedPayload === 'object' && parsedPayload !== null && 'text' in parsedPayload ? String((parsedPayload as any).text ?? '') : ''} /></div>
+      )}
+      {cap.operation_policy?.requires_existing_task && (
+        <div className="mb-3"><RequiresExistingTaskHint /></div>
+      )}
+      {cap.id === 'image-i2i' && (
+        <div className="mb-3"><ImageI2IHint /></div>
+      )}
+
       {required.length > 0 && (
         <div className="mb-3">
           <p className="text-xs text-slate-500 mb-1">Confirmations:</p>
@@ -267,10 +346,11 @@ function InvokePanel({
         <p className="text-xs text-slate-500 mb-1">Payload (JSON):</p>
         <textarea
           value={payload}
-          onChange={(e) => setPayload(e.target.value)}
+          onChange={(e) => onPayloadChange(e.target.value)}
           rows={8}
-          className="w-full font-mono text-xs border border-slate-300 rounded p-2"
+          className={`w-full font-mono text-xs border rounded p-2 ${payloadErr ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
         />
+        {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
       </div>
 
       <button
@@ -304,6 +384,7 @@ export default function TestConsole() {
   const [selectedCapId, setSelectedCapId] = useState<string | null>(null)
   const [panelType, setPanelType] = useState<'none' | 'risk-check' | 'invoke'>('none')
   const [confirmations, setConfirmations] = useState<Record<string, Record<string, boolean>>>({})
+  const [payloads, setPayloads] = useState<Record<string, string>>({})
   const [filterScope, setFilterScope] = useState<string>('all')
   const [filterCat, setFilterCat] = useState<string>('all')
   const [search, setSearch] = useState<string>('')
@@ -335,12 +416,18 @@ export default function TestConsole() {
     setSelectedCapId(cap.id)
     setPanelType('risk-check')
     setConfirmations({})
+    if (payloads[cap.id] === undefined) {
+      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(cap.example ?? {}, null, 2) }))
+    }
   }
 
   const openInvoke = (cap: Capability) => {
     setSelectedCapId(cap.id)
     setPanelType('invoke')
     setConfirmations({})
+    if (payloads[cap.id] === undefined) {
+      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(cap.example ?? {}, null, 2) }))
+    }
   }
 
   const selectedCap = registry?.capabilities.find((c) => c.id === selectedCapId) ?? null
@@ -495,6 +582,8 @@ export default function TestConsole() {
           {panelType === 'risk-check' && (
             <RiskCheckPanel
               cap={selectedCap}
+              payload={payloads[selectedCap.id] ?? '{}'}
+              onPayloadChange={(v) => setPayloads(p => ({ ...p, [selectedCap.id]: v }))}
               confirmations={confirmations[selectedCap.id] ?? {}}
               onConfirmationsChange={(c) => setConfirmations({ ...confirmations, [selectedCap.id]: c })}
               onClose={() => { setPanelType('none'); setSelectedCapId(null) }}
@@ -503,6 +592,8 @@ export default function TestConsole() {
           {panelType === 'invoke' && (
             <InvokePanel
               cap={selectedCap}
+              payload={payloads[selectedCap.id] ?? '{}'}
+              onPayloadChange={(v) => setPayloads(p => ({ ...p, [selectedCap.id]: v }))}
               confirmations={confirmations[selectedCap.id] ?? {}}
               onConfirmationsChange={(c) => setConfirmations({ ...confirmations, [selectedCap.id]: c })}
               onClose={() => { setPanelType('none'); setSelectedCapId(null) }}
