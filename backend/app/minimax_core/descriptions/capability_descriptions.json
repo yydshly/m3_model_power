@@ -60,8 +60,8 @@
       ],
       "input_notes": [
         "核心输入为 text、voice_id、model",
-        "文本长度建议不超过 5000 字符，超出需要 confirm_quota",
-        "需携带 task_id 或 file_id 参数（requires_existing_task）"
+        "创建任务后返回 task_id（不需要携带已有 task_id）",
+        "字符数规则：≤300 默认允许，301-1000 产生 warning，1001-5000 需勾选 confirm_quota，>5000 禁止默认执行"
       ],
       "output_notes": [
         "返回 task_id 用于后续轮询",
@@ -77,7 +77,6 @@
       ],
       "common_errors": [
         "text 超过 5000 字符且未勾选 confirm_quota",
-        "缺少 task_id 或 file_id 参数",
         "voice_id 不支持"
       ],
       "product_usage": [
@@ -191,7 +190,7 @@
       "input_notes": [
         "使用 multipart/form-data 格式",
         "需指定 file 和 purpose 参数",
-        "部分能力要求特定文件格式"
+        "需勾选 confirm_asset_source 确认资产来源"
       ],
       "output_notes": [
         "返回 file_id 或 AssetRef",
@@ -199,7 +198,8 @@
       ],
       "risk_notes": [
         "上传恶意文件可能触发安全审查",
-        "大文件上传消耗带宽和时间"
+        "大文件上传消耗带宽和时间",
+        "confirm_asset_source 必须勾选才能执行"
       ],
       "billing_notes": [
         "部分文件存储可能产生配额费用"

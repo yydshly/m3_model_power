@@ -491,6 +491,16 @@ export default function TestConsole() {
             {summary.in_scope_unverified_ids.length > 0 && (
               <div className="text-red-500">未验收: {summary.in_scope_unverified_ids.join(', ')}</div>
             )}
+            {(() => {
+              const caps = registry?.capabilities ?? []
+              const inScopeTotal = caps.filter(c => c.scope_policy?.current_scope === 'in_scope' && c.scope_policy?.count_in_completion_rate).length
+              const describedInScope = caps.filter(c => c.scope_policy?.current_scope === 'in_scope' && descriptions[c.id]).length
+              return (
+                <div className="text-blue-700">
+                  说明覆盖: <strong>{describedInScope}</strong> / {inScopeTotal} in_scope
+                </div>
+              )
+            })()}
           </div>
         ) : (
           <p className="text-sm text-slate-500">加载中…</p>
@@ -585,10 +595,28 @@ export default function TestConsole() {
                     <span className="text-slate-600">{d.risk_notes.join('；')}</span>
                   </div>
                 )}
+                {d.billing_notes.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded mr-1">计费说明</span>
+                    <span className="text-slate-600">{d.billing_notes.join('；')}</span>
+                  </div>
+                )}
+                {d.output_notes.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-teal-700 bg-teal-100 px-1.5 py-0.5 rounded mr-1">输出说明</span>
+                    <span className="text-slate-600">{d.output_notes.join('；')}</span>
+                  </div>
+                )}
                 {d.common_errors.length > 0 && (
                   <div>
                     <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded mr-1">常见错误</span>
                     <span className="text-slate-600">{d.common_errors.join('；')}</span>
+                  </div>
+                )}
+                {d.product_usage.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded mr-1">产品化建议</span>
+                    <span className="text-slate-600">{d.product_usage.join('；')}</span>
                   </div>
                 )}
                 {d.integration_tips.length > 0 && (
