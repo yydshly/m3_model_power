@@ -193,10 +193,20 @@
 |---|---|
 | verify key_source | `MINIMAX_API_KEY` |
 | verify key_sha256_8 | `db892eeb` (与 probe 相同) |
-| verify medium tts-sync | `auth_or_token_mismatch` (1004) |
-| verify medium image-t2i | `auth_or_token_mismatch` (1004) |
-| verify medium music-gen | `auth_or_token_mismatch` (1004) |
-| 结论 | verify 和 probe 使用同一 Key，1004 是账户/权限问题，非脚本差异 |
+| verify medium tts-sync | `success` (HTTP 200, 无实际音频输出，audio_returned=false) |
+| verify medium image-t2i | `success` (HTTP 200, 无图片 URL，success_count=0) |
+| verify medium music-gen | `success` (HTTP 200, 无音频 URL/hex，audio_returned=false) |
+| verify medium lyrics-gen | `success` (HTTP 200, 无歌词内容) |
+| 结论 | verify 报告 success 但无实际输出；API 返回 HTTP 200 但 base_resp.status_code=1004 且无内容 |
+
+**关键发现**：
+- verify 和 probe 使用同一 Key (sha256_8=db892eeb)
+- verify 报告 `success` 但实际上 `audio_returned=false`、`image_urls_count=0`、`lyrics_preview=""`、`audio_url/hex=false`
+- probe 正确识别 `base_resp.status_code=1004` 并归类为 `auth_or_token_mismatch`
+- **verify 脚本的 CapabilityInvoker 没有检查 base_resp.status_code**，误报 success
+- API 返回 HTTP 200 + base_resp.status_code=1004 + 空内容，说明账户权限问题
+
+**注意**：verify 的 success 不代表真正有输出，可能是 TokenPlan/账户权限问题导致空响应。
 
 **结论**：
 1. `MINIMAX_TOKEN_PLAN_KEY` 未配置，无法做 key 对照实验

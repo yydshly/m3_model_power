@@ -1,7 +1,7 @@
 """响应与错误结构：AssetRef / UnifiedResponse / UnifiedError。"""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
