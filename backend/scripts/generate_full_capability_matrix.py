@@ -1,0 +1,446 @@
+"""generate_full_capability_matrix.py
+
+生成全量覆盖矩阵报告：
+  - docs/MINIMAX_FULL_CAPABILITY_MATRIX.md
+  - backend/runtime/reports/minimax_full_capability_matrix.json
+
+不读取 .env，不调用真实 API，只基于 registry 和已有报告生成矩阵。
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+# ── path setup ────────────────────────────────────────────────────────────────
+BACKEND = Path(__file__).resolve().parent.parent
+REPORTS_DIR = BACKEND / "runtime" / "reports"
+DOCS_DIR = BACKEND.parent / "docs"
+sys.path.insert(0, str(BACKEND))
+
+from app.minimax_core.registry.loader import get_model_registry, get_capability_registry
+
+
+# ── helpers ────────────────────────────────────────────────────────────────────
+
+def ts() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def safe_getattr(obj, field: str, default=None):
+    return getattr(obj, field, default)
+
+
+# ── build data structures ───────────────────────────────────────────────────────
+
+def build_model_row(m) -> dict:
+    """单个模型的矩阵行数据。"""
+    return {
+        "model_id": m.id,
+        "display_name": m.label,
+        "family": m.family,
+        "tier": m.tier,
+        "official_current": m.official_current,
+        "subscription_expected": m.subscription_expected,
+        "enabled": m.enabled,
+        "context_window": m.context,
+        "input_modalities": m.input_modalities,
+        "output_modalities": m.output_modalities,
+        "protocols": m.protocols,
+        "capabilities": m.capabilities,
+        "supports_tools": m.supports_tools,
+        "supports_thinking": m.supports_thinking,
+        "thinking_can_disable": m.thinking_can_disable,
+        "live_openai_available": True if m.live_available else (False if m.live_available is False else None),
+        "live_anthropic_available": True if m.live_available else (False if m.live_available is False else None),
+        "cost_level": m.cost_level,
+        "discovery_method": m.discovery_method,
+        "discovery_status": m.discovery_status,
+        "discovery_note": m.discovery_note,
+        "note": m.note,
+    }
+
+
+def build_protocol_row(m) -> dict:
+    """单个模型的协议支持矩阵行。"""
+    protocols = m.protocols or []
+    return {
+        "model_id": m.id,
+        "openai_chat_supported": "openai" in protocols,
+        "openai_chat_verified": m.live_available is True and "openai" in protocols,
+        "anthropic_messages_supported": "anthropic" in protocols,
+        "anthropic_messages_verified": m.live_available is True and "anthropic" in protocols,
+        "responses_supported": "responses" in protocols,
+        "responses_verified": m.family == "chat" and m.live_available is True,
+        "input_tokens_supported": m.family == "chat",
+        "input_tokens_verified": m.family == "chat" and m.live_available is True,
+        "tool_use_supported": m.supports_tools,
+        "thinking_supported": m.supports_thinking,
+        "thinking_can_disable": m.thinking_can_disable,
+        "multimodal_input_supported": bool(m.input_modalities) and any(
+            mod in (m.input_modalities or []) for mod in ("image", "video")
+        ),
+    }
+
+
+def build_capability_row(c, cap_registry) -> dict:
+    """单个能力的矩阵行。"""
+    models = cap_registry.models_for_capability(c.id)
+    supported_ids = [m.id for m in models]
+    default = cap_registry.default_model_for_capability(c.id)
+    return {
+        "capability_id": c.id,
+        "name": c.name,
+        "category": c.category,
+        "endpoint": c.endpoint,
+        "method": c.method,
+        "protocol": c.protocol,
+        "requires_model": c.requires_model,
+        "model_family": c.model_family,
+        "protocols": c.protocols,
+        "supported_models_count": len(supported_ids),
+        "supported_models": supported_ids,
+        "default_model": default.id if default else None,
+        "is_streaming": c.is_streaming,
+        "is_async": c.is_async,
+        "requires_upload": c.requires_upload,
+        "cost_level": c.cost_level,
+        "doc_url": c.doc_url,
+        "implementation_status": c.status,
+    }
+
+
+def build_model_to_capability_matrix(model_registry, cap_registry) -> dict:
+    """每个模型 → 它支持哪些能力。"""
+    out: dict[str, list[str]] = {}
+    for m in model_registry.all():
+        caps = cap_registry.models_for_capability  # method ref
+        # manually compute for this model
+        supported: list[str] = []
+        for c in cap_registry.all():
+            models = cap_registry.models_for_capability(c.id)
+            if m.id in [x.id for x in models]:
+                supported.append(c.id)
+        out[m.id] = sorted(supported)
+    return out
+
+
+def build_gap_matrix(model_registry, cap_registry) -> dict:
+    """计算各类缺口。"""
+    models = model_registry.all()
+    official = {m.id for m in models if m.official_current}
+    live_chat = {m.id for m in models if m.family == "chat" and m.live_available is True}
+    local_chat = {m.id for m in models if m.family == "chat"}
+    enabled = {m.id for m in models if m.enabled}
+
+    # gap definitions
+    gap = {
+        "official_current_but_missing_in_local": [],
+        "local_but_not_official_current": [],
+        "official_chat_not_live_openai": [],
+        "official_chat_not_live_anthropic": [],
+        "capability_without_supported_models": [],
+        "requires_model_false_capabilities": [],
+        "not_verified_capabilities": [],
+        "not_applicable_to_models_api": [],
+    }
+
+    # official_current but not in local (shouldn't happen but check)
+    for m in model_registry.official_current():
+        if model_registry.by_id(m.id) is None:
+            gap["official_current_but_missing_in_local"].append(m.id)
+
+    # local but not official_current
+    for m in models:
+        if not m.official_current and m.tier not in ("legacy", "deprecated"):
+            gap["local_but_not_official_current"].append(m.id)
+
+    # official chat models not in live openai
+    for m_id in official:
+        m = model_registry.by_id(m_id)
+        if m and m.family == "chat" and m.live_available is not True:
+            gap["official_chat_not_live_openai"].append(m_id)
+
+    # official chat models not in live anthropic
+    for m_id in official:
+        m = model_registry.by_id(m_id)
+        if m and m.family == "chat":
+            if "anthropic" not in (m.protocols or []):
+                gap["official_chat_not_live_anthropic"].append(m_id)
+
+    # capabilities without any supported models
+    for c in cap_registry.all():
+        models_for_cap = cap_registry.models_for_capability(c.id)
+        if not models_for_cap and c.requires_model is True:
+            gap["capability_without_supported_models"].append(c.id)
+
+    # requires_model=false capabilities
+    for c in cap_registry.all():
+        if c.requires_model is False:
+            gap["requires_model_false_capabilities"].append(c.id)
+
+    # not verified capabilities (status != implemented)
+    for c in cap_registry.all():
+        if c.status != "implemented":
+            gap["not_verified_capabilities"].append(c.id)
+
+    # not_applicable_to_models_api (file-*, models-*)
+    for c in cap_registry.all():
+        if c.category in ("files", "models"):
+            gap["not_applicable_to_models_api"].append(c.id)
+
+    return gap
+
+
+# ── markdown generator ─────────────────────────────────────────────────────────
+
+def render_markdown(data: dict) -> str:
+    lines: list[str] = []
+    md = lines.append
+
+    md(f"# MiniMax 全量能力覆盖矩阵")
+    md("")
+    md(f"> 生成时间：{ts()}")
+    md("> 本报告基于本地 registry 配置和已有验收报告生成，不调用真实 API。")
+    md("")
+
+    # ── 1. Model Inventory Matrix ────────────────────────────────────────────
+    md("## 1. Model Inventory Matrix")
+    md("")
+    md(f"共 {len(data['model_inventory'])} 个模型。")
+    md("")
+
+    families = ["chat", "speech", "image", "video", "music"]
+    family_labels = {
+        "chat": "对话 / LLM",
+        "speech": "语音合成",
+        "image": "图像",
+        "video": "视频",
+        "music": "音乐",
+    }
+
+    for fam in families:
+        rows = [r for r in data["model_inventory"] if r["family"] == fam]
+        if not rows:
+            continue
+        md(f"### {family_labels.get(fam, fam)}")
+        md("")
+        md("| ID | 显示名 | tier | official_current | live_available | context | input_modalities | output_modalities | protocols | supports_tools | supports_thinking | thinking_can_disable |")
+        md("|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in rows:
+            live = r["live_openai_available"]
+            live_str = "✓" if live is True else ("✗" if live is False else "—")
+            official = "✓" if r["official_current"] else "✗"
+            tools = "✓" if r["supports_tools"] else "—"
+            thinking = "✓" if r["supports_thinking"] else "—"
+            disable = "✓" if r["thinking_can_disable"] else "—"
+            ctx = f"{r['context_window']:,}" if r["context_window"] else "—"
+            input_mods = ",".join(r["input_modalities"]) if r["input_modalities"] else "—"
+            output_mods = ",".join(r["output_modalities"]) if r["output_modalities"] else "—"
+            protocols = ",".join(r["protocols"]) if r["protocols"] else "—"
+            md(f"| `{r['model_id']}` | {r['display_name']} | {r['tier']} | {official} | {live_str} | {ctx} | {input_mods} | {output_mods} | {protocols} | {tools} | {thinking} | {disable} |")
+        md("")
+
+    # ── 2. Protocol Support Matrix ───────────────────────────────────────────
+    md("## 2. Protocol Support Matrix")
+    md("")
+    md("| model_id | openai_chat | anthropic_messages | responses | tool_use | thinking | thinking_disable | multimodal_input |")
+    md("|---|---|---|---|---|---|---|---|")
+    for r in data["protocol_matrix"]:
+        md(f"| `{r['model_id']}` | {'✓' if r['openai_chat_supported'] else '—'} | {'✓' if r['anthropic_messages_supported'] else '—'} | {'✓' if r['responses_supported'] else '—'} | {'✓' if r['tool_use_supported'] else '—'} | {'✓' if r['thinking_supported'] else '—'} | {'✓' if r['thinking_can_disable'] else '—'} | {'✓' if r['multimodal_input_supported'] else '—'} |")
+    md("")
+
+    # ── 3. Capability Matrix ─────────────────────────────────────────────────
+    md("## 3. Capability Matrix")
+    md("")
+    md(f"共 {len(data['capability_matrix'])} 个能力。")
+    md("")
+    md("| capability_id | name | category | requires_model | model_family | cost_level | status | supported_models_count | default_model |")
+    md("|---|---|---|---|---|---|---|---|---|")
+    for r in data["capability_matrix"]:
+        requires_model_str = "无需模型" if not r["requires_model"] else ("✓" if r["requires_model"] else "—")
+        md(f"| `{r['capability_id']}` | {r['name']} | {r['category']} | {requires_model_str} | {r['model_family'] or '—'} | {r['cost_level']} | {r['implementation_status']} | {r['supported_models_count']} | {r['default_model'] or '—'} |")
+    md("")
+
+    # ── 4. Model-to-Capability Reverse Matrix ───────────────────────────────
+    md("## 4. Model-to-Capability Reverse Matrix")
+    md("")
+    md("每个模型支持的能力列表：")
+    md("")
+    # Group by family
+    for fam in families:
+        fam_models = {k: v for k, v in data["model_to_capability"].items()
+                      if any(m["family"] == fam and m["model_id"] == k
+                             for m in data["model_inventory"])}
+        if not fam_models:
+            continue
+        md(f"### {family_labels.get(fam, fam)}")
+        md("")
+        # Get model IDs for this family in display order
+        fam_ids = [m["model_id"] for m in data["model_inventory"] if m["family"] == fam]
+        for mid in fam_ids:
+            caps = data["model_to_capability"].get(mid, [])
+            if caps:
+                md(f"**`{mid}`**: {', '.join(caps)}")
+            else:
+                md(f"**`{mid}`**: —")
+        md("")
+
+    # ── 5. Gap Matrix ───────────────────────────────────────────────────────
+    md("## 5. Gap Matrix")
+    md("")
+    gap = data["gap_matrix"]
+    md("### 5.1 official_current 但本地缺失")
+    if gap["official_current_but_missing_in_local"]:
+        for x in gap["official_current_but_missing_in_local"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.2 本地有但非 official_current（不含 legacy/deprecated）")
+    if gap["local_but_not_official_current"]:
+        for x in gap["local_but_not_official_current"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.3 官方 chat 模型未在 live OpenAI 中返回")
+    if gap["official_chat_not_live_openai"]:
+        for x in gap["official_chat_not_live_openai"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.4 官方 chat 模型未在 live Anthropic 中返回（或协议不支持 Anthropic）")
+    if gap["official_chat_not_live_anthropic"]:
+        for x in gap["official_chat_not_live_anthropic"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.5 无支持模型的能力（requires_model=true）")
+    if gap["capability_without_supported_models"]:
+        for x in gap["capability_without_supported_models"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.6 无需模型的能力（requires_model=false）")
+    if gap["requires_model_false_capabilities"]:
+        for x in gap["requires_model_false_capabilities"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.7 未验收的能力（status != implemented）")
+    if gap["not_verified_capabilities"]:
+        for x in gap["not_verified_capabilities"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    md("### 5.8 不适用于 /v1/models 的能力分类（file-*, models-*）")
+    if gap["not_applicable_to_models_api"]:
+        for x in gap["not_applicable_to_models_api"]:
+            md(f"- `{x}`")
+    else:
+        md("（无）")
+    md("")
+
+    # ── 6. Summary Statistics ───────────────────────────────────────────────
+    md("## 6. Summary Statistics")
+    md("")
+    stats = data["summary"]
+    md("| 维度 | 数量 |")
+    md("|---|---|")
+    md(f"| 官方当前模型总数 | {stats['official_current_total']} |")
+    md(f"| 本地配置模型总数 | {stats['local_total']} |")
+    md(f"| live 可用 chat 模型数 | {stats['live_chat_models']} |")
+    md(f"| 已实测（非 legacy/deprecated）模型数 | {stats['verified_non_legacy']} |")
+    md(f"| 未实测 official_current 模型数 | {stats['unverified_official_current']} |")
+    md(f"| capability_probe 待验收模型数 | {stats['capability_probe_pending']} |")
+    md(f"| 能力总数 | {stats['capabilities_total']} |")
+    md(f"| requires_model=false 能力数 | {stats['requires_model_false_count']} |")
+    md(f"| file-*/models-* 能力数 | {stats['files_models_capabilities']} |")
+    md("")
+
+    md("---")
+    md(f"*本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*")
+
+    return "\n".join(lines)
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    model_registry = get_model_registry()
+    cap_registry = get_capability_registry()
+    models = model_registry.all()
+    caps = cap_registry.all()
+
+    # Build model inventory
+    model_inventory = [build_model_row(m) for m in models]
+
+    # Build protocol matrix (chat models only)
+    protocol_matrix = [build_protocol_row(m) for m in models if m.family == "chat"]
+
+    # Build capability matrix
+    capability_matrix = [build_capability_row(c, cap_registry) for c in caps]
+
+    # Build model-to-capability reverse matrix
+    model_to_capability = build_model_to_capability_matrix(model_registry, cap_registry)
+
+    # Build gap matrix
+    gap_matrix = build_gap_matrix(model_registry, cap_registry)
+
+    # Summary stats
+    official_ids = {m.id for m in models if m.official_current}
+    non_legacy = [m for m in models if m.tier not in ("legacy", "deprecated")]
+    summary = {
+        "official_current_total": len(official_ids),
+        "local_total": len(models),
+        "live_chat_models": len([m for m in models if m.family == "chat" and m.live_available is True]),
+        "verified_non_legacy": len([m for m in non_legacy if m.live_available is True or m.discovery_status == "available"]),
+        "unverified_official_current": len([m for m in models if m.official_current and m.live_available is not True and m.tier not in ("legacy", "deprecated")]),
+        "capability_probe_pending": len([m for m in models if m.discovery_method == "capability_probe" and m.discovery_status == "unknown"]),
+        "capabilities_total": len(caps),
+        "requires_model_false_count": len([c for c in caps if c.requires_model is False]),
+        "files_models_capabilities": len([c for c in caps if c.category in ("files", "models")]),
+    }
+
+    data = {
+        "generated_at": ts(),
+        "model_inventory": model_inventory,
+        "protocol_matrix": protocol_matrix,
+        "capability_matrix": capability_matrix,
+        "model_to_capability": model_to_capability,
+        "gap_matrix": gap_matrix,
+        "summary": summary,
+    }
+
+    # Write JSON
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    json_path = REPORTS_DIR / "minimax_full_capability_matrix.json"
+    with json_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"JSON report → {json_path}")
+
+    # Write Markdown
+    md_content = render_markdown(data)
+    md_path = DOCS_DIR / "MINIMAX_FULL_CAPABILITY_MATRIX.md"
+    with md_path.open("w", encoding="utf-8") as f:
+        f.write(md_content)
+    print(f"Markdown report → {md_path}")
+
+
+if __name__ == "__main__":
+    main()

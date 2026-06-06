@@ -103,6 +103,32 @@ frontend/
 | music | music-2.6 | — | music | native | 最新音乐生成 |
 | music | music-cover | — | music | native | 翻唱生成 |
 
+### 全量统计原则
+
+本项目优先保证 **MiniMax TokenPlanPlus 能力全量、准确、可追溯**。架构复用服务于全量统计，不替代全量统计。
+
+1. **所有官方当前模型必须逐项展示**：每个模型单独一行，不允许用总数代替明细。
+2. **highspeed 模型必须作为独立模型展示**：`MiniMax-M2.7-highspeed`、`MiniMax-M2.5-highspeed`、`MiniMax-M2.1-highspeed` 必须各自独立出现。
+3. **`/v1/models` 不返回 non-chat 模型不代表它们不可用**：speech / image / video / music 模型通过 capability probe 验证，不能因 API 列表缺失就忽略。
+4. **非 LLM 模型通过 capability probe 验证**：speech / image / video / music 模型以 `discovery_method: capability_probe` 标注，由能力端点实测确认。
+5. **所有 32 个能力必须逐项出现**：包含 requires_model=false 的能力（如 lyrics-gen / file-* / models-*），正确显示"无需模型"。
+6. **Gap 矩阵必须完整**：official_current 但本地缺失、本地有但非官方当前、live 有但本地缺失、能力无支持模型等缺口必须逐项列出。
+7. **全量覆盖矩阵文档**：`docs/MINIMAX_FULL_CAPABILITY_MATRIX.md` 是全量统计的核心交付物，基于 registry 和已有报告生成，不调用真实 API。
+
+### music-2.6-free 特殊说明
+
+`music-2.6-free` 虽然 `official_current: true`，但 `subscription_expected: false`（免费档变体，不在主权益范围内），本地标记 `enabled: false`，不影响 TokenPlanPlus 主权益展示，但必须统计。
+
+### highspeed 模型协议说明
+
+| 模型 | openai | anthropic | responses |
+|---|---|---|---|
+| MiniMax-M2.7-highspeed | ✓ | ✓ | — |
+| MiniMax-M2.5-highspeed | ✓ | ✓ | — |
+| MiniMax-M2.1-highspeed | ✓ | ✓ | — |
+
+highspeed 档位走 TokenPlanPlus 共享配额（`cost_level: quota`）。
+
 历史兼容模型（`official_current: false`，默认隐藏）:
 abab6.5s-chat / abab6.5-chat / abab6.5t-chat / abab6.5g-chat / speech-01-hd / speech-01-turbo / speech-01-240228 / T2V-01 / T2V-01-Director / I2V-01 / I2V-01-live / I2V-01-Director / S2V-01 / video-01 / music-1.5 / music-01
 

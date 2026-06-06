@@ -33,6 +33,12 @@ export default function Overview() {
     officialCurrent: registry.models.filter((m) => m.official_current).length,
     liveAvailable: registry.models.filter((m) => m.live_available === true).length,
     legacyHidden: registry.models.filter((m) => m.enabled && !m.official_current).length,
+    // full coverage stats
+    liveChatModels: registry.models.filter((m) => m.family === 'chat' && m.live_available === true).length,
+    localConfigured: registry.models.length,
+    capabilityProbePending: registry.models.filter((m) => m.discovery_method === 'capability_probe' && m.discovery_status === 'unknown').length,
+    officialCurrentNonLive: registry.models.filter((m) => m.official_current && m.live_available !== true && m.tier !== 'legacy' && m.tier !== 'deprecated').length,
+    highspeedCount: registry.models.filter((m) => m.tier === 'highspeed').length,
   }
 
   return (
@@ -86,6 +92,21 @@ export default function Overview() {
             <ModelStat label="实际可用" value={stats.liveAvailable} sub="live=true 已验收" tone="indigo" />
             <ModelStat label="本地配置" value={stats.models} sub="含历史兼容" tone="slate" />
             <ModelStat label="历史/隐藏" value={stats.legacyHidden} sub="deprecated/legacy" tone="amber" />
+          </div>
+        </section>
+      )}
+
+      {/* 全量覆盖缺口统计 */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">全量覆盖缺口</h2>
+          <div className="grid grid-cols-6 gap-3">
+            <GapStat label="官方当前" value={stats.officialCurrent} sub="official_current=true" tone="emerald" />
+            <GapStat label="本地配置" value={stats.localConfigured} sub="含 legacy/deprecated" tone="slate" />
+            <GapStat label="live chat" value={stats.liveChatModels} sub="/v1/models 返回" tone="indigo" />
+            <GapStat label="待验收" value={stats.capabilityProbePending} sub="capability_probe=unknown" tone="amber" />
+            <GapStat label="未 live 验收" value={stats.officialCurrentNonLive} sub="official_current 且 live≠true" tone="orange" />
+            <GapStat label="highspeed 档" value={stats.highspeedCount} sub="独立统计" tone="purple" />
           </div>
         </section>
       )}
@@ -158,6 +179,24 @@ function ModelStat({ label, value, sub, tone }: { label: string; value: number; 
   return (
     <div className={`rounded-lg border px-4 py-3 text-center ${toneCls[tone]}`}>
       <div className="text-2xl font-semibold">{value}</div>
+      <div className="text-xs font-medium mt-0.5">{label}</div>
+      <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
+    </div>
+  )
+}
+
+function GapStat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: string }) {
+  const toneCls: Record<string, string> = {
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    slate: 'border-slate-200 bg-slate-50 text-slate-700',
+    orange: 'border-orange-200 bg-orange-50 text-orange-700',
+    purple: 'border-purple-200 bg-purple-50 text-purple-700',
+  }
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-center ${toneCls[tone]}`}>
+      <div className="text-xl font-semibold">{value}</div>
       <div className="text-xs font-medium mt-0.5">{label}</div>
       <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
     </div>
