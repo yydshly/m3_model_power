@@ -160,17 +160,14 @@ def _spec_to_capability(spec) -> Capability:
 
 def _build_registry() -> Registry:
     """从 minimax_core 加载并转换为旧 Registry 格式。"""
-    from app.minimax_core.registry.loader import get_model_registry, get_capability_registry
+    from app.minimax_core.registry.loader import get_model_registry, get_capability_registry, get_categories
 
     model_reg = get_model_registry()
     cap_reg = get_capability_registry()
 
-    # categories 来自 capabilities.yaml（minimax_core 未暴露 categories，
-    # 暂时从 core loader 的原始 YAML 读取）
-    from app.minimax_core.registry.loader import load_yaml_configs
-    raw = load_yaml_configs()
-    categories = [Category.model_validate(c) for c in raw["categories"]]
-    categories.sort(key=lambda c: c.order)
+    # categories 完全委托 core
+    raw_cats = get_categories()
+    categories = [Category.model_validate(c) for c in raw_cats]
 
     models = [_spec_to_model(m) for m in model_reg.all()]
     capabilities = [_spec_to_capability(c) for c in cap_reg.all()]

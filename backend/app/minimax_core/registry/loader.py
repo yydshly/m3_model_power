@@ -43,6 +43,11 @@ def load_yaml_configs() -> dict[str, Any]:
     }
 
 
+def load_categories() -> list[dict[str, Any]]:
+    """返回 categories 列表（原始字典）。"""
+    return load_yaml_configs()["categories"]
+
+
 def load_model_specs() -> list[ModelSpec]:
     """加载并转换为 ModelSpec 列表。"""
     data = load_yaml_configs()
@@ -141,7 +146,17 @@ def get_capability_registry() -> CapabilityRegistry:
     )
 
 
+@lru_cache(maxsize=1)
+def get_categories() -> list[dict[str, Any]]:
+    """返回 categories 列表单例（缓存）。"""
+    cats = load_categories()
+    # 按 order 排序
+    cats.sort(key=lambda c: c.get("order", 100))
+    return cats
+
+
 def clear_registry_cache() -> None:
     """清除 registry 缓存（测试/重载用）。"""
     get_model_registry.cache_clear()
     get_capability_registry.cache_clear()
+    get_categories.cache_clear()

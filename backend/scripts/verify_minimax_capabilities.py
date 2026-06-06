@@ -50,14 +50,16 @@ from app.minimax_core.clients.openai import MiniMaxOpenAIClient
 from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
 from app.minimax_core.clients.native import MiniMaxNativeClient
 from app.minimax_core.clients.files import MiniMaxFilesClient
-from app.minimax_core.contracts import AssetRef
+from app.minimax_core.contracts import AssetRef, VerificationResult
 from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
 
-# CapabilityInvoker 支持的能力列表（safe + medium）
+# CapabilityInvoker 支持的能力列表（全量 safe + medium）
 _INVOKER_SUPPORTED = {
     "chat-openai", "chat-anthropic", "chat-responses-create",
     "chat-responses-tokens", "tts-sync", "image-t2i",
     "lyrics-gen", "music-gen", "file-list", "voice-list",
+    "models-openai-list", "models-anthropic-list",
+    "models-openai-retrieve", "models-anthropic-retrieve",
 }
 RUNTIME_DIR = BACKEND / "runtime" / "capability_verification"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
@@ -182,11 +184,15 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
     "music-gen":              {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},
     "file-list":              {},
     "voice-list":             {"voice_type": "all"},
+    "models-openai-list":     {},
+    "models-anthropic-list":  {},
+    "models-openai-retrieve": {"model": "MiniMax-M3"},
+    "models-anthropic-retrieve": {"model": "MiniMax-M3"},
 }
 
 
 def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict) -> dict:
-    """通过 CapabilityInvoker 调用能力。"""
+    """通过 CapabilityInvoker 调用能力，主结果使用 VerificationResult 字段结构。"""
     payload = _INVOKER_PAYLOADS.get(cap_id, {})
 
     invoker = CapabilityInvoker(api_key=api_key, timeout=180.0)
@@ -195,45 +201,63 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
     try:
         response = invoker.invoke(cap_id, payload)
         latency_ms = int((time.monotonic() - t0) * 1000)
-        result["latency_ms"] = latency_ms
-        result["ended_at"] = datetime.now(timezone.utc).isoformat()
-        result["response_shape_ok"] = response.ok
-        result["status"] = "success" if response.ok else "failed"
-        result["model"] = response.model
-        result["output_type"] = response.output_type
+        ended_at = datetime.now(timezone.utc).isoformat()
 
-        # medium 能力特有字段
-        if cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen"):
-            result["level"] = "medium"
+        # medium 能力特有字段（从 response.assets 统一填充）
+        is_medium = cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen")
+
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": ended_at,
+            "status": "success",
+            "response_shape_ok": True,
+            "model": response.model,
+            "output_type": response.output_type,
+            "level": "medium" if is_medium else "safe",
+            "http_status": 200,
+            # assets 统一来自 response.assets
+            "assets": [a.model_dump() for a in response.assets] if response.assets else [],
+        })
+
+        # medium 能力特有字段（_handle_medium_result 保留以处理 asset_saved / asset_committed）
+        if is_medium:
             _handle_medium_result(cap_id, response.raw, result)
 
     except NotImplementedCapability as exc:
-        result["status"] = "skipped"
-        result["error_message"] = f"not_implemented: {exc.capability_id}"
-        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        result.update({
+            "status": "skipped",
+            "error_message": f"not_implemented: {exc.capability_id}",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     except Exception as exc:
         latency_ms = int((time.monotonic() - t0) * 1000)
-        result["latency_ms"] = latency_ms
-        result["ended_at"] = datetime.now(timezone.utc).isoformat()
-        result["status"] = "failed"
+        ended_at = datetime.now(timezone.utc).isoformat()
         err_msg = str(exc)
-        if hasattr(exc, "http_status"):
-            result["http_status"] = exc.http_status
+        http_status = None
+        error_type = "unknown"
+        if hasattr(exc, "http_status") and exc.http_status:
+            http_status = exc.http_status
         if hasattr(exc, "message"):
             err_msg = exc.message
-        result["error_message"] = err_msg
+        if hasattr(exc, "error_type") and exc.error_type:
+            error_type = exc.error_type
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": ended_at,
+            "status": "failed",
+            "http_status": http_status,
+            "error_type": error_type,
+            "error_message": err_msg,
+            "response_shape_ok": False,
+        })
 
     return result
 
 
-# ── 旧 client 路径（models-* / high / video 等）──────────────────────────────
+# ── 旧 client 路径（high / video / voice-clone 等 Invoker 未覆盖的能力）──────
 
 _cap_client_config: dict[str, tuple[str, str, dict | None, float]] = {
-    "models-openai-list":     ("openai",   "list_models",           None,  30),
-    "models-anthropic-list":  ("anthropic","list_models",           None,  30),
-    "models-openai-retrieve": ("openai",   "retrieve_model",        None,  30),
-    "models-anthropic-retrieve": ("anthropic","retrieve_model",     None,  30),
     "voice-clone-do":        ("native",   "voice_clone",           {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False},  30),
     "voice-design":          ("native",   "voice_design",          {"prompt": "a calm female voice", "preview_text": "hello"},  30),
     "video-t2v":             ("native",   "video_generation",      {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5},  180),

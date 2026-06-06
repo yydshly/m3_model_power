@@ -3,12 +3,13 @@
 设计目标：
   - 外部调用者只需传入 api_key 和 payload，无需关心使用哪个 client
   - 返回 UnifiedResponse / UnifiedError，不返回裸 dict
-  - 未实现的能力抛出明确的 NotImplementedError
+  - 未实现的能力抛出明确的 NotImplementedCapability
 
-本轮支持的能力（safe + medium）：
-  chat-openai, chat-anthropic, chat-responses-create,
-  tts-sync, image-t2i, lyrics-gen, music-gen,
-  file-list, voice-list
+支持的能力：
+  chat-openai / chat-anthropic / chat-responses-create / chat-responses-tokens,
+  tts-sync / image-t2i / lyrics-gen / music-gen,
+  file-list / voice-list,
+  models-openai-list / models-anthropic-list / models-openai-retrieve / models-anthropic-retrieve
 
 用法：
     invoker = CapabilityInvoker(api_key="sk-...")
@@ -93,6 +94,14 @@ class CapabilityInvoker:
             return self._file_list(payload)
         if capability_id == "voice-list":
             return self._voice_list(payload)
+        if capability_id == "models-openai-list":
+            return self._models_openai_list(payload)
+        if capability_id == "models-anthropic-list":
+            return self._models_anthropic_list(payload)
+        if capability_id == "models-openai-retrieve":
+            return self._models_openai_retrieve(payload)
+        if capability_id == "models-anthropic-retrieve":
+            return self._models_anthropic_retrieve(payload)
 
         raise NotImplementedCapability(capability_id)
 
@@ -130,14 +139,40 @@ class CapabilityInvoker:
 
     def _chat_responses_create(self, payload: dict) -> UnifiedResponse:
         raw = self._openai.responses_create(payload)
+        # 多路径文本提取
+        text = self._extract_responses_text(raw)
         return UnifiedResponse(
             ok=True,
             capability_id="chat-responses-create",
             model=payload.get("model"),
             output_type="text",
-            text=raw.get("output", {}).get("text", ""),
+            text=text,
             raw=raw,
         )
+
+    @staticmethod
+    def _extract_responses_text(raw: dict) -> str | None:
+        """从 Responses API 响应中提取文本。
+
+        路径优先级：
+          1. output_text（部分响应格式）
+          2. output[i].content[j].text（结构化 output 数组）
+          3. 返回 None（保留 raw 供调用方检查）
+        """
+        # 路径1
+        if raw.get("output_text"):
+            return raw["output_text"]
+        # 路径2
+        output = raw.get("output")
+        if isinstance(output, list):
+            for item in output:
+                if isinstance(item, dict):
+                    content = item.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "text":
+                                return block.get("text")
+        return None
 
     def _chat_responses_tokens(self, payload: dict) -> UnifiedResponse:
         raw = self._openai.responses_input_tokens(payload)
@@ -293,5 +328,57 @@ class CapabilityInvoker:
             model=None,
             output_type="json",
             text=None,
+            raw=raw,
+        )
+
+    # ── Models ──────────────────────────────────────────────────────────────
+
+    def _models_openai_list(self, payload: dict) -> UnifiedResponse:
+        raw = self._openai.list_models()
+        return UnifiedResponse(
+            ok=True,
+            capability_id="models-openai-list",
+            model=None,
+            output_type="json",
+            text=None,
+            assets=[],
+            raw=raw,
+        )
+
+    def _models_anthropic_list(self, payload: dict) -> UnifiedResponse:
+        raw = self._anthropic.list_models()
+        return UnifiedResponse(
+            ok=True,
+            capability_id="models-anthropic-list",
+            model=None,
+            output_type="json",
+            text=None,
+            assets=[],
+            raw=raw,
+        )
+
+    def _models_openai_retrieve(self, payload: dict) -> UnifiedResponse:
+        model_id = payload.get("model", "MiniMax-M3")
+        raw = self._openai.retrieve_model(model_id)
+        return UnifiedResponse(
+            ok=True,
+            capability_id="models-openai-retrieve",
+            model=model_id,
+            output_type="json",
+            text=None,
+            assets=[],
+            raw=raw,
+        )
+
+    def _models_anthropic_retrieve(self, payload: dict) -> UnifiedResponse:
+        model_id = payload.get("model", "MiniMax-M3")
+        raw = self._anthropic.retrieve_model(model_id)
+        return UnifiedResponse(
+            ok=True,
+            capability_id="models-anthropic-retrieve",
+            model=model_id,
+            output_type="json",
+            text=None,
+            assets=[],
             raw=raw,
         )

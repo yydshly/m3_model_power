@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
-import yaml
 
 # ── 项目路径 ──────────────────────────────────────────────────────────────────
 BACKEND = Path(__file__).resolve().parent.parent
@@ -59,10 +58,9 @@ def _load_env() -> dict:
 
 
 def _load_local_models() -> list[dict]:
-    models_path = BACKEND / "config" / "models.yaml"
-    with models_path.open(encoding="utf-8") as f:
-        doc = yaml.safe_load(f)
-    return doc.get("models", [])
+    """通过 get_model_registry() 获取本地配置模型（使用 .model_dump() 转换为 dict）。"""
+    from app.minimax_core.registry.loader import get_model_registry
+    return [m.model_dump() for m in get_model_registry().all()]
 
 
 def _call_openai_models(api_key: str) -> dict:
