@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-06-06T18:56:03.350868+00:00",
-  "updated_by": "rebuild_verification_index.py",
+  "updated_at": "2026-06-06T19:05:20.233290+00:00",
+  "updated_by": "verify_minimax_capabilities.py",
   "capabilities": {
     "tts-async": {
       "capability_id": "tts-async",
@@ -177,6 +177,129 @@
         "latency_ms": 924.2,
         "audio_chunk_count": 9,
         "asset_saved": true
+      }
+    },
+    "chat-responses-create": {
+      "capability_id": "chat-responses-create",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:03:17.775314+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "chat-responses-create",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "model": "MiniMax-M3",
+        "latency_ms": 6891,
+        "output_type": "text",
+        "asset_saved": false
+      }
+    },
+    "chat-responses-tokens": {
+      "capability_id": "chat-responses-tokens",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:03:39.652026+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "chat-responses-tokens",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "model": "MiniMax-M3",
+        "latency_ms": 500,
+        "output_type": "json",
+        "asset_saved": false
+      }
+    },
+    "models-openai-list": {
+      "capability_id": "models-openai-list",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:03:59.867913+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "models-openai-list",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 485,
+        "output_type": "json",
+        "asset_saved": false
+      }
+    },
+    "models-openai-retrieve": {
+      "capability_id": "models-openai-retrieve",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:04:20.008785+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "models-openai-retrieve",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "model": "MiniMax-M3",
+        "latency_ms": 468,
+        "output_type": "json",
+        "asset_saved": false
+      }
+    },
+    "models-anthropic-list": {
+      "capability_id": "models-anthropic-list",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:04:33.724176+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "models-anthropic-list",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 452,
+        "output_type": "json",
+        "asset_saved": false
+      }
+    },
+    "models-anthropic-retrieve": {
+      "capability_id": "models-anthropic-retrieve",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:04:51.988861+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "models-anthropic-retrieve",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "model": "MiniMax-M3",
+        "latency_ms": 485,
+        "output_type": "json",
+        "asset_saved": false
+      }
+    },
+    "voice-list": {
+      "capability_id": "voice-list",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T19:05:20.217003+00:00",
+      "last_failure": null,
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "voice-list",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 843,
+        "output_type": "json",
+        "asset_saved": false
       }
     }
   }
