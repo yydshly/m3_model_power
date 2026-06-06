@@ -352,6 +352,7 @@ def _verify_single(
     confirmations: dict | None = None,
     file_id: str | None = None,
     reference_image: str | None = None,
+    image_url: str | None = None,
 ) -> dict:
     """使用 CapabilityInvoker 验收单个能力。"""
     confirmations = confirmations or {}
@@ -382,7 +383,7 @@ def _verify_single(
 
     # image-i2i 需要先上传参考图
     if cap_id == "image-i2i":
-        return _verify_via_invoker_with_ref_image(cap_id, api_key, started_at, result, confirmations, reference_image)
+        return _verify_via_invoker_with_ref_image(cap_id, api_key, started_at, result, confirmations, reference_image, image_url)
 
     # CapabilityInvoker 支持的能力走统一路径
     if cap_id in _INVOKER_SUPPORTED:
@@ -522,12 +523,13 @@ def _verify_via_invoker_with_ref_image(
     result: dict,
     confirmations: dict,
     reference_image_path: str | None,
+    image_url: str | None = None,
 ) -> dict:
     """Upload reference image (if local path given) then call image-i2i via CapabilityInvoker.
 
     Supports two modes:
     - Local file path: upload to MiniMax, use returned file_id
-    - URL-based payload: use subject_reference with public URL (no upload needed)
+    - URL-based payload: use img_url with public URL (no upload needed)
     """
     # RiskGate: image-i2i requires confirm_asset_source
     cap_op = next((c for c in _load_capabilities() if c.get("id") == cap_id), None)
@@ -563,11 +565,15 @@ def _verify_via_invoker_with_ref_image(
         for key in ("subject_reference", "img_url"):
             if key in payload:
                 del payload[key]
-    elif "subject_reference" not in payload and "input_file_id" not in payload:
+    elif image_url:
+        # Use the provided public image URL directly — no upload needed
+        payload["img_url"] = image_url
+        result["reference_image_public_url"] = image_url
+    elif "subject_reference" not in payload and "input_file_id" not in payload and "img_url" not in payload:
         # Neither local file nor URL payload — skip
         result.update({
             "status": "skipped",
-            "error_message": "image-i2i requires --reference-image <path> or URL-based payload",
+            "error_message": "image-i2i requires --reference-image <path> or --image-url <url>",
             "ended_at": datetime.now(timezone.utc).isoformat(),
         })
         return result
@@ -1260,6 +1266,8 @@ def main() -> None:
                         help="指定 file_id（用于 file-retrieve / file-content 验收）")
     parser.add_argument("--reference-image",
                         help="指定参考图路径（用于 image-i2i 验收）")
+    parser.add_argument("--image-url",
+                        help="指定公开图片 URL（用于 image-i2i 验收，覆盖 payload 默认 img_url）")
     args = parser.parse_args()
 
     # Diagnose mode
@@ -1335,7 +1343,7 @@ def main() -> None:
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        result = _verify_single(cap_id, api_key, confirmations, file_id=chained_file_id, reference_image=args.reference_image)
+        result = _verify_single(cap_id, api_key, confirmations, file_id=chained_file_id, reference_image=args.reference_image, image_url=args.image_url)
         results.append(result)
 
         # 如果是 file-upload 成功，提取 file_id 供后续 file-retrieve/file-content 使用
