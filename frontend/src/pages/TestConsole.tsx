@@ -355,7 +355,7 @@ function InvokePanel({
 
       <button
         onClick={runInvoke}
-        disabled={loading || !allConfirmed}
+        disabled={loading || !allConfirmed || !!payloadErr}
         className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40"
       >
         {loading ? '执行中…' : 'Execute'}
