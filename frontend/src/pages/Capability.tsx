@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getModelsFor, type Model } from '../api'
+import { getModelsFor, riskCheck, type RiskCheckResult, type Model } from '../api'
 import { AsyncVideoPanel } from '../components/AsyncVideoPanel'
 import { ChatPanel } from '../components/ChatPanel'
 import { CostBadge, CostNotice } from '../components/CostBadge'
@@ -18,6 +18,10 @@ export default function CapabilityPage() {
   const { registry } = useRegistry()
   const [models, setModels] = useState<Model[]>([])
   const [mode, setMode] = useState<Mode>('invoke')
+  const [confirmations, setConfirmations] = useState<Record<string, boolean>>({})
+  const [riskCheckResult, setRiskCheckResult] = useState<RiskCheckResult | null>(null)
+  const [riskCheckLoading, setRiskCheckLoading] = useState(false)
+  const [examplePayload, setExamplePayload] = useState<Record<string, unknown>>({})
 
   useEffect(() => {
     if (id) {
@@ -36,6 +40,17 @@ export default function CapabilityPage() {
     const cap = registry?.capabilities.find((c) => c.id === id)
     if (cap?.category === 'chat' && cap.streaming) setMode('stream')
     else setMode('invoke')
+    if (cap) {
+      setExamplePayload(cap.example ?? {})
+      // Initialize confirmations state based on required confirmations
+      const required = getRequiredConfirmations(cap)
+      setConfirmations((prev) => {
+        const next: Record<string, boolean> = {}
+        for (const r of required) next[r] = prev[r] ?? false
+        return next
+      })
+    }
+    setRiskCheckResult(null)
   }, [id, registry])
 
   if (!registry) return <div className="p-8 text-sm text-slate-500">加载中…</div>
@@ -247,6 +262,7 @@ export default function CapabilityPage() {
       {(() => {
         const required = getRequiredConfirmations(cap)
         if (required.length === 0) return null
+        const allConfirmed = required.every((r) => confirmations[r])
         return (
           <section className="mt-4">
             <div className="rounded border border-rose-200 bg-rose-50 p-4">
@@ -254,29 +270,174 @@ export default function CapabilityPage() {
                 <span className="text-rose-500 text-lg">🔒</span>
                 <span className="font-semibold text-rose-800">执行前需要确认</span>
               </div>
-              <ul className="space-y-1 text-sm text-rose-700">
+              <ul className="space-y-2 text-sm text-rose-700">
                 {required.includes('confirm_paid') && (
-                  <li>• 可能额外收费（may_charge_extra=true）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_paid'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_paid: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认该能力可能产生额外费用
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_high_cost') && (
-                  <li>• 高成本能力（billing_category=high_cost_confirm_required）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_high_cost'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_high_cost: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认该能力属于高成本能力
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_destructive') && (
-                  <li>• 破坏性操作（is_destructive=true）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_destructive'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_destructive: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认这是破坏性操作，资源删除后可能无法恢复
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_asset_source') && (
-                  <li>• 素材来源/版权（requires_uploaded_asset=true）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_asset_source'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_asset_source: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认上传/引用素材来源合法，且已获得必要授权
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_long_running') && (
-                  <li>• 长任务执行（is_long_running=true）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_long_running'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_long_running: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认该能力是长任务，可能消耗较多额度
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_existing_task') && (
-                  <li>• 需要已有 task_id / file_id（requires_existing_task=true）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_existing_task'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_existing_task: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认已提供已有任务 ID / 文件 ID
+                    </label>
+                  </li>
                 )}
                 {required.includes('confirm_quota') && (
-                  <li>• 超过字符阈值（tts-async）</li>
+                  <li>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confirmations['confirm_quota'] ?? false}
+                        onChange={(e) => setConfirmations((p) => ({ ...p, confirm_quota: e.target.checked }))}
+                        className="accent-rose-500"
+                      />
+                      我确认文本长度超过默认阈值，允许消耗更多额度
+                    </label>
+                  </li>
                 )}
               </ul>
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  className={`px-3 py-1.5 rounded text-xs font-medium ${
+                    riskCheckLoading
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : allConfirmed
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  }`}
+                  disabled={riskCheckLoading}
+                  onClick={async () => {
+                    if (!id) return
+                    setRiskCheckLoading(true)
+                    setRiskCheckResult(null)
+                    try {
+                      const result = await riskCheck(id, examplePayload, confirmations)
+                      setRiskCheckResult(result)
+                    } catch (err) {
+                      setRiskCheckResult({
+                        allowed: false,
+                        blocked_reasons: [`检查失败: ${err instanceof Error ? err.message : String(err)}`],
+                        required_confirmations: [],
+                        warnings: [],
+                      })
+                    } finally {
+                      setRiskCheckLoading(false)
+                    }
+                  }}
+                >
+                  {riskCheckLoading ? '检查中…' : allConfirmed ? '门禁检查 / Dry Run' : '请先完成执行前确认'}
+                </button>
+                {!allConfirmed && (
+                  <span className="text-xs text-rose-600">请先勾选所有确认项</span>
+                )}
+              </div>
+
+              {/* RiskGate 检查结果 */}
+              {riskCheckResult && (
+                <div className={`mt-3 rounded p-3 text-xs ${
+                  riskCheckResult.allowed
+                    ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                    : 'bg-red-50 border border-red-200 text-red-800'
+                }`}>
+                  <div className="font-semibold mb-1">
+                    RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
+                  </div>
+                  {riskCheckResult.blocked_reasons.length > 0 && (
+                    <div className="mt-1">
+                      <span className="font-medium">阻断原因：</span>
+                      <ul className="list-disc list-inside mt-0.5">
+                        {riskCheckResult.blocked_reasons.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {riskCheckResult.required_confirmations.length > 0 && (
+                    <div className="mt-1">
+                      <span className="font-medium">需要确认项：</span>
+                      {riskCheckResult.required_confirmations.join(', ')}
+                    </div>
+                  )}
+                  {riskCheckResult.warnings.length > 0 && (
+                    <div className="mt-1">
+                      <span className="font-medium">警告：</span>
+                      <ul className="list-disc list-inside mt-0.5">
+                        {riskCheckResult.warnings.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="mt-3 text-xs text-rose-600 bg-rose-100 rounded p-2">
                 后端 RiskGate 会阻断未确认的执行请求。前端调用前请确保已在后端通过等效确认。
               </div>

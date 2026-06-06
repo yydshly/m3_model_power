@@ -179,3 +179,27 @@ export async function streamInvoke(capId: string, payload: Record<string, unknow
     body: JSON.stringify(payload),
   })
 }
+
+export type RiskCheckResult = {
+  allowed: boolean
+  blocked_reasons: string[]
+  required_confirmations: string[]
+  warnings: string[]
+}
+
+export async function riskCheck(
+  capId: string,
+  payload: Record<string, unknown>,
+  confirmations: Record<string, boolean>,
+): Promise<RiskCheckResult> {
+  const r = await fetch(`/api/capabilities/${capId}/risk-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payload, confirmations }),
+  })
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}))
+    throw new Error(data.message ?? `risk-check ${r.status}`)
+  }
+  return r.json()
+}

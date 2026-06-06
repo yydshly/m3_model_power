@@ -521,5 +521,93 @@
    - text_length > 5000：无 `confirm_quota=true` 硬阻断
 4. **video-query / video-download**：即使提供 `confirm_existing_task=true`，若 payload 中无 `task_id`/`file_id` 仍会阻断。
 
+## 10. 前端确认项与后端 RiskGate 闭环
+
+> 本节说明前端确认 UI 与后端 RiskGate 的完整闭环机制。
+
+### 10.1 闭环流程
+
+1. **前端展示确认项**：Capability 页面根据 `billing_policy` 和 `operation_policy` 计算所需确认项，以 checkbox 形式展示
+2. **用户勾选确认**：用户必须勾选所有 required confirmation 才能启用 "门禁检查 / Dry Run" 按钮
+3. **前端调用 risk-check API**：`POST /api/capabilities/{cap_id}/risk-check`，携带 `confirmations` 字典
+4. **后端 RiskGate 裁决**：后端调用 `evaluate_capability_risk()`，返回 `allowed` / `blocked_reasons` / `required_confirmations` / `warnings`
+5. **前端展示结果**：页面展示 RiskGate 检查结果，包括是否允许执行、阻断原因、需要确认项、警告
+6. **正式调用时再次核验**：前端调用 `POST /api/invoke/{cap_id}` 时仍需携带 `confirmations`，后端 RiskGate 再次裁决
+
+### 10.2 risk-check API
+
+```
+POST /api/capabilities/{cap_id}/risk-check
+Content-Type: application/json
+
+{
+  "payload": {},
+  "confirmations": {
+    "confirm_paid": false,
+    "confirm_high_cost": false,
+    "confirm_destructive": false,
+    "confirm_asset_source": false,
+    "confirm_long_running": false,
+    "confirm_existing_task": false,
+    "confirm_quota": false
+  }
+}
+```
+
+响应：
+```json
+{
+  "allowed": false,
+  "blocked_reasons": [],
+  "required_confirmations": [],
+  "warnings": []
+}
+```
+
+**注意**：`risk-check` API 只做 RiskGate 评估，不调用 MiniMax API。
+
+### 10.3 invoke API 确认参数
+
+```
+POST /api/invoke/{cap_id}
+Content-Type: application/json
+
+{
+  "payload": {},
+  "confirmations": {
+    "confirm_paid": true,
+    "confirm_high_cost": true,
+    ...
+  }
+}
+```
+
+后端 RiskGate 仍作为最终执行裁决，未确认的风险能力会被阻断。
+
+### 10.4 前端 checkbox 文案
+
+| 确认项 | checkbox 文案 |
+|---|---|
+| `confirm_paid` | 我确认该能力可能产生额外费用 |
+| `confirm_high_cost` | 我确认该能力属于高成本能力 |
+| `confirm_destructive` | 我确认这是破坏性操作，资源删除后可能无法恢复 |
+| `confirm_asset_source` | 我确认上传/引用素材来源合法，且已获得必要授权 |
+| `confirm_long_running` | 我确认该能力是长任务，可能消耗较多额度 |
+| `confirm_existing_task` | 我确认已提供已有任务 ID / 文件 ID |
+| `confirm_quota` | 我确认文本长度超过默认阈值，允许消耗更多额度 |
+
+### 10.5 本轮测试结论
+
+| capability | 无确认时 allowed | 需要确认项 |
+|---|---|---|
+| `tts-sync` | `true` | 无 |
+| `voice-design` | `false` | `confirm_paid` |
+| `video-t2v` | `false` | `confirm_high_cost`, `confirm_long_running` |
+| `file-delete` | `false` | `confirm_destructive` |
+| `tts-async`（2000字） | `false` | `confirm_quota` |
+| `video-query`（无 task_id） | `false` | `confirm_existing_task` |
+
+**本轮仅做 dry-run / risk-check，不执行任何高成本、删除、上传、tts-async、video、voice-clone 能力。**
+
 ---
 *本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*
