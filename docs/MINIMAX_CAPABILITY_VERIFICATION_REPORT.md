@@ -2,6 +2,8 @@
 
 > 生成时间：2026-06-06T17:59:48.558355+00:00
 
+**注意**：本报告为最近一次 `verify_minimax_capabilities.py --level safe` 运行结果，不代表全量验收状态。`latest.json` 每次运行会整体覆盖。全量完成率以 `report_scope_gap.py` 多来源聚合结果或 Matrix 文档为准。
+
 ## 验收摘要
 
 | 状态 | 数量 |

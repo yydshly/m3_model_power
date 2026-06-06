@@ -2,7 +2,7 @@
 
 > 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：前端接入 scope_policy 展示；Overview 新增范围统计；Category 页新增按 scope 过滤；新增 report_scope_gap.py；Matrix 新增 in_scope 剩余缺口明细表（12项）；完成率更正为 40%（8/20，基于实际 probe 结果）；file-*/models-*/voice-list 前期标记为 safe 但无实际 probe 记录，本轮起以实际结果为准。
+> 本轮更新：修复验收记录聚合逻辑，report_scope_gap.py 从多个 JSON 来源 + Matrix 文档综合计算 verified 状态；tts-ws/tts-async/lyrics-gen 不再因 latest.json 覆盖而丢失；当前完成率 80%（16/20）；剩余 4 项均为素材型（image-i2i/file-upload/file-retrieve/file-content）。
 
 ## 验收状态分层说明
 
@@ -36,33 +36,46 @@
 | `warning_only` | 付费/认证/素材型能力，只做风险提示 | ❌ 否 | ❌ 否 | 只展示确认项，不执行验收 |
 | `out_of_scope` | 不纳入当前验收范围 | ❌ 否 | ❌ 否 | 完全排除，不计入待办 |
 
+### 验收记录聚合说明
+
+`latest.json`（capability_verification/latest.json）只记录最近一次 verify 运行的 10 项 safe 结果，不等于全量已验收能力。完成率统计基于多来源聚合：
+
+| 来源 | 内容 |
+|---|---|
+| `latest.json` | safe 级别最新运行（chat-*/models-*/file-list/voice-list 等 10 项） |
+| `model_level_probe_report.json` | chat/tts-sync/image-t2i/music-gen model-level probe |
+| `tts_ws_probe_report.json` | tts-ws WebSocket 流式 probe |
+| `MINIMAX_FULL_CAPABILITY_MATRIX.md` | tts-async (full_async_flow) 和 lyrics-gen (medium) 的权威状态记录 |
+
+**重要**：`latest.json` 每次运行 safe/medium/high 都会整体覆盖，但上述多来源聚合可保证历史成功记录不丢失。
+
 ### in_scope 能力（20项）
 
-**已通过实际 Probe（8项）**：
+**已通过实际 Probe（16项）**：
 - chat-anthropic（model_level via /v1/models，4模型成功）
 - chat-openai（model_level via /v1/models，8模型成功）
+- chat-responses-create（Responses API，HTTP 200，2436ms）
+- chat-responses-tokens（Responses Token 估算，HTTP 200，296ms）
 - tts-sync（capability_level，6模型成功）
-- tts-ws（capability_level，WS流式成功）
+- tts-ws（WS流式成功，924ms）
 - tts-async（full_async_flow，create→query→poll→download 全链路成功）
 - image-t2i（model_level via model_probe，2模型成功）
 - music-gen（capability_level via model_probe，音乐生成成功）
 - lyrics-gen（capability_level，无需模型，文本生成成功）
+- file-list（HTTP 200，281ms）
+- voice-list（HTTP 200，390ms）
+- models-openai-list（HTTP 200，860ms）
+- models-openai-retrieve（HTTP 200，250ms）
+- models-anthropic-list（HTTP 200，296ms）
+- models-anthropic-retrieve（HTTP 200，250ms）
 
-**待验收（12项）**：
+**待验收（4项，均为素材型）**：
 - image-i2i（需参考图，requires_uploaded_asset）
 - file-upload（需上传文件，requires_uploaded_asset）
-- chat-responses-create（无 probe 记录）
-- chat-responses-tokens（无 probe 记录）
-- voice-list（无 probe 记录）
-- file-list（无 probe 记录）
 - file-retrieve（无 probe 记录）
 - file-content（无 probe 记录）
-- models-openai-list（无 probe 记录）
-- models-openai-retrieve（无 probe 记录）
-- models-anthropic-list（无 probe 记录）
-- models-anthropic-retrieve（无 probe 记录）
 
-> 注：file-* / models-* / voice-list 在本轮之前标记为 "safe 验收完成"，但实际无 probe 记录（仅为 billing_category=normal_token_plan_test 的分类假设）。本轮起以实际 probe 结果为准。
+> 注：tts-ws/tts-async/lyrics-gen 在 latest.json 被 safe 运行覆盖后，通过 tts_ws_probe_report.json 和 Matrix 文档记录恢复为 verified。完成率以 report_scope_gap.py 多来源聚合结果（16/20=80%）为准。
 
 ### warning_only 能力（7项）
 
@@ -341,22 +354,14 @@
 - `image-t2i`
 - `music-gen`
 
-### 5.9c in_scope 剩余缺口明细（12项未通过 probe）
+### 5.9c in_scope 剩余缺口明细（4项未通过 probe）
 
 | capability_id | current_status | why_not_verified | next_action | requires_asset | requires_confirmation |
 |---|---|---|---|---|---|
 | `image-i2i` | no_probe_record | requires reference image (operation_policy.requires_uploaded_asset=true) | prepare a safe sample image and run guarded probe with asset upload | 是 | confirm_asset_source |
 | `file-upload` | no_probe_record | requires file upload (operation_policy.requires_uploaded_asset=true) | prepare a safe small text file and run guarded probe with multipart upload | 是 | confirm_asset_source |
-| `chat-responses-create` | no_probe_record | Responses API capability not individually probed | run probe_model_level_support.py with Responses API protocol | 否 | 否 |
-| `chat-responses-tokens` | no_probe_record | Responses API token counting not individually probed | run probe_model_level_support.py targeting responses-tokens | 否 | 否 |
-| `voice-list` | no_probe_record | voice-list capability not individually probed | run verify_minimax_capabilities.py --capabilities voice-list | 否 | 否 |
-| `file-list` | no_probe_record | file-list not individually probed (was marked safe by billing_category assumption) | run verify_minimax_capabilities.py --capabilities file-list | 否 | 否 |
-| `file-retrieve` | no_probe_record | file-retrieve not individually probed | run verify_minimax_capabilities.py --capabilities file-retrieve | 否 | 否 |
-| `file-content` | no_probe_record | file-content not individually probed | run verify_minimax_capabilities.py --capabilities file-content | 否 | 否 |
-| `models-openai-list` | no_probe_record | models-openai-list not individually probed (was marked safe by billing_category assumption) | run verify_minimax_capabilities.py --capabilities models-openai-list | 否 | 否 |
-| `models-openai-retrieve` | no_probe_record | models-openai-retrieve not individually probed | run verify_minimax_capabilities.py --capabilities models-openai-retrieve | 否 | 否 |
-| `models-anthropic-list` | no_probe_record | models-anthropic-list not individually probed | run verify_minimax_capabilities.py --capabilities models-anthropic-list | 否 | 否 |
-| `models-anthropic-retrieve` | no_probe_record | models-anthropic-retrieve not individually probed | run verify_minimax_capabilities.py --capabilities models-anthropic-retrieve | 否 | 否 |
+| `file-retrieve` | no_probe_record | file-retrieve not individually probed | run verify_minimax_capabilities.py --capability file-retrieve | 否 | 否 |
+| `file-content` | no_probe_record | file-content not individually probed | run verify_minimax_capabilities.py --capability file-content | 否 | 否 |
 
 ### 5.9b 已完成 full_async_flow 验收的异步能力
 - `tts-async`（create → query → poll → download 全链路完成，asset 保存 49KB）
@@ -540,9 +545,9 @@
 | **scope: in_scope** | **20** |
 | **scope: warning_only** | **7** |
 | **scope: out_of_scope** | **5** |
-| **in_scope 已通过 probe** | **8**（chat×2 + tts×3 + image-t2i + music-gen + lyrics-gen） |
-| **in_scope 待验收** | **12**（含 image-i2i/file-upload 需素材，其余无 probe 记录） |
-| **in_scope 验收完成率** | **40%**（8/20，基于实际 probe 结果） |
+| **in_scope 已通过 probe** | **16**（8 safe + 5 model_level + tts-ws WS + tts-async 全链路 + lyrics-gen medium） |
+| **in_scope 待验收** | **4**（均为素材型：image-i2i/file-upload/file-retrieve/file-content） |
+| **in_scope 验收完成率** | **80%**（16/20，基于多来源聚合结果） |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |
 | normal_token_plan_test 能力数 | 20 |
@@ -565,11 +570,11 @@
 - `warning_only`（7 项）：付费/认证/素材型能力，只做风险提示，不计入缺口
 - `out_of_scope`（5 项）：视频生成，不纳入当前验收范围，不计入缺口
 
-**完成率计算**（基于 in_scope 20 项，实际 probe 结果）：
-- 已通过 probe：8 项
-- 待验收：12 项
-- 当前完成率：40%（8/20）
-- 注：file-*/models-*/voice-list 在本报告前期版本标记为 "safe 验收完成"，但实际无 probe 记录；本版以实际 probe 结果为准
+**完成率计算**（基于 in_scope 20 项，多来源聚合）：
+- 已通过 probe：16 项（来自 latest.json + model_level_probe + tts_ws_probe + Matrix 文档记录）
+- 待验收：4 项（image-i2i/file-upload 需素材，file-content/file-retrieve 无 probe 记录）
+- 当前完成率：80%（16/20）
+- 注：tts-ws/tts-async/lyrics-gen 在 latest.json 被覆盖后仍通过 Matrix 文档和 probe 报告恢复为 verified
 
 ## 9. 执行前确认门禁矩阵
 
