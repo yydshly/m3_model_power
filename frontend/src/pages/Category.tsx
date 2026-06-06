@@ -1,15 +1,25 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CostBadge } from '../components/CostBadge'
 import { StatusBadge } from '../components/StatusBadge'
 import { useRegistry } from '../store'
+import type { ScopeLevel } from '../api'
+
+type FilterScope = 'all' | ScopeLevel
 
 export default function Category() {
   const { id } = useParams<{ id: string }>()
   const { registry } = useRegistry()
+  const [filterScope, setFilterScope] = useState<FilterScope>('all')
   if (!registry) return <div className="p-8 text-sm text-slate-500">加载中…</div>
   const cat = registry.categories.find((c) => c.id === id)
   if (!cat) return <div className="p-8 text-sm text-red-600">分类不存在：{id}</div>
-  const caps = registry.capabilities.filter((c) => c.category === id)
+  const allCaps = registry.capabilities.filter((c) => c.category === id)
+  const caps = filterScope === 'all' ? allCaps : allCaps.filter((c) => c.scope_policy?.current_scope === filterScope)
+
+  const inScopeCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'in_scope').length
+  const warningCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'warning_only').length
+  const outCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'out_of_scope').length
 
   return (
     <div className="p-8 max-w-5xl">
@@ -19,7 +29,36 @@ export default function Category() {
       </div>
       <p className="text-sm text-slate-600 mt-1">{cat.desc}</p>
 
-      <ul className="mt-6 space-y-2">
+      {/* Scope filter */}
+      <div className="mt-4 flex items-center gap-2 flex-wrap text-xs">
+        <span className="text-slate-500">范围筛选：</span>
+        <button
+          className={`px-2 py-1 rounded border ${filterScope === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          onClick={() => setFilterScope('all')}
+        >
+          全部 ({allCaps.length})
+        </button>
+        <button
+          className={`px-2 py-1 rounded border ${filterScope === 'in_scope' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          onClick={() => setFilterScope('in_scope')}
+        >
+          范围内 ({inScopeCount})
+        </button>
+        <button
+          className={`px-2 py-1 rounded border ${filterScope === 'warning_only' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          onClick={() => setFilterScope('warning_only')}
+        >
+          只提示 ({warningCount})
+        </button>
+        <button
+          className={`px-2 py-1 rounded border ${filterScope === 'out_of_scope' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}
+          onClick={() => setFilterScope('out_of_scope')}
+        >
+          范围外 ({outCount})
+        </button>
+      </div>
+
+      <ul className="mt-4 space-y-2">
         {caps.map((c) => (
           <li key={c.id} className="rounded-lg border border-slate-200 bg-white hover:border-slate-400 transition">
             <Link to={`/cap/${c.id}`} className="block px-4 py-3">
@@ -27,6 +66,9 @@ export default function Category() {
                 <div className="font-medium text-slate-900">{c.label}</div>
                 <StatusBadge status={c.status} />
                 <CostBadge level={c.cost_level} />
+                {c.scope_policy?.current_scope === 'in_scope' && <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">范围内</span>}
+                {c.scope_policy?.current_scope === 'warning_only' && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">只提示</span>}
+                {c.scope_policy?.current_scope === 'out_of_scope' && <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">范围外</span>}
                 <span className="text-[10px] font-mono text-slate-500">{c.method} {c.mm_path}</span>
                 {c.streaming && <span className="text-[10px] text-sky-600">流式</span>}
                 {c.async_job && <span className="text-[10px] text-purple-600">异步任务</span>}

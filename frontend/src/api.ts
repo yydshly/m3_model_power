@@ -9,6 +9,18 @@ export type HealthResp = {
   status?: number
 }
 
+export type ScopeLevel = 'in_scope' | 'warning_only' | 'out_of_scope'
+
+export type VerificationAction = 'verify' | 'show_warning_only' | 'exclude'
+
+export interface ScopePolicy {
+  current_scope: ScopeLevel
+  scope_reason: string
+  count_in_completion_rate: boolean
+  count_in_gap_matrix: boolean
+  default_verification_action: VerificationAction
+}
+
 export type CapabilityStatus = 'implemented' | 'planned' | 'unsupported'
 
 export type BillingCategory =
@@ -80,6 +92,7 @@ export type Capability = {
   has_handler: boolean
   billing_policy: BillingPolicy
   operation_policy: OperationPolicy
+  scope_policy: ScopePolicy
 }
 
 export type Model = {

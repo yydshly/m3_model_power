@@ -76,6 +76,34 @@ export default function CapabilityPage() {
       <p className="text-sm text-slate-600 mt-2">{cap.desc}</p>
       {cap.notes && <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">{cap.notes}</div>}
 
+      {/* Scope policy display */}
+      {cap.scope_policy && (
+        <div className={`mt-3 rounded border p-3 text-xs ${
+          cap.scope_policy.current_scope === 'in_scope'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+            : cap.scope_policy.current_scope === 'warning_only'
+            ? 'border-amber-200 bg-amber-50 text-amber-800'
+            : 'border-slate-200 bg-slate-50 text-slate-600'
+        }`}>
+          <div className="font-semibold mb-1">
+            {cap.scope_policy.current_scope === 'in_scope'
+              ? '✅ 当前 Token Plan 验收范围内能力'
+              : cap.scope_policy.current_scope === 'warning_only'
+              ? '⚠️ 仅做风险提示，不参与默认验收'
+              : '🚫 当前项目范围外，不计入完成率和缺口'}
+          </div>
+          {cap.scope_policy.scope_reason && (
+            <div className="text-xs opacity-80">{cap.scope_policy.scope_reason}</div>
+          )}
+          {cap.scope_policy.current_scope === 'warning_only' && (
+            <div className="mt-1 text-xs">不展示默认验收入口，保留风险提示。</div>
+          )}
+          {cap.scope_policy.current_scope === 'out_of_scope' && (
+            <div className="mt-1 text-xs">视频生成类能力，当前项目暂不考虑。</div>
+          )}
+        </div>
+      )}
+
       {/* Billing policy display */}
       <section className="mt-4">
         {cap.billing_policy.requires_explicit_confirmation && (

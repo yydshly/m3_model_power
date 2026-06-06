@@ -76,6 +76,11 @@ export default function Overview() {
     confirmLongRunning: registry.capabilities.filter((c) => c.operation_policy?.is_long_running === true).length,
     confirmExistingTask: registry.capabilities.filter((c) => c.operation_policy?.requires_existing_task === true).length,
     confirmQuota: registry.capabilities.filter((c) => c.id === 'tts-async').length,
+    // scope stats
+    inScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope').length,
+    inScopeVerified: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope' && (c.billing_policy?.billing_category === 'normal_token_plan_test' || c.billing_policy?.billing_category === 'quota_sensitive')).length,
+    warningOnlyTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'warning_only').length,
+    outOfScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'out_of_scope').length,
   }
 
   return (
@@ -197,6 +202,24 @@ export default function Overview() {
       )}
 
       {regErr && <div className="mt-6 text-sm text-red-600">无法加载能力图谱：{regErr}</div>}
+
+      {/* Scope level statistics */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">Token Plan 范围统计</h2>
+          <div className="grid grid-cols-5 gap-3">
+            <GapStat label="范围内" value={stats.inScopeTotal} sub="in_scope" tone="emerald" />
+            <GapStat label="范围内已验收" value={stats.inScopeVerified} sub="safe/medium" tone="indigo" />
+            <GapStat label="范围内未验收" value={stats.inScopeTotal - stats.inScopeVerified} sub="待补充验收" tone="amber" />
+            <GapStat label="只提示" value={stats.warningOnlyTotal} sub="warning_only" tone="orange" />
+            <GapStat label="范围外" value={stats.outOfScopeTotal} sub="out_of_scope" tone="slate" />
+          </div>
+          <div className="mt-3 text-xs text-slate-600">
+            完成率：<span className="font-semibold text-emerald-600">{stats.inScopeTotal > 0 ? Math.round(stats.inScopeVerified / stats.inScopeTotal * 100) : 0}%</span>
+            {' '}({stats.inScopeVerified}/{stats.inScopeTotal}，仅基于 in_scope 计算)
+          </div>
+        </section>
+      )}
 
       {stats && (
         <section className="mt-6 grid grid-cols-5 gap-3 text-center">
