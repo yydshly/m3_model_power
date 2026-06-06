@@ -2,7 +2,7 @@
 
 > 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：tts-async 完整闭环已验收（create→query→poll→download）；task_id/file_id/usage_characters 正确解析；资产成功保存至 runtime/assets/tts_async/（49664 bytes）；tts-sync/tts-ws 回归通过。
+> 本轮更新：tts-async quota guard 收口；>5000 字默认硬阻断，plain confirm_quota 无法绕过，需未来 confirm_very_large_quota；6 场景 inline 测试全部通过（A✅B✅C✅D✅E✅F✅）。
 
 ## 验收状态分层说明
 
@@ -341,7 +341,7 @@
 | `chat-responses-tokens` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `tts-sync` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | 消耗 TokenPlan 语音/字符额度 |
 | `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（speech-02-turbo，9 chunk/13KB，verified_at=2026-06-06，task_started=true，task_finished=true，event_counts={task_continued:9}） | 消耗 TokenPlan 语音/字符额度；WS 协议：task_start→task_started→task_continue+task_finish→task_continued(audio hex)→task_finished；已通过 minimax_core invoke_async 验收 |
-| `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | full_async_flow_verified（create→query→poll→download 全链路通过；task_id/file_id/usage_characters 正确解析；asset 49KB 已保存；poll 2次；字符数保护同上） | 消耗 TokenPlan 语音/字符额度；字符数保护：<=300字允许默认测试；>1000字需confirm_quota；>5000字无确认硬阻断；本轮仅用短文本(2字)测试 |
+| `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | full_async_flow_verified（create→query→poll→download 全链路通过；task_id/file_id/usage_characters 正确解析；asset 49KB 已保存；字符数保护已收口） | 消耗 TokenPlan 语音/字符额度；字符数保护规则（已收口）：<=300字默认允许；301~1000字允许但有warning；1001~5000字需confirm_quota=true；>5000字硬阻断（confirm_quota也无法绕过，需未来confirm_very_large_quota）；本轮仅用短文本(2字)测试 |
 | `voice-clone-upload-audio` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-upload-prompt` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-do` | paid_confirm_required | ✓ | ✓ | ✓ | ✓ | ✓ | pending_explicit_confirmation | 音色克隆官方价 9.9 元/音色 |
@@ -410,7 +410,7 @@
 | `chat-responses-tokens` | normal | ✗ | ✗ | ✗ | ✗ | — |
 | `tts-sync` | normal | ✗ | ✗ | ✗ | ✗ | — |
 | `tts-ws` | normal | ✗ | ✗ | ✗ | ✗ | — |
-| `tts-async` | quota_guarded | ✗ | ✗ | ✗ | ✓ | <=300字允许默认测试；>1000字需二次确认；>5000字无确认禁止执行 |
+| `tts-async` | quota_guarded | ✗ | ✗ | ✗ | ✓ | <=300字默认允许；301~1000字允许但有warning；1001~5000字需confirm_quota；>5000字硬阻断（plain confirm_quota无法绕过，需未来confirm_very_large_quota） |
 | `voice-clone-upload-audio` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传参考音频；请确认素材来源、隐私、版权 |
 | `voice-clone-upload-prompt` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传 Prompt 文本；请确认素材来源、隐私 |
 | `voice-clone-do` | asset_required | ✗ | ✓ | ✗ | ✗ | 音色克隆训练；克隆音色 7 天未使用会被删除 |
@@ -510,7 +510,7 @@
 | `video-query` | confirm_existing_task | 否（无 task_id 时） | requires_existing_task=true 且 payload 无 task_id/file_id |
 | `video-download` | confirm_existing_task | 否（无 file_id 时） | requires_existing_task=true 且 payload 无 file_id |
 | `music-cover-prep` | confirm_paid, confirm_asset_source | 否 | may_charge_extra=true, requires_uploaded_asset=true |
-| `tts-async` | confirm_quota（字符数>1000时） | 字符数<=300时允许 | text_length > requires_confirmation_above_chars / hard_block_above_chars_without_confirm |
+| `tts-async` | confirm_quota（字符数>1000时）；confirm_very_large_quota（字符数>5000时，未来预留） | 字符数<=300时允许；字符数>5000时无论confirm_quota都硬阻断 | text_length > requires_confirmation_above_chars（1001~5000需confirm_quota）；text_length > hard_block_above_chars_without_confirm（>5000硬阻断，plain confirm_quota无法绕过） |
 | `image-i2i` | confirm_asset_source | 否 | requires_uploaded_asset=true |
 | `file-upload` | confirm_asset_source | 否 | requires_uploaded_asset=true |
 | `file-delete` | confirm_destructive | 否 | is_destructive=true |
@@ -519,10 +519,11 @@
 
 1. **风险能力默认阻断**：上表中的能力在未提供对应确认参数时，后端 `RiskGate` 会抛出 `risk_gate_blocked` 错误，不实际调用 MiniMax API。
 2. **脚本确认参数**：通过 `verify_minimax_capabilities.py` 的 `--confirm-paid`、`--confirm-destructive`、`--confirm-asset-source`、`--confirm-long-running`、`--confirm-existing-task`、`--confirm-quota` 参数提供确认。
-3. **tts-async 字符数保护**：
+3. **tts-async 字符数保护（已收口）**：
    - text_length <= 300：默认允许
-   - text_length > 1000：需 `confirm_quota=true`，否则阻断
-   - text_length > 5000：无 `confirm_quota=true` 硬阻断
+   - text_length 301~1000：允许但有 warning（消耗 quota）
+   - text_length 1001~5000：需 `confirm_quota=true`
+   - text_length > 5000：硬阻断，即使 `confirm_quota=true` 也不行（plain confirm_quota 无法绕过，需未来 `confirm_very_large_quota` 确认项）
 4. **video-query / video-download**：即使提供 `confirm_existing_task=true`，若 payload 中无 `task_id`/`file_id` 仍会阻断。
 
 ## 10. 前端确认项与后端 RiskGate 闭环

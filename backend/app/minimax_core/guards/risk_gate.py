@@ -40,6 +40,7 @@ CONFIRM_ASSET_SOURCE = "confirm_asset_source"
 CONFIRM_LONG_RUNNING = "confirm_long_running"
 CONFIRM_EXISTING_TASK = "confirm_existing_task"
 CONFIRM_QUOTA = "confirm_quota"
+CONFIRM_VERY_LARGE_QUOTA = "confirm_very_large_quota"
 
 ALL_CONFIRM_TYPES = {
     CONFIRM_PAID,
@@ -49,6 +50,7 @@ ALL_CONFIRM_TYPES = {
     CONFIRM_LONG_RUNNING,
     CONFIRM_EXISTING_TASK,
     CONFIRM_QUOTA,
+    CONFIRM_VERY_LARGE_QUOTA,
 }
 
 
@@ -105,6 +107,12 @@ def evaluate_capability_risk(
     op = capability.operation_policy
 
     # ── 1. tts-async 字符数保护（特殊逻辑：优先级最高）────────────────────
+    # 规则（已收口）：
+    #   <= 300 字：              允许，无 warning
+    #   301 ~ 1000 字：           允许，有 warning
+    #   1001 ~ 5000 字：         需 confirm_quota=true 才允许
+    #   > 5000 字：              硬阻断，即使 confirm_quota=true 也不行
+    #                           （需 confirm_very_large_quota，本轮不实现）
     if capability.id == "tts-async":
         text = payload.get("text", "") or ""
         text_length = len(text)
@@ -113,27 +121,33 @@ def evaluate_capability_risk(
         requires_confirm_above = op.requires_confirmation_above_chars
         hard_block_above = op.hard_block_above_chars_without_confirm
 
-        # <= max_default_chars → 允许（无需确认）
-        if max_default_chars is not None and text_length > max_default_chars:
+        # 硬阻断（最高优先级）：> hard_block_above → 无论 confirm_quota 都阻断
+        if hard_block_above is not None and text_length > hard_block_above:
+            blocked_reasons.append(
+                f"tts-async: text_length={text_length} exceeds hard safety limit "
+                f"hard_block_above_chars_without_confirm={hard_block_above}. "
+                f"Plain confirm_quota cannot override. Text must be split or a "
+                f"future confirm_very_large_quota flag is required."
+            )
+            required_confirmations.append(CONFIRM_VERY_LARGE_QUOTA)
+
+        # 需确认阈值：> requires_confirmation_above_chars → 需 confirm_quota=true
+        elif requires_confirm_above is not None and text_length > requires_confirm_above:
+            if not confirmations.get(CONFIRM_QUOTA, False):
+                blocked_reasons.append(
+                    f"tts-async: text_length={text_length} exceeds requires_confirmation_above_chars "
+                    f"={requires_confirm_above}. confirm_quota=true is required."
+                )
+                required_confirmations.append(CONFIRM_QUOTA)
+
+        # 默认允许但有 warning：> max_default_chars
+        elif max_default_chars is not None and text_length > max_default_chars:
             warnings.append(
-                f"tts-async text length {text_length} exceeds default limit {max_default_chars}"
+                f"tts-async text length {text_length} exceeds default safe limit "
+                f"{max_default_chars} characters. This will consume quota."
             )
 
-        if requires_confirm_above is not None and text_length > requires_confirm_above:
-            if not confirmations.get(CONFIRM_QUOTA, False):
-                blocked_reasons.append(
-                    f"tts-async: text_length={text_length} > requires_confirmation_above_chars={requires_confirm_above} "
-                    f"but confirm_quota=false"
-                )
-                required_confirmations.append(CONFIRM_QUOTA)
-
-        if hard_block_above is not None and text_length > hard_block_above:
-            if not confirmations.get(CONFIRM_QUOTA, False):
-                blocked_reasons.append(
-                    f"tts-async: text_length={text_length} > hard_block_above_chars_without_confirm={hard_block_above} "
-                    f"and confirm_quota=false — hard blocked"
-                )
-                required_confirmations.append(CONFIRM_QUOTA)
+        # <= max_default_chars：完全允许，无 warning
 
         # tts-async 的 is_long_running 保护由字符数逻辑覆盖，不再单独阻断
     else:
@@ -223,7 +237,11 @@ def get_required_confirmations(capability: CapabilitySpec) -> list[str]:
     required: list[str] = []
 
     if capability.id == "tts-async":
+        # tts-async may need either CONFIRM_QUOTA (1001-5000) or
+        # CONFIRM_VERY_LARGE_QUOTA (>5000). Show both in UI; evaluation
+        # picks the right one based on actual text length.
         required.append(CONFIRM_QUOTA)
+        required.append(CONFIRM_VERY_LARGE_QUOTA)
     else:
         if op.is_long_running:
             required.append(CONFIRM_LONG_RUNNING)
