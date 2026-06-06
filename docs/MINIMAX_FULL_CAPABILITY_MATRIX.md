@@ -169,7 +169,7 @@
 | `voice-list` | 音色列表 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
 | `voice-delete` | 删除音色 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
 | `image-t2i` | 文生图 T2I | vision | ✓ | image | quota | implemented | image-01,image-01-live | image-01 | model_level_verified | — | model_level |
-| `image-i2i` | 图生图 I2I | vision | ✓ | image | quota | implemented | image-01,image-01-live | image-01 | not_probed | — | not_probed |
+| `image-i2i` | 图生图 I2I | vision | ✓ | image | quota | implemented | image-01,image-01-live | image-01 | success | — | capability_level |
 | `video-t2v` | 文生视频 T2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,T2V-01,T2V-01-Director | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
 | `video-i2v` | 图生视频 I2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,I2V-01,I2V-01-live,I2V-01-Director | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
 | `video-s2v` | 主体参考视频 S2V | vision | ✓ | video | high | implemented | MiniMax-Hailuo-2.3,MiniMax-Hailuo-2.3-Fast,MiniMax-Hailuo-02,S2V-01 | MiniMax-Hailuo-2.3-Fast | not_probed | — | not_probed |
@@ -298,6 +298,7 @@
 ### 5.9 能力已验收但仅 capability_level（非 model_level）
 - `tts-sync`
 - `image-t2i`
+- `image-i2i`
 - `music-gen`
 
 ### 5.10 模型未逐项 probe（capability_probe 且 status=unknown）
@@ -315,13 +316,12 @@
 - `music-2.6`
 - `music-cover`
 
-### 5.11 高成本暂缓（video / voice-clone / voice-design / tts-async / music-cover-prep）
+### 5.11 高成本暂缓（video / voice-clone / voice-design / music-cover-prep）
 - `video-t2v`
 - `video-i2v`
 - `video-s2v`
 - `voice-clone-do`
 - `voice-design`
-- `tts-async`
 - `music-cover-prep`
 
 ### 5.12 chat-openai 模型级 probe 失败

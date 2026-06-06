@@ -203,6 +203,8 @@ class CapabilityInvoker:
             raise NotImplementedCapability("tts-ws requires invoke_async() from async context")
         if capability_id == "image-t2i":
             return self._image_t2i(payload)
+        if capability_id == "image-i2i":
+            return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
             return self._lyrics_gen(payload)
         if capability_id == "music-gen":
@@ -282,6 +284,8 @@ class CapabilityInvoker:
                 max_poll_attempts=confirmations.get("max_poll_attempts", 30),
             )
         if capability_id == "image-t2i":
+            return self._image_t2i(payload)
+        if capability_id == "image-i2i":
             return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
             return self._lyrics_gen(payload)

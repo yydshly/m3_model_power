@@ -1,6 +1,6 @@
 # MiniMax 能力验收报告
 
-> 生成时间：2026-06-06T19:05:20.234419+00:00
+> 生成时间：2026-06-06T19:56:22.531891+00:00
 
 ## 验收摘要
 
@@ -12,7 +12,7 @@
 
 | 能力 ID | 状态 | HTTP | 延迟(ms) | 模型 | 错误 |
 |---|---|---|---|---|---|
-| voice-list | success | 200 | 843 | None | - |
+| image-i2i | success | 200 | 17641 | image-01 | - |
 
 ---
 *此报告由 `backend/scripts/verify_minimax_capabilities.py` 自动生成*
