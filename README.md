@@ -30,7 +30,7 @@ MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
 ```bash
 # 后端
 cd backend
-cp .env.example .env   # 填入 MINIMAX_API_KEY
+cp .env.example .env   # 填入 MINIMAX_TOKEN_PLAN_KEY
 pip install -e .
 uvicorn app.main:app --reload --port 8000
 
@@ -177,6 +177,23 @@ MiniMax native API（tts-sync / image-t2i / lyrics-gen / music-gen / voice-list 
 | 其他非零 | 业务错误 | failed · minimax_api_error |
 
 **验收脚本和 CapabilityInvoker 必须检查 `base_resp.status_code`，不能仅凭 HTTP 200 判定 success。**
+
+## Token Plan Only 模式
+
+本项目**默认只验证 TokenPlanPlus 极速版能力**：
+
+```bash
+# 在 backend/.env 中配置 TokenPlan Key
+MINIMAX_TOKEN_PLAN_KEY=你的TokenPlan订阅Key
+
+# 运行验收（默认使用 token-plan）
+python scripts/verify_minimax_capabilities.py --level medium --confirm-cost
+python scripts/probe_model_level_support.py --scope low-cost
+```
+
+- `MINIMAX_TOKEN_PLAN_KEY` 是**唯一参与验收的凭证**
+- `MINIMAX_API_KEY` 仅在显式传递 `--key-source api-key` 时用于对照诊断，**不参与默认验收**
+- 如果 `MINIMAX_TOKEN_PLAN_KEY` 未配置，native 多模态验收将跳过并提示
 
 ## 能力验收方式
 

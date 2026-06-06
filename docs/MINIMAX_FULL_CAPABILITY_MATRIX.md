@@ -6,6 +6,18 @@
 
 ---
 
+## Token Plan Only 验收原则
+
+本项目**默认只验收 TokenPlanPlus 极速版能力**：
+
+1. **默认 Key 是 `MINIMAX_TOKEN_PLAN_KEY`**，所有验收脚本均使用该 Key
+2. **`MINIMAX_API_KEY` 不参与默认验收**，仅在显式 `--key-source api-key` 时用于对照诊断
+3. 如果 `MINIMAX_TOKEN_PLAN_KEY` 未配置，native 多模态状态为 `token_plan_key_not_set`
+4. 之前 API Key 返回 1004 的记录仅作为诊断参考，**不作为 Token Plan 能力结论**
+5. 全量矩阵以 Token Plan Key 实测结果为唯一事实来源
+
+---
+
 ## 重要说明：HTTP 200 ≠ MiniMax 业务成功
 
 MiniMax native API（tts-sync / image-t2i / lyrics-gen / music-gen / voice-list 等）使用 **HTTP 200 + 业务状态码** 双层状态体系：

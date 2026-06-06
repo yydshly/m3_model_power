@@ -83,7 +83,7 @@ def _key_fingerprint(key: str) -> dict:
 
 
 def diagnose_auth() -> dict:
-    """诊断 verify 脚本使用的 Key 配置。"""
+    """诊断 verify 脚本使用的 Key 配置（Token Plan Only 模式）。"""
     env = _load_env()
     token_plan_key = env.get("MINIMAX_TOKEN_PLAN_KEY", "")
     api_key = env.get("MINIMAX_API_KEY", "")
@@ -92,12 +92,13 @@ def diagnose_auth() -> dict:
     api_key_fp = _key_fingerprint(api_key)
     same_key = (token_plan_fp["key_sha256_8"] == api_key_fp["key_sha256_8"]) if (token_plan_key and api_key) else None
 
-    # verify 脚本只用 MINIMAX_API_KEY
-    actual_key = api_key
-    actual_fp = api_key_fp
+    # verify 脚本默认使用 MINIMAX_TOKEN_PLAN_KEY
+    actual_key = token_plan_key
+    actual_fp = token_plan_fp
+    key_source_actual = "MINIMAX_TOKEN_PLAN_KEY"
 
     return {
-        "key_source_actual": "MINIMAX_API_KEY",
+        "key_source_actual": key_source_actual,
         "key_preview": _redact(actual_key),
         "key_sha256_8": actual_fp["key_sha256_8"],
         "key_prefix": actual_fp["key_prefix"],
@@ -138,7 +139,8 @@ def print_diagnose_auth_report() -> None:
     print(f"  dotenv_loaded:       {d['dotenv_loaded']}")
     print()
     print("说明：")
-    print("  - verify 脚本只使用 MINIMAX_API_KEY")
+    print("  - verify 脚本默认只使用 MINIMAX_TOKEN_PLAN_KEY（Token Plan Only 模式）")
+    print("  - MINIMAX_API_KEY 仅用于可选诊断，不参与默认验收")
     print("  - key_sha256_8 用于比较两个脚本是否用同一 Key")
     print("=" * 60)
     print()
@@ -709,11 +711,13 @@ def main() -> None:
     # --level safe+medium → 只在本任务中用于 isolated medium 模式（不通过 arg 暴露）
 
     env = _load_env()
-    api_key = env.get("MINIMAX_API_KEY", "")
+    token_plan_key = env.get("MINIMAX_TOKEN_PLAN_KEY", "")
 
-    if not api_key:
-        print("ERROR: MINIMAX_API_KEY 未配置", file=sys.stderr)
+    if not token_plan_key:
+        print("ERROR: MINIMAX_TOKEN_PLAN_KEY 未配置（Token Plan Only 模式）", file=sys.stderr)
+        print("提示：backend/.env 中配置 MINIMAX_TOKEN_PLAN_KEY", file=sys.stderr)
         sys.exit(1)
+    api_key = token_plan_key
 
     # 决定调用哪些能力
     if args.level == "safe":

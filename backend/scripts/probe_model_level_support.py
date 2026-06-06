@@ -20,14 +20,14 @@ probe 范围（--scope low-cost 默认）：
 用法：
   python scripts/probe_model_level_support.py --scope low-cost    # 默认
   python scripts/probe_model_level_support.py --chat             # 只测 chat
-  python scripts/probe_model_level_support.py --native-only --key-source api-key  # 最小 native 对照
+  python scripts/probe_model_level_support.py --native-only  # 默认使用 token-plan
   python scripts/probe_model_level_support.py --diagnose-auth    # 诊断鉴权配置
   python scripts/probe_model_level_support.py --dry-run          # 只打印，不执行
 
-Key 选择：
-  --key-source auto        # MINIMAX_TOKEN_PLAN_KEY > MINIMAX_API_KEY（默认）
-  --key-source token-plan  # 只用 MINIMAX_TOKEN_PLAN_KEY
-  --key-source api-key     # 只用 MINIMAX_API_KEY
+Key 选择（默认 token-plan）：
+  --key-source token-plan  # 只用 MINIMAX_TOKEN_PLAN_KEY（默认）
+  --key-source api-key     # 只用 MINIMAX_API_KEY（仅诊断，不参与默认验收）
+  --key-source auto        # TokenPlan Key 优先，不回退到 API Key
 
 输出：
   backend/runtime/reports/model_level_probe_report.json（不提交 Git）
@@ -121,14 +121,11 @@ def resolve_key(key_source: str) -> tuple[str, str, dict]:
         fp = _key_fingerprint(api_key)
         return api_key, "MINIMAX_API_KEY", fp
 
-    # auto: prefer token_plan_key, fall back to api_key
+    # auto: TokenPlan Key 优先，不回退到 API Key（Token Plan Only 模式）
     if token_plan_key:
         fp = _key_fingerprint(token_plan_key)
         return token_plan_key, "MINIMAX_TOKEN_PLAN_KEY", fp
-    if api_key:
-        fp = _key_fingerprint(api_key)
-        return api_key, "MINIMAX_API_KEY", fp
-    raise KeySourceError("Neither MINIMAX_TOKEN_PLAN_KEY nor MINIMAX_API_KEY is set")
+    raise KeySourceError("MINIMAX_TOKEN_PLAN_KEY is not set (auto mode requires TokenPlan Key)")
 
 
 # ── auth diagnosis ───────────────────────────────────────────────────────────────
@@ -848,7 +845,7 @@ def main() -> None:
     parser.add_argument("--speech", action="store_true", help="Only probe speech models")
     parser.add_argument("--image", action="store_true", help="Only probe image models")
     parser.add_argument("--music", action="store_true", help="Only probe music models")
-    parser.add_argument("--key-source", default="auto",
+    parser.add_argument("--key-source", default="token-plan",
                         choices=["auto", "token-plan", "api-key"],
                         help="Key source: auto (default), token-plan, api-key")
     parser.add_argument("--diagnose-auth", action="store_true", help="Print auth diagnostics and exit")
