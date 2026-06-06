@@ -18,6 +18,10 @@
 | — | `parser_mismatch` | HTTP 200，输出存在但解析器未能识别结构 |
 | — | `http_success_but_output_missing` | HTTP 200 但无有效输出 |
 | — | `api_error` | HTTP 200 但 `base_resp.status_code != 0`（如 1004），属 API 层错误非模型不可用 |
+| — | `auth_or_token_mismatch` | HTTP 200 且 `base_resp.status_code=1004`，Token/鉴权问题，非模型不可用 |
+| — | `token_plan_required` | Native 多模态能力需 TokenPlan Key，当前 Key 不支持 |
+| — | `api_key_required` | 能力需使用按量 API Key，TokenPlan Key 不支持该能力 |
+| — | `both_keys_failed` | 两类 Key 均未通过，账户权限或区域可能有问题 |
 
 **重要说明**：
 - `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
@@ -27,6 +31,10 @@
 - HTTP 200 + `base_resp.status_code != 0`（如 1004）表示 API 层错误，不是模型不可用
 - `probe_assertion_failed` 表示接口已通但输出格式不符预期（如 thinking block 而非 text）
 - 探针判定问题（如解析逻辑错误）不再标记为"模型不可用"
+- **TokenPlan Key 与普通 API Key 不可混用**：TokenPlan Key 用于会员额度，API Key 走按量计费，两者权限可能不同
+- Native 多模态能力（speech/image/music）可能需要特定的 API Key 类型，1004 表示当前 Key 无权限
+- 诊断命令：`python scripts/probe_model_level_support.py --diagnose-auth`
+- Key 对比：`python scripts/probe_model_level_support.py --scope native-only --key-source api-key`
 
 ## 1. Model Inventory Matrix
 
@@ -153,6 +161,53 @@
 - `auth_or_token_mismatch`（speech 6个 / image 2个 / music 1个）：HTTP 200 但 `base_resp.status_code=1004`，表示 Token/鉴权问题（当前 API Key 对 native API 无权限或余额不足），不是模型本身不可用。
 - **1004 不等于模型不可用**，表示 API 层鉴权/配额问题，需检查 API Key 是否开通了 native 能力或账户余额。
 - 诊断命令：`python scripts/probe_model_level_support.py --diagnose-auth`
+
+## 2c. Native Auth Diagnosis Matrix
+
+> 诊断时间：2026-06-06T09:45:00Z
+> 说明：对比 MINIMAX_API_KEY 和 MINIMAX_TOKEN_PLAN_KEY 对 native 多模态端点的访问结果
+
+| capability_id | model_id | api_key_result | token_plan_key_result | key_source_used | same_key | diagnosis | next_action |
+|---|---|---|---|---|---|---|---|
+| `tts-sync` | speech-02-turbo | `auth_or_token_mismatch` (1004) | NOT_SET | MINIMAX_API_KEY | N/A | `ONE_KEY_ONLY` - 只有 MINIMAX_API_KEY，MINIMAX_TOKEN_PLAN_KEY 未配置 | 需确认 TokenPlan 是否包含 native 多模态权限 |
+| `image-t2i` | image-01 | `auth_or_token_mismatch` (1004) | NOT_SET | MINIMAX_API_KEY | N/A | 同上 | 同上 |
+| `music-gen` | music-2.6 | `auth_or_token_mismatch` (1004) | NOT_SET | MINIMAX_API_KEY | N/A | 同上 | 同上 |
+
+**Key 指纹诊断**：
+
+| 字段 | 值 |
+|---|---|
+| key_source_actual | `MINIMAX_API_KEY` |
+| key_preview | `sk-c***MnK8` |
+| key_sha256_8 | `db892eeb` |
+| key_prefix | `sk-c` |
+| key_length | 125 |
+| has_token_plan_key | **false** (未配置) |
+| has_api_key | true |
+| same_key | N/A |
+| same_key_label | `ONE_KEY_ONLY` |
+
+**verify_minimax_capabilities.py medium 验收对比**：
+
+| 字段 | 值 |
+|---|---|
+| verify key_source | `MINIMAX_API_KEY` |
+| verify key_sha256_8 | `db892eeb` (与 probe 相同) |
+| verify medium tts-sync | `auth_or_token_mismatch` (1004) |
+| verify medium image-t2i | `auth_or_token_mismatch` (1004) |
+| verify medium music-gen | `auth_or_token_mismatch` (1004) |
+| 结论 | verify 和 probe 使用同一 Key，1004 是账户/权限问题，非脚本差异 |
+
+**结论**：
+1. `MINIMAX_TOKEN_PLAN_KEY` 未配置，无法做 key 对照实验
+2. 当前 `MINIMAX_API_KEY` (sk-c***MnK8) 对 native 多模态端点返回 1004
+3. verify medium 和 probe native 使用同一 Key，确认 1004 是账户权限问题
+4. **1004 不等于模型不可用**，表示 Token/鉴权无权限或账户欠费/未开通该能力
+
+**建议操作**：
+- 确认 TokenPlan 是否包含 native 多模态能力（speech/image/music）权限
+- 确认账户是否有足够余额
+- 如 TokenPlan 已包含权限，尝试将 TokenPlan Key 配置为 `MINIMAX_TOKEN_PLAN_KEY` 后重测
 
 ## 3. Capability Matrix
 
@@ -344,9 +399,10 @@
 - music-2.6：base_resp.status_code=1004 → auth_or_token_mismatch（鉴权/Token 问题，非模型不可用）
 
 **诊断结论**：
-- 1004 错误表示当前 API Key 对 native API（tts/image/music）无权限或余额不足
-- 与 verify_minimax_capabilities.py 对齐使用 MINIMAX_API_KEY，不传 group_id
-- 建议：检查 API Key 是否开通 native 能力，或账户是否有足够余额
+- MINIMAX_TOKEN_PLAN_KEY 未配置（ONE_KEY_ONLY）
+- 当前 MINIMAX_API_KEY (sk-c***MnK8, sha256_8=db892eeb) 对 native API 返回 1004
+- verify medium 与 probe native 使用同一 Key，1004 是账户权限问题，非脚本差异
+- 1004 不等于模型不可用，建议检查 TokenPlan 权限或账户余额
 
 ## 6. Summary Statistics
 

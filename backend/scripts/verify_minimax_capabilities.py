@@ -33,6 +33,7 @@ MiniMax 能力验收脚本 —— verify_minimax_capabilities.py
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -71,6 +72,82 @@ def _redact(key: str) -> str:
     if not key or len(key) <= 8:
         return "***"
     return f"{key[:4]}***{key[-4:]}"
+
+
+def _key_fingerprint(key: str) -> dict:
+    """计算 Key 指纹（用于比较两个脚本是否用同一 Key）。"""
+    if not key:
+        return {"key_sha256_8": None, "key_prefix": None, "key_length": 0}
+    h = hashlib.sha256(key.encode()).hexdigest()[:8]
+    return {"key_sha256_8": h, "key_prefix": key[:4], "key_length": len(key)}
+
+
+def diagnose_auth() -> dict:
+    """诊断 verify 脚本使用的 Key 配置。"""
+    env = _load_env()
+    token_plan_key = env.get("MINIMAX_TOKEN_PLAN_KEY", "")
+    api_key = env.get("MINIMAX_API_KEY", "")
+
+    token_plan_fp = _key_fingerprint(token_plan_key)
+    api_key_fp = _key_fingerprint(api_key)
+    same_key = (token_plan_fp["key_sha256_8"] == api_key_fp["key_sha256_8"]) if (token_plan_key and api_key) else None
+
+    # verify 脚本只用 MINIMAX_API_KEY
+    actual_key = api_key
+    actual_fp = api_key_fp
+
+    return {
+        "key_source_actual": "MINIMAX_API_KEY",
+        "key_preview": _redact(actual_key),
+        "key_sha256_8": actual_fp["key_sha256_8"],
+        "key_prefix": actual_fp["key_prefix"],
+        "key_length": actual_fp["key_length"],
+        "token_empty": not bool(actual_key),
+        "has_token_plan_key": bool(token_plan_key),
+        "has_api_key": bool(api_key),
+        "token_plan_key_sha256_8": token_plan_fp["key_sha256_8"],
+        "api_key_sha256_8": api_key_fp["key_sha256_8"],
+        "same_key": same_key,
+        "same_key_label": "SAME_KEY" if same_key else ("DIFFERENT_KEYS" if (token_plan_key and api_key) else "ONE_KEY_ONLY"),
+        "base_url": "https://api.minimaxi.com",
+        "native_base_url": "https://api.minimaxi.com/v1",
+        "env_file_path": str(BACKEND / ".env"),
+        "dotenv_loaded": (BACKEND / ".env").exists(),
+    }
+
+
+def print_diagnose_auth_report() -> None:
+    """诊断模式：打印鉴权信息并退出。"""
+    d = diagnose_auth()
+    print("=" * 60)
+    print("verify_minimax_capabilities.py 鉴权诊断报告")
+    print("=" * 60)
+    print(f"  key_source_actual:   {d['key_source_actual']}")
+    print(f"  key_preview:         {d['key_preview']}")
+    print(f"  key_sha256_8:       {d['key_sha256_8']}")
+    print(f"  key_prefix:          {d['key_prefix']}")
+    print(f"  key_length:          {d['key_length']}")
+    print(f"  token_empty:         {d['token_empty']}")
+    print(f"  same_key:           {d['same_key']} ({d['same_key_label']})")
+    print(f"  has_token_plan_key: {d['has_token_plan_key']}")
+    print(f"  has_api_key:        {d['has_api_key']}")
+    print(f"  token_plan_key_sha256_8: {d['token_plan_key_sha256_8']}")
+    print(f"  api_key_sha256_8:        {d['api_key_sha256_8']}")
+    print(f"  base_url:            {d['base_url']}")
+    print(f"  native_base_url:     {d['native_base_url']}")
+    print(f"  dotenv_loaded:       {d['dotenv_loaded']}")
+    print()
+    print("说明：")
+    print("  - verify 脚本只使用 MINIMAX_API_KEY")
+    print("  - key_sha256_8 用于比较两个脚本是否用同一 Key")
+    print("=" * 60)
+    print()
+    print(json.dumps(d, ensure_ascii=False, indent=2))
+
+    diag_path = RUNTIME_DIR / "verify_key_diagnosis.json"
+    with diag_path.open("w", encoding="utf-8") as f:
+        json.dump(d, f, ensure_ascii=False, indent=2)
+    print(f"\nJSON diagnosis -> {diag_path}")
 
 
 def _load_env() -> dict:
@@ -594,7 +671,14 @@ def main() -> None:
                         help="确认中等成本验收（tts-sync, image-t2i 等）")
     parser.add_argument("--confirm-high-cost", action="store_true",
                         help="确认高成本验收（video, voice-clone 等）")
+    parser.add_argument("--diagnose-auth", action="store_true",
+                        help="打印 Key 诊断信息并退出")
     args = parser.parse_args()
+
+    # Diagnose mode
+    if args.diagnose_auth:
+        print_diagnose_auth_report()
+        return
 
     if args.level == "medium" and not args.confirm_cost:
         print("ERROR: medium 级别需要 --confirm-cost 参数确认费用风险。", file=sys.stderr)
@@ -651,10 +735,12 @@ def main() -> None:
             print(f"    错误：{result['error_message'][:100]}")
 
     # 保存结果
+    api_key_fp = _key_fingerprint(api_key)
     output: dict = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "level": args.level,
         "api_key_tail": _redact(api_key),
+        "api_key_sha256_8": api_key_fp["key_sha256_8"],
         "total": len(results),
         "results": results,
     }

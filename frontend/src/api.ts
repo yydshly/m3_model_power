@@ -68,11 +68,14 @@ export type Model = {
    * - 'parser_mismatch': HTTP 200 but parser couldn't recognize output structure
    * - 'http_success_but_output_missing': HTTP 200 but no valid output
    * - 'auth_or_token_mismatch': HTTP 200 but base_resp.status_code=1004 (Token/鉴权问题，非模型不可用)
+   * - 'token_plan_required': Native 多模态需 TokenPlan Key，当前 API Key 不支持
+   * - 'api_key_required': 能力需按量 API Key，TokenPlan Key 不支持
+   * - 'both_keys_failed': 两类 Key 均未通过，账户权限或区域问题
    * - 'high_cost_pending': high-cost capability not executed
    * - 'not_probed': no probe performed yet
    * - null: unknown / not applicable
    */
-  probe_status: 'success' | 'failed' | 'probe_assertion_failed' | 'parser_mismatch' | 'http_success_but_output_missing' | 'auth_or_token_mismatch' | 'high_cost_pending' | 'not_probed' | null
+  probe_status: 'success' | 'failed' | 'probe_assertion_failed' | 'parser_mismatch' | 'http_success_but_output_missing' | 'auth_or_token_mismatch' | 'token_plan_required' | 'api_key_required' | 'both_keys_failed' | 'high_cost_pending' | 'not_probed' | null
   /** raw_http_success indicates if the last probe returned HTTP 200, regardless of content */
   raw_http_success: boolean | null
   discovery_note: string

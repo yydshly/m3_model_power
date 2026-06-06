@@ -82,6 +82,18 @@ export default function ModelsPage() {
       // 1004 error - Token/鉴权问题，不是模型不可用
       return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">鉴权待排查</span>
     }
+    if (probe === 'token_plan_required') {
+      // Native 多模态需 TokenPlan Key，当前 API Key 不支持
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">需 TokenPlan Key</span>
+    }
+    if (probe === 'api_key_required') {
+      // 能力需按量 API Key，TokenPlan Key 不支持
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">需按量 API Key</span>
+    }
+    if (probe === 'both_keys_failed') {
+      // 两类 Key 均未通过
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-red-100 text-red-700">两类 Key 均失败</span>
+    }
     if (probe === 'failed') {
       // HTTP non-2xx or base_resp error - check if it was an API error vs model unavailable
       if (rawHttp === true) {
