@@ -44,6 +44,12 @@ import httpx
 import yaml
 
 BACKEND = Path(__file__).resolve().parent.parent
+
+# ── Core 客户端（minimax_core）─────────────────────────────────────────────────
+from app.minimax_core.clients.openai import MiniMaxOpenAIClient
+from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
+from app.minimax_core.clients.native import MiniMaxNativeClient
+from app.minimax_core.clients.files import MiniMaxFilesClient
 RUNTIME_DIR = BACKEND / "runtime" / "capability_verification"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 DOCS_DIR = BACKEND.parent / "docs"
@@ -150,23 +156,11 @@ def _call(
 
 # ── 单个能力验收 ─────────────────────────────────────────────────────────────
 
-def _get_default_model(cap_id: str, models: list[dict]) -> str:
-    """返回该能力下默认推荐的模型 ID。"""
-    cap = next((c for c in models if c.get("id") == cap_id), None)
-    if not cap:
-        return "MiniMax-M3"
-    # 按优先级：highspeed > flagship > standard > legacy
-    order = {"highspeed": 0, "flagship": 1, "standard": 2, "hd": 1, "turbo": 2, "legacy": 3, "deprecated": 4}
-    eligible = [m for m in models if m.get("enabled", True)]
-    eligible.sort(key=lambda m: order.get(m.get("tier", "standard"), 99))
-    return eligible[0]["id"] if eligible else "MiniMax-M3"
-
-
 def _verify_single(
     cap_id: str,
-    base_url: str,
     api_key: str,
 ) -> dict:
+    """使用 core 客户端验收单个能力。"""
     started_at = datetime.now(timezone.utc).isoformat()
     result: dict = {
         "capability_id": cap_id,
@@ -188,48 +182,71 @@ def _verify_single(
         "asset_committed": False,
     }
 
-    # 判断是否为 Anthropic 协议
-    is_anthropic = "anthropic" in cap_id
-    headers = {"X-Api-Key": api_key, "anthropic-version": "2023-06-01"} if is_anthropic else {"Authorization": f"Bearer {api_key}"}
-
-    # 能力 → 请求信息
-    cap_config = {
-        "models-openai-list": {"method": "GET", "path": "/v1/models"},
-        "models-anthropic-list": {"method": "GET", "path": "/anthropic/v1/models"},
-        "models-openai-retrieve": {"method": "GET", "path": "/v1/models/MiniMax-M3"},
-        "models-anthropic-retrieve": {"method": "GET", "path": "/anthropic/v1/models/MiniMax-M3"},
-        "chat-openai": {"method": "POST", "path": "/v1/chat/completions", "body": {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16}},
-        "chat-anthropic": {"method": "POST", "path": "/anthropic/v1/messages", "body": {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16}},
-        "chat-responses-create": {"method": "POST", "path": "/v1/responses", "body": {"model": "MiniMax-M3", "input": "Hi"}},
-        "chat-responses-tokens": {"method": "POST", "path": "/v1/responses/input_tokens", "body": {"model": "MiniMax-M3", "input": "Hi"}},
-        "file-list": {"method": "GET", "path": "/v1/files/list"},
-        "voice-list": {"method": "POST", "path": "/v1/get_voice", "body": {"voice_type": "all"}},
-        "tts-sync": {"method": "POST", "path": "/v1/t2a_v2", "body": {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}}},
-        "image-t2i": {"method": "POST", "path": "/v1/image_generation", "body": {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1}},
-        "lyrics-gen": {"method": "POST", "path": "/v1/lyrics_generation", "body": {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"}},
-        "music-gen": {"method": "POST", "path": "/v1/music_generation", "body": {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}}},
-        "voice-clone-do": {"method": "POST", "path": "/v1/voice_clone", "body": {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False}},
-        "voice-design": {"method": "POST", "path": "/v1/voice_design", "body": {"prompt": "a calm female voice", "preview_text": "hello"}},
-        "video-t2v": {"method": "POST", "path": "/v1/video_generation", "body": {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5}},
-        "video-i2v": {"method": "POST", "path": "/v1/video_generation", "body": {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "first_frame_image": "https://example.com/f.jpg", "duration": 5}},
-        "video-s2v": {"method": "POST", "path": "/v1/video_generation", "body": {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "subject_reference": [{"type": "character", "image": ["https://example.com/s.jpg"]}]}},
-        "music-cover-prep": {"method": "POST", "path": "/v1/music_cover/preprocess", "body": {"purpose": "song"}},
-        "tts-async": {"method": "POST", "path": "/v1/t2a_async_v2", "body": {"model": "speech-02-turbo", "text": "测试语音", "voice_setting": {"voice_id": "female-shaonu"}}},
+    # 能力 → (client_type, method_name, body, timeout)
+    cap_client_config: dict[str, tuple[str, str, dict | None, float]] = {
+        "models-openai-list":    ("openai",  "list_models",           None,  30),
+        "models-anthropic-list":  ("anthropic", "list_models",        None,  30),
+        "models-openai-retrieve": ("openai",  "retrieve_model",       None,  30),
+        "models-anthropic-retrieve": ("anthropic", "retrieve_model",  None,  30),
+        "chat-openai":            ("openai",  "chat_completions",      {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},  30),
+        "chat-anthropic":         ("anthropic", "messages",            {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},  30),
+        "chat-responses-create":  ("openai",  "responses_create",     {"model": "MiniMax-M3", "input": "Hi"},  30),
+        "chat-responses-tokens": ("openai",  "responses_input_tokens", {"model": "MiniMax-M3", "input": "Hi"},  30),
+        "file-list":             ("files",   "list_files",             None,  30),
+        "voice-list":            ("native",  "voice_list",             {"voice_type": "all"},  30),
+        "tts-sync":              ("native",  "tts_http",               {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},  30),
+        "image-t2i":             ("native",  "image_generation",       {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},  30),
+        "lyrics-gen":            ("native",  "lyrics_generation",      {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},  30),
+        "music-gen":             ("native",  "music_generation",      {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},  180),
+        "voice-clone-do":        ("native",  "voice_clone",            {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False},  30),
+        "voice-design":          ("native",  "voice_design",           {"prompt": "a calm female voice", "preview_text": "hello"},  30),
+        "video-t2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5},  180),
+        "video-i2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "first_frame_image": "https://example.com/f.jpg", "duration": 5},  180),
+        "video-s2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "subject_reference": [{"type": "character", "image": ["https://example.com/s.jpg"]}]},  180),
+        "music-cover-prep":      ("native",  "music_generation",       {"purpose": "song"},  180),
+        "tts-async":             ("native",  "tts_http",               {"model": "speech-02-turbo", "text": "测试语音", "voice_setting": {"voice_id": "female-shaonu"}},  180),
     }
 
-    if cap_id not in cap_config:
+    if cap_id not in cap_client_config:
         result["status"] = "skipped"
         result["error_message"] = "no config for this capability"
         result["ended_at"] = datetime.now(timezone.utc).isoformat()
         return result
 
-    cfg = cap_config[cap_id]
-    url = f"{base_url.rstrip('/')}{cfg['path']}"
-    body = cfg.get("body")
-    timeout = 180 if cap_id in ("video-t2v", "video-i2v", "video-s2v", "music-cover-prep", "tts-async", "music-gen") else 30
+    client_type, method_name, body, timeout = cap_client_config[cap_id]
 
+    # 创建客户端
+    try:
+        clients = {
+            "openai":   MiniMaxOpenAIClient(api_key=api_key, timeout=timeout),
+            "anthropic": MiniMaxAnthropicClient(api_key=api_key, timeout=timeout),
+            "native":   MiniMaxNativeClient(api_key=api_key, timeout=timeout),
+            "files":    MiniMaxFilesClient(api_key=api_key, timeout=timeout),
+        }
+        client = clients[client_type]
+    except Exception as exc:
+        result["status"] = "failed"
+        result["error_message"] = f"client_init_error: {exc}"
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        return result
+
+    # 调用
     t0 = time.monotonic()
-    status_code, data, err = _call(cfg["method"], url, headers, body, timeout=timeout)
+    status_code: int | None = None
+    data: dict | None = None
+    err: str | None = None
+
+    try:
+        method = getattr(client, method_name)
+        data = method(body) if body else method()
+        status_code = 200
+    except Exception as exc:
+        err = str(exc)
+        # 尝试从 UnifiedError 提取信息
+        if hasattr(exc, "http_status"):
+            status_code = exc.http_status
+            err = exc.message if hasattr(exc, "message") else str(exc)
+
     latency_ms = int((time.monotonic() - t0) * 1000)
     result["latency_ms"] = latency_ms
     result["ended_at"] = datetime.now(timezone.utc).isoformat()
@@ -250,7 +267,7 @@ def _verify_single(
         result["error_message"] = "HTTP 429 Rate Limited"
         return result
 
-    if status_code >= 400:
+    if status_code and status_code >= 400:
         result["status"] = "failed"
         result["error_message"] = f"HTTP {status_code}: {str(data)[:200]}"
         return result
@@ -465,8 +482,6 @@ def main() -> None:
 
     env = _load_env()
     api_key = env.get("MINIMAX_API_KEY", "")
-    base_url = env.get("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/")
-    group_id = env.get("MINIMAX_GROUP_ID", "")
 
     if not api_key:
         print("ERROR: MINIMAX_API_KEY 未配置", file=sys.stderr)
@@ -486,7 +501,6 @@ def main() -> None:
     print("=" * 60)
     print(f"MiniMax 能力验收 - Level: {args.level}")
     print(f"API Key: {_redact(api_key)}")
-    print(f"Base URL: {base_url}")
     print(f"待验收能力数: {len(cap_ids)}")
     print("=" * 60)
 
@@ -496,7 +510,7 @@ def main() -> None:
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        result = _verify_single(cap_id, base_url, api_key)
+        result = _verify_single(cap_id, api_key)
         results.append(result)
 
         status_icon = {"success": "[OK]", "failed": "[FAIL]", "skipped": "-",
@@ -512,7 +526,6 @@ def main() -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "level": args.level,
         "api_key_tail": _redact(api_key),
-        "base_url": base_url,
         "total": len(results),
         "results": results,
     }

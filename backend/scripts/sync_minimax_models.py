@@ -30,6 +30,10 @@ RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 DOCS_DIR = BACKEND.parent / "docs"
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Core 客户端（minimax_core）─────────────────────────────────────────────────
+from app.minimax_core.clients.openai import MiniMaxOpenAIClient
+from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
+
 
 def _redact(key: str) -> str:
     """脱敏：只显示前后少量字符。"""
@@ -61,24 +65,16 @@ def _load_local_models() -> list[dict]:
     return doc.get("models", [])
 
 
-def _call_openai_models(base_url: str, api_key: str) -> dict:
+def _call_openai_models(api_key: str) -> dict:
     """GET /v1/models — OpenAI 兼容端点。"""
-    url = f"{base_url.rstrip('/')}/v1/models"
-    headers = {"Authorization": f"Bearer {api_key}"}
-    with httpx.Client(timeout=30) as client:
-        resp = client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = MiniMaxOpenAIClient(api_key=api_key, timeout=30)
+    return client.list_models()
 
 
-def _call_anthropic_models(base_url: str, api_key: str) -> dict:
+def _call_anthropic_models(api_key: str) -> dict:
     """GET /anthropic/v1/models — Anthropic 兼容端点。"""
-    url = f"{base_url.rstrip('/')}/anthropic/v1/models"
-    headers = {"X-Api-Key": api_key, "anthropic-version": "2023-06-01"}
-    with httpx.Client(timeout=30) as client:
-        resp = client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    client = MiniMaxAnthropicClient(api_key=api_key, timeout=30)
+    return client.list_models()
 
 
 def _extract_model_ids(openai_resp: dict, anthropic_resp: dict) -> tuple[set[str], set[str], set[str]]:
@@ -274,14 +270,14 @@ def main() -> None:
     # 调用 live API
     print("\n调用 OpenAI 模型列表...")
     try:
-        openai_resp = _call_openai_models(base_url, api_key)
+        openai_resp = _call_openai_models(api_key)
     except Exception as exc:
         print(f"  [FAIL] 失败：{exc}")
         openai_resp = {"error": str(exc)}
 
     print("调用 Anthropic 模型列表...")
     try:
-        anthropic_resp = _call_anthropic_models(base_url, api_key)
+        anthropic_resp = _call_anthropic_models(api_key)
     except Exception as exc:
         print(f"  [FAIL] 失败：{exc}")
         anthropic_resp = {"error": str(exc)}
