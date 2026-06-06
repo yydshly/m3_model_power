@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-06-06T19:05:20.233290+00:00",
+  "updated_at": "2026-06-06T19:47:48.833258+00:00",
   "updated_by": "verify_minimax_capabilities.py",
   "capabilities": {
     "tts-async": {
@@ -300,6 +300,23 @@
         "latency_ms": 843,
         "output_type": "json",
         "asset_saved": false
+      }
+    },
+    "image-i2i": {
+      "capability_id": "image-i2i",
+      "best_status": "integration_ready_but_probe_pending_valid_image_url",
+      "verified": false,
+      "last_success": null,
+      "last_failure": "2026-06-06T19:47:48.816665+00:00",
+      "source": "verify_minimax_capabilities.py",
+      "evidence": {
+        "capability_id": "image-i2i",
+        "status": "integration_ready_but_probe_pending_valid_image_url",
+        "level": "safe",
+        "note": "RiskGate / Invoker / payload结构已修复；等待有效公开测试图片URL",
+        "integration_code_ready": true,
+        "api_called": false,
+        "asset_guard_verified": true
       }
     }
   }

@@ -59,6 +59,7 @@ from app.config import settings
 _INVOKER_SUPPORTED = {
     "chat-openai", "chat-anthropic", "chat-responses-create",
     "chat-responses-tokens", "tts-sync", "tts-ws", "tts-async", "image-t2i",
+    "image-i2i",
     "lyrics-gen", "music-gen", "file-list", "voice-list",
     "models-openai-list", "models-anthropic-list",
     "models-openai-retrieve", "models-anthropic-retrieve",
@@ -75,6 +76,7 @@ _STATUS_PRIORITY = {
     "capability_level_verified": 5,
     "success": 4,
     "success_with_warning": 3,
+    "integration_ready_but_probe_pending_valid_image_url": 2,
     "pending": 2,
     "failed": 1,
     "no_probe_record": 0,
@@ -327,6 +329,7 @@ CAPABILITY_GROUPS = {
         "tts-ws",
         "tts-async",
         "image-t2i",
+        "image-i2i",
         "lyrics-gen",
         "music-gen",
     ],
@@ -348,6 +351,7 @@ def _verify_single(
     api_key: str,
     confirmations: dict | None = None,
     file_id: str | None = None,
+    reference_image: str | None = None,
 ) -> dict:
     """使用 CapabilityInvoker 验收单个能力。"""
     confirmations = confirmations or {}
@@ -376,6 +380,10 @@ def _verify_single(
     if cap_id == "file-upload":
         return _verify_via_multipart(cap_id, api_key, started_at, result, confirmations)
 
+    # image-i2i 需要先上传参考图
+    if cap_id == "image-i2i":
+        return _verify_via_invoker_with_ref_image(cap_id, api_key, started_at, result, confirmations, reference_image)
+
     # CapabilityInvoker 支持的能力走统一路径
     if cap_id in _INVOKER_SUPPORTED:
         return _verify_via_invoker(cap_id, api_key, started_at, result, confirmations)
@@ -400,6 +408,7 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
     "tts-ws":                 {"model": "speech-02-turbo", "text": "OK", "voice_id": "female-tianmei", "speed": 1.0, "sample_rate": 32000, "audio_format": "mp3"},
     "tts-async":             {"model": "speech-02-turbo", "text": "你好，这是异步语音合成测试。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},
     "image-t2i":              {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},
+    "image-i2i":             {"model": "image-01", "prompt": "将图片转换为插画风格", "img_url": "https://example.com/sample.jpg", "n": 1},
     "lyrics-gen":             {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},
     "music-gen":              {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},
     "file-list":              {},
@@ -473,6 +482,129 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
         # tts-async 专用 full-flow 字段提取
         if cap_id == "tts-async":
             _handle_tts_async_result(response.raw, result)
+
+    except NotImplementedCapability as exc:
+        result.update({
+            "status": "skipped",
+            "error_message": f"not_implemented: {exc.capability_id}",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        ended_at = datetime.now(timezone.utc).isoformat()
+        err_msg = str(exc)
+        http_status = None
+        error_type = "unknown"
+        if hasattr(exc, "http_status") and exc.http_status:
+            http_status = exc.http_status
+        if hasattr(exc, "message"):
+            err_msg = exc.message
+        if hasattr(exc, "error_type") and exc.error_type:
+            error_type = exc.error_type
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": ended_at,
+            "status": "failed",
+            "http_status": http_status,
+            "error_type": error_type,
+            "error_message": err_msg,
+            "response_shape_ok": False,
+        })
+
+    return result
+
+
+def _verify_via_invoker_with_ref_image(
+    cap_id: str,
+    api_key: str,
+    started_at: str,
+    result: dict,
+    confirmations: dict,
+    reference_image_path: str | None,
+) -> dict:
+    """Upload reference image (if local path given) then call image-i2i via CapabilityInvoker.
+
+    Supports two modes:
+    - Local file path: upload to MiniMax, use returned file_id
+    - URL-based payload: use subject_reference with public URL (no upload needed)
+    """
+    # RiskGate: image-i2i requires confirm_asset_source
+    cap_op = next((c for c in _load_capabilities() if c.get("id") == cap_id), None)
+    if cap_op and not confirmations.get("confirm_asset_source"):
+        result.update({
+            "status": "risk_gate_blocked",
+            "error_message": "image-i2i requires confirm_asset_source=true",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return result
+
+    # Build base payload from _INVOKER_PAYLOADS
+    payload = dict(_INVOKER_PAYLOADS.get(cap_id, {}))
+
+    # If a local reference image path is given, upload it and swap in file_id
+    if reference_image_path:
+        upload_result = _upload_reference_image(reference_image_path, api_key)
+        if "error" in upload_result:
+            result.update({
+                "status": "failed",
+                "error_message": f"reference image upload failed: {upload_result['error']}",
+                "latency_ms": upload_result.get("latency_ms"),
+                "ended_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return result
+
+        file_id = upload_result.get("file_id")
+        result["reference_file_id"] = file_id
+        result["reference_image_upload_ms"] = upload_result.get("latency_ms")
+        # Replace URL-based reference with uploaded file_id
+        payload["input_file_id"] = file_id
+        # Remove URL-based fields
+        for key in ("subject_reference", "img_url"):
+            if key in payload:
+                del payload[key]
+    elif "subject_reference" not in payload and "input_file_id" not in payload:
+        # Neither local file nor URL payload — skip
+        result.update({
+            "status": "skipped",
+            "error_message": "image-i2i requires --reference-image <path> or URL-based payload",
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return result
+
+    # 3. Call via CapabilityInvoker (same as _verify_via_invoker)
+    invoker = CapabilityInvoker(api_key=api_key, timeout=180.0)
+    t0 = time.monotonic()
+
+    try:
+        response = invoker.invoke(cap_id, payload, confirmations=confirmations)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        ended_at = datetime.now(timezone.utc).isoformat()
+
+        if not response.ok:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id=cap_id,
+                error_type=getattr(response, "error_type", None) or "unknown",
+                error_code=getattr(response, "error_code", None),
+                message=getattr(response, "message", None) or f"{cap_id} returned ok=False",
+                http_status=getattr(response, "http_status", None) or 200,
+                retryable=False,
+                redacted=True,
+            )
+
+        result.update({
+            "latency_ms": latency_ms,
+            "ended_at": ended_at,
+            "status": "success",
+            "response_shape_ok": True,
+            "model": response.model,
+            "output_type": response.output_type,
+            "level": "medium",
+            "http_status": 200,
+            "assets": [a.model_dump() for a in response.assets] if response.assets else [],
+        })
+        _handle_medium_result(cap_id, response.raw, result)
 
     except NotImplementedCapability as exc:
         result.update({
@@ -596,6 +728,54 @@ def _verify_via_client(cap_id: str, api_key: str, started_at: str, result: dict)
 # ── multipart 上传路径 ─────────────────────────────────────────────────────────
 
 _MULTIPART_TEST_CONTENT = b"MiniMax Token Plan file capability probe.\nThis is a safe test file.\n"
+
+
+def _upload_reference_image(image_path: str, api_key: str) -> dict:
+    """Upload a local image file to MiniMax and return the file_id.
+
+    Returns {"file_id": ..., "http_status": ..., "latency_ms": ...} on success,
+    or {"error": ...} on failure.
+    """
+    from pathlib import Path
+    p = Path(image_path)
+    if not p.exists():
+        return {"error": f"reference image not found: {image_path}"}
+
+    env = _load_env()
+    group_id = env.get("MINIMAX_GROUP_ID", "")
+    url = f"{settings.minimax_base_url}/v1/files/upload"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    params = {}
+    if group_id:
+        params["GroupId"] = group_id
+
+    t0 = time.monotonic()
+    try:
+        with open(p, "rb") as f:
+            image_bytes = f.read()
+        mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
+        files = {"file": (p.name, image_bytes, mime)}
+        data = {"purpose": "retrieval"}
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(url, headers=headers, params=params, files=files, data=data)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+
+        if resp.status_code >= 400:
+            return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}", "latency_ms": latency_ms}
+
+        json_data = resp.json()
+        base_resp = json_data.get("base_resp", {})
+        if base_resp.get("status_code") not in (None, 0, "0"):
+            return {"error": f"base_resp.status_code={base_resp.get('status_code')}: {base_resp.get('status_msg', '')}", "latency_ms": latency_ms}
+
+        file_item = json_data.get("file", json_data)
+        return {
+            "file_id": file_item.get("file_id"),
+            "http_status": resp.status_code,
+            "latency_ms": latency_ms,
+        }
+    except Exception as exc:
+        return {"error": str(exc)[:200]}
 
 
 def _verify_via_multipart(cap_id: str, api_key: str, started_at: str, result: dict, confirmations: dict) -> dict:
@@ -1078,6 +1258,8 @@ def main() -> None:
                         help="只验收指定能力（如 tts-ws），与 --level 配合可精确指定单个能力")
     parser.add_argument("--file-id",
                         help="指定 file_id（用于 file-retrieve / file-content 验收）")
+    parser.add_argument("--reference-image",
+                        help="指定参考图路径（用于 image-i2i 验收）")
     args = parser.parse_args()
 
     # Diagnose mode
@@ -1153,7 +1335,7 @@ def main() -> None:
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        result = _verify_single(cap_id, api_key, confirmations, file_id=chained_file_id)
+        result = _verify_single(cap_id, api_key, confirmations, file_id=chained_file_id, reference_image=args.reference_image)
         results.append(result)
 
         # 如果是 file-upload 成功，提取 file_id 供后续 file-retrieve/file-content 使用
