@@ -3,9 +3,11 @@ import {
   getVerificationIndex,
   getVerificationSummary,
   getTestConsoleHistory,
+  getCapabilityDescriptions,
   invoke,
   riskCheck,
   type Capability,
+  type CapabilityDescription,
   type RiskCheckResult,
   type TestConsoleHistoryItem,
   type VerificationIndex,
@@ -400,6 +402,7 @@ export default function TestConsole() {
   const [search, setSearch] = useState<string>('')
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
 
   const refreshHistory = () => {
     getTestConsoleHistory(50)
@@ -408,6 +411,12 @@ export default function TestConsole() {
   }
 
   useEffect(() => { refreshHistory() }, [])
+
+  useEffect(() => {
+    getCapabilityDescriptions()
+      .then(r => setDescriptions(r.descriptions))
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     getVerificationSummary()
@@ -541,6 +550,61 @@ export default function TestConsole() {
         )}
       </div>
 
+      {/* ── Capability Description Panel ── */}
+      {selectedCap && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-blue-900">能力说明 — {selectedCap.id}</h3>
+          </div>
+          {descriptions[selectedCap.id] ? (() => {
+            const d = descriptions[selectedCap.id]
+            return (
+              <div className="space-y-2 text-sm">
+                <div className="text-slate-700">{d.summary}</div>
+                {d.use_cases.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-green-700 bg-green-100 px-1.5 py-0.5 rounded mr-1">适合场景</span>
+                    <span className="text-slate-600">{d.use_cases.join('、')}</span>
+                  </div>
+                )}
+                {d.not_recommended_for.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-red-700 bg-red-100 px-1.5 py-0.5 rounded mr-1">不适合</span>
+                    <span className="text-slate-600">{d.not_recommended_for.join('、')}</span>
+                  </div>
+                )}
+                {d.input_notes.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded mr-1">输入</span>
+                    <span className="text-slate-600">{d.input_notes.join('；')}</span>
+                  </div>
+                )}
+                {d.risk_notes.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded mr-1">风险/计费</span>
+                    <span className="text-slate-600">{d.risk_notes.join('；')}</span>
+                  </div>
+                )}
+                {d.common_errors.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded mr-1">常见错误</span>
+                    <span className="text-slate-600">{d.common_errors.join('；')}</span>
+                  </div>
+                )}
+                {d.integration_tips.length > 0 && (
+                  <div>
+                    <span className="text-xs font-medium text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded mr-1">集成建议</span>
+                    <span className="text-slate-600">{d.integration_tips.join('；')}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })() : (
+            <p className="text-sm text-slate-400">暂无能力说明</p>
+          )}
+        </div>
+      )}
+
       {/* ── Filter bar ── */}
       <div className="flex flex-wrap gap-3 items-center">
         <input
@@ -584,6 +648,7 @@ export default function TestConsole() {
               <th className="text-left px-4 py-2.5 font-medium text-slate-700">Billing</th>
               <th className="text-left px-4 py-2.5 font-medium text-slate-700">Risk</th>
               <th className="text-left px-4 py-2.5 font-medium text-slate-700">Verified</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Desc</th>
               <th className="text-left px-4 py-2.5 font-medium text-slate-700">Actions</th>
             </tr>
           </thead>
@@ -606,6 +671,11 @@ export default function TestConsole() {
                   <td className="px-4 py-2.5">
                     {verified
                       ? <span className="text-green-600 font-medium">✓</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {descriptions[cap.id]
+                      ? <span className="text-blue-600 font-medium">✓</span>
                       : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-2.5">

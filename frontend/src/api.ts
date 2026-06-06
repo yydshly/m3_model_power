@@ -289,3 +289,30 @@ export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestCo
   if (!r.ok) throw new Error(`history ${r.status}`)
   return r.json()
 }
+
+// ── Capability Descriptions ────────────────────────────────────────────
+
+export type CapabilityDescription = {
+  summary: string
+  use_cases: string[]
+  not_recommended_for: string[]
+  input_notes: string[]
+  output_notes: string[]
+  risk_notes: string[]
+  billing_notes: string[]
+  common_errors: string[]
+  product_usage: string[]
+  integration_tips: string[]
+}
+
+export type CapabilityDescriptionsResponse = {
+  schema_version: number
+  updated_at?: string
+  descriptions: Record<string, CapabilityDescription>
+}
+
+export async function getCapabilityDescriptions(): Promise<CapabilityDescriptionsResponse> {
+  const r = await fetch('/api/descriptions/capabilities')
+  if (!r.ok) throw new Error(`descriptions ${r.status}`)
+  return r.json()
+}

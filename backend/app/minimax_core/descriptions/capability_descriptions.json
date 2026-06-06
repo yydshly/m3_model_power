@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-06-07",
+  "descriptions": {
+    "tts-sync": {
+      "summary": "短文本同步语音合成，适合快速生成可播放音频。",
+      "use_cases": [
+        "短句旁白",
+        "按钮试听",
+        "语音提示音",
+        "少量文本转语音"
+      ],
+      "not_recommended_for": [
+        "超长文章（建议用 tts-async）",
+        "批量有声书",
+        "需要后台轮询的大任务"
+      ],
+      "input_notes": [
+        "核心输入通常是 text、voice_id、model",
+        "文本长度应保持较短，长文本建议改用 tts-async",
+        "voice_id 必须为平台支持的音色 ID"
+      ],
+      "output_notes": [
+        "返回音频资产或音频相关 AssetRef",
+        "前端不应直接暴露 Token Plan Key"
+      ],
+      "risk_notes": [
+        "同步 TTS 消耗 Token Plan 额度",
+        "大文本可能导致等待时间变长或请求失败"
+      ],
+      "billing_notes": [
+        "属于 quota-sensitive 能力，UI 中应提示额度消耗"
+      ],
+      "common_errors": [
+        "voice_id 不存在或不可用",
+        "text 为空",
+        "模型不支持当前语音参数"
+      ],
+      "product_usage": [
+        "适合作为 Voice Lab 的试听接口",
+        "适合作为情绪对话、提示音、短视频旁白的底层能力"
+      ],
+      "integration_tips": [
+        "建议在后端统一封装，前端只提交文本和音色选择",
+        "生成音频后应保存 AssetRef，避免重复消耗"
+      ]
+    },
+    "tts-async": {
+      "summary": "长文本异步语音合成，适合批量或长时间音频生成。",
+      "use_cases": [
+        "长篇文章转语音",
+        "有声书批量生成",
+        "多段落配音任务",
+        "需要后台处理的语音合成"
+      ],
+      "not_recommended_for": [
+        "短文本（建议用 tts-sync，响应更快）",
+        "需要即时返回的场景",
+        "实时交互式语音"
+      ],
+      "input_notes": [
+        "核心输入为 text、voice_id、model",
+        "文本长度建议不超过 5000 字符，超出需要 confirm_quota",
+        "需携带 task_id 或 file_id 参数（requires_existing_task）"
+      ],
+      "output_notes": [
+        "返回 task_id 用于后续轮询",
+        "完成后可通过 task_id 获取音频资产"
+      ],
+      "risk_notes": [
+        "异步任务不保证即时完成，前端需要轮询",
+        "超长文本会触发 confirm_quota 确认",
+        "消耗 Token Plan 额度较大"
+      ],
+      "billing_notes": [
+        "属于 quota-sensitive 能力，confirm_quota 不足时会被阻断"
+      ],
+      "common_errors": [
+        "text 超过 5000 字符且未勾选 confirm_quota",
+        "缺少 task_id 或 file_id 参数",
+        "voice_id 不支持"
+      ],
+      "product_usage": [
+        "适合内容平台批量配音",
+        "适合教育类长音频内容生成"
+      ],
+      "integration_tips": [
+        "建议后端封装轮询逻辑，前端只展示进度",
+        "已完成的任务建议缓存 AssetRef，避免重复调用"
+      ]
+    },
+    "image-t2i": {
+      "summary": "文本生成图像（Text-to-Image），根据描述性文本生成图片。",
+      "use_cases": [
+        "文章配图",
+        "产品概念图生成",
+        "创意素材生成",
+        "图像灵感探索"
+      ],
+      "not_recommended_for": [
+        "需要精确人脸/文字的图片",
+        "实时图形渲染",
+        "需要版权素材的商业应用"
+      ],
+      "input_notes": [
+        "核心输入为 text（描述词）",
+        "可选 model、resolution、style 等参数",
+        "text 应尽量具体明确"
+      ],
+      "output_notes": [
+        "返回图片 URL 或 AssetRef",
+        "图片可能需要后续处理（如裁剪、增强）"
+      ],
+      "risk_notes": [
+        "生成的图片可能有版权争议",
+        "不当内容可能触发风控"
+      ],
+      "billing_notes": [
+        "属于 quota-sensitive 或高成本确认能力"
+      ],
+      "common_errors": [
+        "text 过于模糊导致生成质量差",
+        "不支持的 resolution 或 style 参数",
+        "并发请求超出限制"
+      ],
+      "product_usage": [
+        "适合内容平台的配图生成",
+        "适合创意工具的概念图功能"
+      ],
+      "integration_tips": [
+        "建议在服务端缓存已生成的图片",
+        "前端展示时应标注 AI 生成图片的免责声明"
+      ]
+    },
+    "image-i2i": {
+      "summary": "图像生成图像（Image-to-Image），基于参考图生成新图。",
+      "use_cases": [
+        "图片风格迁移",
+        "图像变体生成",
+        "局部修改与扩展",
+        "图像质量提升"
+      ],
+      "not_recommended_for": [
+        "需要保留原图完整细节的场景",
+        "完全不同的语义生成（建议用 image-t2i）",
+        "未经授权的版权图片处理"
+      ],
+      "input_notes": [
+        "必须包含 img_url 或 reference image 参数",
+        "建议同时提供 text 描述引导方向",
+        "需勾选 confirm_asset_source 确认资产来源"
+      ],
+      "output_notes": [
+        "返回生成的图片 URL 或 AssetRef",
+        "可能保留原图部分特征"
+      ],
+      "risk_notes": [
+        "使用外部图片需要确认版权",
+        "confirm_asset_source 必须勾选才能执行"
+      ],
+      "billing_notes": [
+        "asset_required_confirm_required 级别，需要明确确认"
+      ],
+      "common_errors": [
+        "img_url 不可访问或格式不支持",
+        "未勾选 confirm_asset_source",
+        "原图与目标风格差异过大"
+      ],
+      "product_usage": [
+        "适合图像编辑工具的风格化功能",
+        "适合创意平台的图像变体工具"
+      ],
+      "integration_tips": [
+        "使用前应检查 img_url 可访问性",
+        "建议在产品中明确告知用户资产来源政策"
+      ]
+    },
+    "file-upload": {
+      "summary": "文件上传接口，用于将本地文件上传至平台存储。",
+      "use_cases": [
+        "上传音频文件用于 tts-async",
+        "上传图片用于 image-i2i",
+        "上传文档进行解析",
+        "批量文件导入"
+      ],
+      "not_recommended_for": [
+        "大文件（超过平台限制）直接上传",
+        "频繁小文件单次上传（建议打包）",
+        "非授权的版权内容上传"
+      ],
+      "input_notes": [
+        "使用 multipart/form-data 格式",
+        "需指定 file 和 purpose 参数",
+        "部分能力要求特定文件格式"
+      ],
+      "output_notes": [
+        "返回 file_id 或 AssetRef",
+        "可用于后续能力调用的输入参数"
+      ],
+      "risk_notes": [
+        "上传恶意文件可能触发安全审查",
+        "大文件上传消耗带宽和时间"
+      ],
+      "billing_notes": [
+        "部分文件存储可能产生配额费用"
+      ],
+      "common_errors": [
+        "文件格式不符合要求",
+        "文件大小超出限制",
+        "purpose 参数不匹配"
+      ],
+      "product_usage": [
+        "作为所有需要文件输入的能力的前置步骤",
+        "适合工具类产品的文件管理功能"
+      ],
+      "integration_tips": [
+        "建议前端显示上传进度",
+        "file_id 应与能力调用一起管理，避免孤立文件"
+      ]
+    }
+  }
+}
