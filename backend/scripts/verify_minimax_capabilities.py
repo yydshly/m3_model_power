@@ -165,8 +165,7 @@ def _get_default_model(cap_id: str, models: list[dict]) -> str:
 def _verify_single(
     cap_id: str,
     base_url: str,
-    headers: dict,
-    group_id: str,
+    api_key: str,
 ) -> dict:
     started_at = datetime.now(timezone.utc).isoformat()
     result = {
@@ -183,6 +182,10 @@ def _verify_single(
         "response_shape_ok": None,
         "sensitive_data_redacted": True,
     }
+
+    # 判断是否为 Anthropic 协议
+    is_anthropic = "anthropic" in cap_id
+    headers = {"X-Api-Key": api_key, "anthropic-version": "2023-06-01"} if is_anthropic else {"Authorization": f"Bearer {api_key}"}
 
     # 能力 → 请求信息
     cap_config = {
@@ -261,11 +264,13 @@ def _check_response_shape(cap_id: str, data) -> bool:
     if cap_id == "models-openai-list":
         return isinstance(data, dict) and "data" in data
     if cap_id == "models-anthropic-list":
-        return isinstance(data, dict) and "models" in data
+        # MiniMax Anthropic 端点返回 OpenAI 兼容格式 {data: [...]} 而非标准 Anthropic {models: [...]}
+        return isinstance(data, dict) and "data" in data
     if cap_id == "models-openai-retrieve":
         return isinstance(data, dict) and "id" in data
     if cap_id == "models-anthropic-retrieve":
-        return isinstance(data, dict) and "name" in data
+        # MiniMax Anthropic 端点返回 OpenAI 兼容格式 {id: ...} 而非标准 Anthropic {name: ...}
+        return isinstance(data, dict) and "id" in data
     if cap_id in ("chat-openai", "chat-anthropic", "chat-responses-create"):
         return isinstance(data, dict)
     if cap_id == "file-list":
@@ -342,10 +347,6 @@ def main() -> None:
         print("ERROR: MINIMAX_API_KEY 未配置", file=sys.stderr)
         sys.exit(1)
 
-    # 构建请求头
-    openai_headers = {"Authorization": f"Bearer {api_key}"}
-    anthropic_headers = {"X-Api-Key": api_key}
-
     # 决定调用哪些能力
     if args.level == "safe":
         cap_ids = CAPABILITY_GROUPS["safe"]
@@ -357,12 +358,12 @@ def main() -> None:
     capabilities = _load_capabilities()
     models = _load_models()
 
-    print("═" * 60)
-    print(f"MiniMax 能力验收 — Level: {args.level}")
+    print("=" * 60)
+    print(f"MiniMax 能力验收 - Level: {args.level}")
     print(f"API Key: {_redact(api_key)}")
     print(f"Base URL: {base_url}")
-    print(f"待验收能力数：{len(cap_ids)}")
-    print("═" * 60)
+    print(f"待验收能力数: {len(cap_ids)}")
+    print("=" * 60)
 
     results: list[dict] = []
     for cap_id in cap_ids:
@@ -370,18 +371,12 @@ def main() -> None:
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        # 根据 capability 选择请求头和路径
-        if "anthropic" in cap_id:
-            headers = anthropic_headers
-        else:
-            headers = openai_headers
-
-        result = _verify_single(cap_id, base_url, headers, group_id)
+        result = _verify_single(cap_id, base_url, api_key)
         results.append(result)
 
-        status_icon = {"success": "✓", "failed": "✗", "skipped": "-",
-                       "unauthorized": "⚠", "quota_limited": "⏳",
-                       "success_with_warning": "⚡"}.get(result["status"], "?")
+        status_icon = {"success": "[OK]", "failed": "[FAIL]", "skipped": "-",
+                       "unauthorized": "[WARN]", "quota_limited": "[WAIT]",
+                       "success_with_warning": "[WARN2]"}.get(result["status"], "?")
         print(f"{status_icon} {result['status']} ({result.get('latency_ms', '-')}ms)")
 
         if result.get("error_message"):
@@ -399,12 +394,12 @@ def main() -> None:
 
     out_path = RUNTIME_DIR / "latest.json"
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"\n✓ 保存 {out_path.relative_to(BACKEND)}")
+    print(f"\n[OK] 保存 {out_path.relative_to(BACKEND)}")
 
     md = _generate_markdown(results)
     md_path = DOCS_DIR / "MINIMAX_CAPABILITY_VERIFICATION_REPORT.md"
     md_path.write_text(md, encoding="utf-8")
-    print(f"✓ 保存 {md_path.relative_to(BACKEND.parent)}")
+    print(f"[OK] 保存 {md_path.relative_to(BACKEND.parent)}")
 
     # 摘要
     from collections import Counter

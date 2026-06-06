@@ -74,7 +74,7 @@ def _call_openai_models(base_url: str, api_key: str) -> dict:
 def _call_anthropic_models(base_url: str, api_key: str) -> dict:
     """GET /anthropic/v1/models — Anthropic 兼容端点。"""
     url = f"{base_url.rstrip('/')}/anthropic/v1/models"
-    headers = {"X-Api-Key": api_key}
+    headers = {"X-Api-Key": api_key, "anthropic-version": "2023-06-01"}
     with httpx.Client(timeout=30) as client:
         resp = client.get(url, headers=headers)
         resp.raise_for_status()
@@ -82,7 +82,11 @@ def _call_anthropic_models(base_url: str, api_key: str) -> dict:
 
 
 def _extract_model_ids(openai_resp: dict, anthropic_resp: dict) -> tuple[set[str], set[str], set[str]]:
-    """从 API 响应中提取模型 ID 集合。"""
+    """从 API 响应中提取模型 ID 集合。
+
+    MiniMax 的 Anthropic 端点实际返回 OpenAI 兼容格式（data[]），
+    而非标准 Anthropic 格式（models[]），因此两个端点都从 data 取 id。
+    """
     openai_ids = set()
     if "data" in openai_resp:
         for m in openai_resp["data"]:
@@ -90,7 +94,12 @@ def _extract_model_ids(openai_resp: dict, anthropic_resp: dict) -> tuple[set[str
                 openai_ids.add(m["id"])
 
     anthropic_ids = set()
-    if "models" in anthropic_resp:
+    # MiniMax Anthropic 端点返回 OpenAI 兼容格式 {data: [...]} 而非 {models: [...]}
+    if "data" in anthropic_resp:
+        for m in anthropic_resp["data"]:
+            if "id" in m:
+                anthropic_ids.add(m["id"])
+    elif "models" in anthropic_resp:
         for m in anthropic_resp["models"]:
             if "name" in m:
                 anthropic_ids.add(m["name"])
@@ -144,7 +153,7 @@ def _build_report(
 
 def _save_json(data: dict, path: Path) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"  ✓ 保存 {path.relative_to(BACKEND)}")
+    print(f"  [OK] 保存 {path.relative_to(BACKEND)}")
 
 
 def _generate_markdown(report: dict) -> str:
@@ -267,14 +276,14 @@ def main() -> None:
     try:
         openai_resp = _call_openai_models(base_url, api_key)
     except Exception as exc:
-        print(f"  ✗ 失败：{exc}")
+        print(f"  [FAIL] 失败：{exc}")
         openai_resp = {"error": str(exc)}
 
     print("调用 Anthropic 模型列表...")
     try:
         anthropic_resp = _call_anthropic_models(base_url, api_key)
     except Exception as exc:
-        print(f"  ✗ 失败：{exc}")
+        print(f"  [FAIL] 失败：{exc}")
         anthropic_resp = {"error": str(exc)}
 
     openai_ids, anthropic_ids, live_ids = _extract_model_ids(openai_resp, anthropic_resp)
@@ -300,7 +309,7 @@ def main() -> None:
     md = _generate_markdown(report)
     md_path = DOCS_DIR / "MINIMAX_MODEL_SUPPORT_REPORT.md"
     md_path.write_text(md, encoding="utf-8")
-    print(f"  ✓ 保存 {md_path.relative_to(BACKEND.parent)}")
+    print(f"  [OK] 保存 {md_path.relative_to(BACKEND.parent)}")
 
     # 摘要
     s = report["summary"]
