@@ -62,6 +62,18 @@ class OperationPolicy(BaseModel):
     operation_note: str | None = None
 
 
+ScopeLevel = Literal["in_scope", "warning_only", "out_of_scope"]
+VerificationAction = Literal["verify", "show_warning_only", "exclude"]
+
+
+class ScopePolicy(BaseModel):
+    current_scope: ScopeLevel = "in_scope"
+    scope_reason: str = ""
+    count_in_completion_rate: bool = True
+    count_in_gap_matrix: bool = True
+    default_verification_action: VerificationAction = "verify"
+
+
 class Category(BaseModel):
     id: str
     label: str
@@ -92,6 +104,7 @@ class Capability(BaseModel):
     requires_model: bool = True
     billing_policy: BillingPolicy = Field(default_factory=BillingPolicy)
     operation_policy: OperationPolicy = Field(default_factory=OperationPolicy)
+    scope_policy: ScopePolicy = Field(default_factory=ScopePolicy)
 
 
 class Model(BaseModel):
@@ -198,6 +211,7 @@ def _spec_to_capability(spec) -> Capability:
         requires_model=spec.requires_model,
         billing_policy=spec.billing_policy,
         operation_policy=spec.operation_policy,
+        scope_policy=spec.scope_policy,
     )
 
 

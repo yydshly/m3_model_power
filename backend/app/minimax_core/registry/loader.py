@@ -16,7 +16,7 @@ from typing import Any
 import yaml
 
 from ..contracts import CapabilitySpec, ModelSpec
-from ..contracts.specs import BillingPolicy, OperationPolicy
+from ..contracts.specs import BillingPolicy, OperationPolicy, ScopePolicy
 from .model_registry import ModelRegistry
 from .capability_registry import CapabilityRegistry
 
@@ -132,6 +132,15 @@ def load_capability_specs() -> list[CapabilitySpec]:
             operation_note=raw_op.get("operation_note"),
         )
 
+        raw_sp = raw.get("scope_policy", {})
+        scope_policy = ScopePolicy(
+            current_scope=raw_sp.get("current_scope", "in_scope"),
+            scope_reason=raw_sp.get("scope_reason", ""),
+            count_in_completion_rate=bool(raw_sp.get("count_in_completion_rate", True)),
+            count_in_gap_matrix=bool(raw_sp.get("count_in_gap_matrix", True)),
+            default_verification_action=raw_sp.get("default_verification_action", "verify"),
+        )
+
         spec = CapabilitySpec(
             id=cap_id,
             name=raw.get("label", cap_id),
@@ -152,6 +161,7 @@ def load_capability_specs() -> list[CapabilitySpec]:
             requires_model=bool(raw.get("requires_model", True)),
             billing_policy=billing_policy,
             operation_policy=operation_policy,
+            scope_policy=scope_policy,
         )
         specs.append(spec)
 

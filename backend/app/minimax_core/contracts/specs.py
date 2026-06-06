@@ -49,6 +49,24 @@ class OperationPolicy(BaseModel):
     operation_note: str | None = None
 
 
+ScopeLevel = Literal["in_scope", "warning_only", "out_of_scope"]
+VerificationAction = Literal["verify", "show_warning_only", "exclude"]
+
+
+class ScopePolicy(BaseModel):
+    """能力范围策略：定义能力是否属于当前项目验收范围。
+
+    - in_scope:        当前 Token Plan 重点验收能力，计入完成率和缺口矩阵
+    - warning_only:    只展示风险提示，不参与默认验收；不计入完成率
+    - out_of_scope:   不纳入当前验收范围，不计入缺口
+    """
+    current_scope: ScopeLevel = "in_scope"
+    scope_reason: str = ""
+    count_in_completion_rate: bool = True
+    count_in_gap_matrix: bool = True
+    default_verification_action: VerificationAction = "verify"
+
+
 class ModelSpec(BaseModel):
     """MiniMax 模型规格定义。
 
@@ -125,3 +143,4 @@ class CapabilitySpec(BaseModel):
         description="该能力是否需要选择模型；false = 如 lyrics-gen / file-* / models-list，无需模型即可调用")
     billing_policy: BillingPolicy = Field(default_factory=BillingPolicy)
     operation_policy: OperationPolicy = Field(default_factory=OperationPolicy)
+    scope_policy: ScopePolicy = Field(default_factory=ScopePolicy)

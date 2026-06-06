@@ -2,7 +2,7 @@
 
 > 生成时间：2026-06-06T16:30:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：RiskGate 变更后回归验收完成；safe 10/10 ✅；medium 6/6 ✅（tts-async full flow: task_id✅ query✅ poll✅ download✅ asset_saved✅ full_async_flow_verified✅ 54272 bytes）；未执行 high/video/voice-clone/delete/upload/music-cover-prep。
+> 本轮更新：新增 scope_policy 字段，32 项能力已划分为 in_scope(20)/warning_only(7)/out_of_scope(5)；video 已标记 out_of_scope，不计入缺口；完成率只基于 in_scope 计算；未执行 high/video/voice-clone/delete/upload/music-cover-prep。
 
 ## 验收状态分层说明
 
@@ -21,6 +21,50 @@
 - `models_api_verified` ≠ `model_level_verified`
 - `capability_level_verified` ≠ 所有模型逐项验证
 - `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- **scope_policy 已引入**：in_scope（20项）计入完成率，warning_only（7项）只做提示，out_of_scope（5项视频能力）不计入缺口
+
+## 0. 项目范围与验收边界
+
+> 本项目定位：MiniMax Token Plan 能力盘点与实测工作台。
+> 当前项目范围：只关注 Token Plan 已确认的能力，不涵盖视频生成等 Token Plan 之外的付费能力。
+
+### 范围分层定义
+
+| scope | 含义 | 计入完成率 | 计入缺口矩阵 | 执行策略 |
+|---|---|---|---|---|
+| `in_scope` | Token Plan 核心验收范围 | ✅ 是 | ✅ 是 | 正常验收（safe/medium/high） |
+| `warning_only` | 付费/认证/素材型能力，只做风险提示 | ❌ 否 | ❌ 否 | 只展示确认项，不执行验收 |
+| `out_of_scope` | 不纳入当前验收范围 | ❌ 否 | ❌ 否 | 完全排除，不计入待办 |
+
+### in_scope 能力（20项）
+
+**已验收（14项）**：
+- safe（10项）：chat-anthropic, chat-openai, chat-responses-create, chat-responses-tokens, file-list, file-retrieve, file-content, file-upload, voice-list, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve
+- medium（4项）：tts-sync, tts-ws, tts-async, image-t2i
+
+**待验收（6项）**：
+- lyrics-gen, music-gen（medium 已测，需 model_level 补充）
+- image-i2i（待参考图验收）
+- voice-list（已 safe，需 medium 验收）
+- file-upload（已 safe，待 medium 验收）
+
+### warning_only 能力（7项）
+
+不做验收，只在前端展示风险提示：
+- `voice-clone-upload-audio`、`voice-clone-upload-prompt`：付费 + 素材
+- `voice-clone-do`：付费 + 认证 + 素材
+- `voice-design`：付费
+- `file-delete`：破坏性操作
+- `voice-delete`：破坏性操作
+- `music-cover-prep`：素材型
+
+### out_of_scope 能力（5项）
+
+视频生成类，当前项目不涉及：
+- `video-t2v`、`video-i2v`、`video-s2v`
+- `video-query`、`video-download`
+
+> 注：视频生成属于 Credits/视频资源包单独计费能力，不在 Token Plan 范围内，本项目不纳入验收。
 
 ## 1. Model Inventory Matrix
 
@@ -245,13 +289,9 @@
 - `MiniMax-M2.5`
 - `MiniMax-M2.1`
 
-### 5.5 无支持模型的能力（requires_model=true）
-- `voice-clone-upload-audio`
-- `voice-clone-upload-prompt`
-- `voice-list`
-- `voice-delete`
-- `video-query`
-- `video-download`
+### 5.5 无支持模型的能力（requires_model=true，且 in_scope）
+（warning_only/out_of_scope 能力不计入缺口）
+- `voice-list`（in_scope，已 safe 验收）
 
 ### 5.6 无需模型的能力（requires_model=false）
 - `lyrics-gen`
@@ -303,13 +343,15 @@
 - `music-2.6`
 - `music-cover`
 
-### 5.11 高成本暂缓（video / voice-clone / voice-design / music-cover-prep；tts-async 已完成验收，本轮仅用短文本测试）
-- `video-t2v`
-- `video-i2v`
-- `video-s2v`
-- `voice-clone-do`
-- `voice-design`
-- `music-cover-prep`
+### 5.11 高成本暂缓（video 已 out_of_scope，voice-clone/voice-design/music-cover-prep 为 warning_only）
+- `video-t2v`（out_of_scope，不计入缺口）
+- `video-i2v`（out_of_scope，不计入缺口）
+- `video-s2v`（out_of_scope，不计入缺口）
+- `video-query`（out_of_scope，不计入缺口）
+- `video-download`（out_of_scope，不计入缺口）
+- `voice-clone-do`（warning_only，只做提示）
+- `voice-design`（warning_only，只做提示）
+- `music-cover-prep`（warning_only，只做提示）
 
 ### 5.12 chat-openai 模型级 probe 失败
 （无）
@@ -462,6 +504,12 @@
 | model_level probe 成功（本次） | 21 |
 | model_level probe 失败（本次） | 0 |
 | 能力总数 | 32 |
+| **scope: in_scope** | **20** |
+| **scope: warning_only** | **7** |
+| **scope: out_of_scope** | **5** |
+| **in_scope 已验收** | **14**（safe 10 + medium 4） |
+| **in_scope 验收中** | **6**（tts-ws/image-t2i/lyrics-gen/music-gen/image-i2i 待 model_level） |
+| **in_scope 验收完成率** | **70%**（14/20） |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |
 | normal_token_plan_test 能力数 | 20 |
@@ -478,6 +526,16 @@
 | long_running 操作能力数 | 3 |
 | quota_guarded 操作能力数 | 1 |
 | 需操作确认能力数 | 10 |
+
+**范围说明**：
+- `in_scope`（20 项）：当前 Token Plan 重点验收能力，计入完成率
+- `warning_only`（7 项）：付费/认证/素材型能力，只做风险提示，不计入缺口
+- `out_of_scope`（5 项）：视频生成，不纳入当前验收范围，不计入缺口
+
+**完成率计算**（基于 in_scope 20 项）：
+- 已完成 safe/medium 验收：14 项
+- 待验收：6 项（tts-ws/image-i2i/lyrics-gen/music-gen 等待 model_level）
+- 当前完成率：70%
 
 ## 9. 执行前确认门禁矩阵
 

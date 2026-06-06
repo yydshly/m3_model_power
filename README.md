@@ -15,6 +15,22 @@ MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
 | 目标 | 完整、正确展示并验证订阅可用的大模型和 API 能力 |
 | 订阅 | TokenPlanPlus 极速版 · 续费 2027-05-29 · Plus-极速版档位 |
 
+## 项目范围边界
+
+本项目范围由 `scope_policy` 字段定义，32 项能力分为三类：
+
+| scope | 数量 | 说明 | 计入完成率 |
+|---|---|---|---|
+| `in_scope` | 20 | Token Plan 核心验收范围 | ✅ 是 |
+| `warning_only` | 7 | 付费/认证/素材型能力，只做风险提示 | ❌ 否 |
+| `out_of_scope` | 5 | 视频生成，完全不纳入 | ❌ 否 |
+
+**完成率**：70%（14/20 in_scope 能力已完成验收）
+
+**warning_only**（不做验收，只做提示）：voice-clone-* 系列（付费+素材）、voice-design（付费）、file-delete/voice-delete（破坏性）、music-cover-prep（素材）
+
+**out_of_scope**（视频生成，Token Plan 之外）：video-t2v / video-i2v / video-s2v / video-query / video-download
+
 ## 模型事实来源
 
 三类状态独立维护，不能混淆：
@@ -92,11 +108,11 @@ frontend/
 
 > 已接入 `minimax_core` + `CapabilityInvoker.invoke_async()` + RiskGate quota guard
 
-字符数保护规则：
+字符数保护规则（已收口）：
 - `<=300` 字：默认允许，无需确认
-- `301~1000` 字：warnning，不阻断
-- `>1000` 字：需 `confirm_quota=true`，否则被 RiskGate `risk_gate_blocked` 拦截
-- `>5000` 字：无 `confirm_quota=true` 硬阻断
+- `301~1000` 字：允许，但有 warning 提示消耗 quota
+- `1001~5000` 字：需 `confirm_quota=true`，否则被 RiskGate `risk_gate_blocked` 拦截
+- `>5000` 字：**硬阻断**，plain `confirm_quota=true` 也无法绕过（需未来 `confirm_very_large_quota`）
 
 CLI 示例：
 ```bash
