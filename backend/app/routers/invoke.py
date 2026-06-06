@@ -82,7 +82,7 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
             capability_id=cap_id,
             payload=payload,
             confirmations=confirmations,
-            result={"ok": False, "error": e.error, "status": e.status, "message": e.message},
+            result={"ok": False, "error": "minimax_error", "status": e.status, "message": e.message},
         )
         return JSONResponse(
             status_code=502 if e.status >= 500 else e.status,

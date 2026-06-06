@@ -176,8 +176,7 @@ def list_history(limit: int = _DEFAULT_HISTORY_LIMIT) -> list[dict]:
     except Exception:
         return []
 
-    # 只读取最后 safe_limit*2 行以避免过度 IO（取最新时不需要全读）
-    # 但保留兜底：lines 可能少于预期
+    # history 文件会在 append 时 compact 到有限大小；这里读取全量文件后反向取最近 safe_limit 条。
     records = []
     for line in reversed(lines):
         line = line.strip()
