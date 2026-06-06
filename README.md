@@ -308,6 +308,65 @@ python scripts/sync_minimax_models.py
 2. 操作风险保护与计费风险独立：同一个能力可能同时标记为高成本和长任务。
 3. 详情见 [docs/MINIMAX_FULL_CAPABILITY_MATRIX.md](docs/MINIMAX_FULL_CAPABILITY_MATRIX.md#7-操作风险保护矩阵)。
 
+## 风险能力执行前确认机制
+
+本项目内置 **RiskGate（执行前确认门禁）**，所有风险能力必须显式确认后才允许执行。
+
+### 核心规则
+
+只要满足以下任意条件，就必须阻断自动执行，除非用户显式确认：
+
+- `billing_policy.requires_explicit_confirmation == true`
+- `operation_policy.requires_operation_confirmation == true`
+- `billing_policy.may_charge_extra == true`
+- `operation_policy.is_destructive == true`
+- `operation_policy.requires_uploaded_asset == true`
+- `operation_policy.is_long_running == true`
+- `operation_policy.requires_existing_task == true`
+
+### 确认项
+
+| 确认项 | 触发条件 |
+|---|---|
+| `--confirm-paid` | `may_charge_extra=true` |
+| `--confirm-high-cost` | `billing_category=high_cost_confirm_required` |
+| `--confirm-destructive` | `is_destructive=true` |
+| `--confirm-asset-source` | `requires_uploaded_asset=true` |
+| `--confirm-long-running` | `is_long_running=true` |
+| `--confirm-existing-task` | `requires_existing_task=true`（需 payload 中有 task_id/file_id） |
+| `--confirm-quota` | `tts-async` 字符数超阈值 |
+
+### 后端 RiskGate
+
+`backend/app/minimax_core/guards/risk_gate.py` 提供 `evaluate_capability_risk()` 函数，`CapabilityInvoker.invoke()` 在实际调用 MiniMax API 前先通过 RiskGate 评估：
+
+```python
+from app.minimax_core.guards.risk_gate import evaluate_capability_risk
+
+decision = evaluate_capability_risk(capability, confirmations={"confirm_paid": True}, payload={"text": "hello"})
+if not decision.allowed:
+    print(decision.blocked_reasons)  # ["voice-design: may_charge_extra=true ..."]
+```
+
+未确认时后端返回 `error_type: risk_gate_blocked`，不实际调用 MiniMax API。
+
+### 脚本确认参数
+
+```bash
+# 验收脚本支持以下确认参数
+python scripts/verify_minimax_capabilities.py --level medium --confirm-cost \
+  --confirm-paid --confirm-destructive --confirm-asset-source \
+  --confirm-long-running --confirm-existing-task --confirm-quota
+```
+
+### 前端确认展示
+
+能力详情页（`Capability.tsx`）对需要确认的能力展示"执行前需要确认"区块，列出所有需要的确认项。后端 RiskGate 会阻断未确认的执行请求。
+
+### 详情
+
+- 确认门禁矩阵：[docs/MINIMAX_FULL_CAPABILITY_MATRIX.md](docs/MINIMAX_FULL_CAPABILITY_MATRIX.md#9-执行前确认门禁矩阵)
+
 ## 安全注意
 
 - API Key 仅存在 `backend/.env`，前端永远不接触 Key

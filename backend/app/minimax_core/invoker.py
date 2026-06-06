@@ -4,6 +4,7 @@
   - 外部调用者只需传入 api_key 和 payload，无需关心使用哪个 client
   - 返回 UnifiedResponse / UnifiedError，不返回裸 dict
   - 未实现的能力抛出明确的 NotImplementedCapability
+  - RiskGate 门禁：所有能力执行前必须通过风险评估
 
 支持的能力：
   chat-openai / chat-anthropic / chat-responses-create / chat-responses-tokens,
@@ -14,12 +15,18 @@
 用法：
     invoker = CapabilityInvoker(api_key="sk-...")
     result = invoker.invoke("tts-sync", {"model": "speech-02-turbo", ...})
+
+风险门禁：
+    decision = invoker.invoke("tts-sync", {"model": "speech-02-turbo", ...},
+                              confirmations={"confirm_quota": True},
+                              payload={"text": "hello"})
 """
 from __future__ import annotations
 
 from typing import Any
 
 from .contracts import AssetRef, UnifiedError, UnifiedErrorException, UnifiedResponse
+from .guards.risk_gate import evaluate_capability_risk
 
 
 # ── MiniMax base_resp 解析 ─────────────────────────────────────────────────────
@@ -66,6 +73,28 @@ def _minimax_error(capability_id: str, error_type: str, status_msg: str | None, 
         retryable=False,
         redacted=True,
     )
+
+
+def _evaluate_risk_gate(capability_id: str, confirmations: dict, payload: dict):
+    """对能力进行 RiskGate 评估。找不到 capability 时返回 allowed=True（由 NotImplementedCapability 处理）。"""
+    try:
+        from .registry.loader import get_capability_registry
+
+        caps = get_capability_registry()
+        cap = caps.by_id(capability_id)
+        if cap is None:
+            # 找不到 capability，后续 NotImplementedCapability 会处理
+            from .guards.risk_gate import RiskGateDecision
+
+            return RiskGateDecision(allowed=True, blocked_reasons=[], required_confirmations=[], warnings=[])
+        return evaluate_capability_risk(cap, confirmations=confirmations, payload=payload)
+    except Exception:
+        # RiskGate 出错时放行（不阻断正常流程）
+        from .guards.risk_gate import RiskGateDecision
+
+        return RiskGateDecision(allowed=True, blocked_reasons=[], required_confirmations=[], warnings=[])
+
+
 from .clients.base import MiniMaxBaseClient
 from .clients.openai import MiniMaxOpenAIClient
 from .clients.anthropic import MiniMaxAnthropicClient
@@ -111,14 +140,46 @@ class CapabilityInvoker:
         self._files = files_client or MiniMaxFilesClient(
             api_key=api_key, timeout=timeout, group_id=group_id)
 
-    def invoke(self, capability_id: str, payload: dict | None = None) -> UnifiedResponse:
+    def invoke(
+        self,
+        capability_id: str,
+        payload: dict | None = None,
+        confirmations: dict | None = None,
+    ) -> UnifiedResponse:
         """统一调用入口，返回 UnifiedResponse。
 
         成功返回 UnifiedResponse(ok=True, ...)。
         失败统一抛出 UnifiedError，由调用者负责转换。
         未实现的能力抛出 NotImplementedCapability。
+
+        RiskGate 门禁：
+          所有能力执行前通过 evaluate_capability_risk 评估风险，
+          若 blocked 则抛出 UnifiedErrorException(error_type="risk_gate_blocked")。
         """
         payload = payload or {}
+        confirmations = confirmations or {}
+
+        # RiskGate 评估
+        decision = _evaluate_risk_gate(capability_id, confirmations, payload)
+        if not decision.allowed:
+            from .registry.loader import get_capability_registry
+
+            cap = get_capability_registry().by_id(capability_id)
+            cap_label = cap.name if cap else capability_id
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id=capability_id,
+                error_type="risk_gate_blocked",
+                error_code=None,
+                message=(
+                    f"Capability '{cap_label}' requires explicit confirmation before execution. "
+                    f"Required: {decision.required_confirmations}. "
+                    f"Reasons: {'; '.join(decision.blocked_reasons)}"
+                ),
+                http_status=403,
+                retryable=False,
+                redacted=True,
+            )
 
         if capability_id == "chat-openai":
             return self._chat_openai(payload)

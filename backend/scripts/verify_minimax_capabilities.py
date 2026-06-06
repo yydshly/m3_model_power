@@ -218,8 +218,10 @@ CAPABILITY_GROUPS = {
 def _verify_single(
     cap_id: str,
     api_key: str,
+    confirmations: dict | None = None,
 ) -> dict:
     """使用 CapabilityInvoker 验收单个能力。"""
+    confirmations = confirmations or {}
     started_at = datetime.now(timezone.utc).isoformat()
     result: dict = {
         "capability_id": cap_id,
@@ -243,7 +245,7 @@ def _verify_single(
 
     # CapabilityInvoker 支持的能力走统一路径
     if cap_id in _INVOKER_SUPPORTED:
-        return _verify_via_invoker(cap_id, api_key, started_at, result)
+        return _verify_via_invoker(cap_id, api_key, started_at, result, confirmations)
 
     # 其余能力（models-* / high / video 等）走旧 client 路径
     return _verify_via_client(cap_id, api_key, started_at, result)
@@ -270,7 +272,7 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
 }
 
 
-def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict) -> dict:
+def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict, confirmations: dict) -> dict:
     """通过 CapabilityInvoker 调用能力，主结果使用 VerificationResult 字段结构。"""
     payload = _INVOKER_PAYLOADS.get(cap_id, {})
 
@@ -278,7 +280,7 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
     t0 = time.monotonic()
 
     try:
-        response = invoker.invoke(cap_id, payload)
+        response = invoker.invoke(cap_id, payload, confirmations=confirmations)
         latency_ms = int((time.monotonic() - t0) * 1000)
         ended_at = datetime.now(timezone.utc).isoformat()
 
@@ -693,6 +695,18 @@ def main() -> None:
                         help="确认中等成本验收（tts-sync, image-t2i 等）")
     parser.add_argument("--confirm-high-cost", action="store_true",
                         help="确认高成本验收（video, voice-clone 等）")
+    parser.add_argument("--confirm-paid", action="store_true",
+                        help="确认付费能力（may_charge_extra=true）")
+    parser.add_argument("--confirm-destructive", action="store_true",
+                        help="确认破坏性操作（is_destructive=true）")
+    parser.add_argument("--confirm-asset-source", action="store_true",
+                        help="确认素材来源能力（requires_uploaded_asset=true）")
+    parser.add_argument("--confirm-long-running", action="store_true",
+                        help="确认长任务能力（is_long_running=true）")
+    parser.add_argument("--confirm-existing-task", action="store_true",
+                        help="确认已有任务能力（requires_existing_task=true）")
+    parser.add_argument("--confirm-quota", action="store_true",
+                        help="确认配额超额能力（tts-async 字符数超阈值）")
     parser.add_argument("--diagnose-auth", action="store_true",
                         help="打印 Key 诊断信息并退出")
     args = parser.parse_args()
@@ -724,6 +738,17 @@ def main() -> None:
         sys.exit(1)
     api_key = token_plan_key
 
+    # 构建 RiskGate 确认字典
+    confirmations = {
+        "confirm_paid": bool(args.confirm_paid),
+        "confirm_high_cost": bool(args.confirm_high_cost),
+        "confirm_destructive": bool(args.confirm_destructive),
+        "confirm_asset_source": bool(args.confirm_asset_source),
+        "confirm_long_running": bool(args.confirm_long_running),
+        "confirm_existing_task": bool(args.confirm_existing_task),
+        "confirm_quota": bool(args.confirm_quota),
+    }
+
     # 决定调用哪些能力
     if args.level == "safe":
         cap_ids = CAPABILITY_GROUPS["safe"]
@@ -747,7 +772,7 @@ def main() -> None:
         cap_label = cap_info.get("label", cap_id) if cap_info else cap_id
         print(f"\n[{cap_id}] {cap_label}...", end=" ", flush=True)
 
-        result = _verify_single(cap_id, api_key)
+        result = _verify_single(cap_id, api_key, confirmations)
         results.append(result)
 
         status_icon = {"success": "[OK]", "failed": "[FAIL]", "skipped": "-",

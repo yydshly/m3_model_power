@@ -15,7 +15,8 @@ from typing import Any
 
 import yaml
 
-from ..contracts import BillingPolicy, CapabilitySpec, ModelSpec, OperationPolicy
+from ..contracts import CapabilitySpec, ModelSpec
+from ..contracts.specs import BillingPolicy, OperationPolicy
 from .model_registry import ModelRegistry
 from .capability_registry import CapabilityRegistry
 

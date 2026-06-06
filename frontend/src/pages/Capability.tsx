@@ -243,6 +243,48 @@ export default function CapabilityPage() {
         </div>
       </section>
 
+      {/* 执行前确认门禁 */}
+      {(() => {
+        const required = getRequiredConfirmations(cap)
+        if (required.length === 0) return null
+        return (
+          <section className="mt-4">
+            <div className="rounded border border-rose-200 bg-rose-50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-rose-500 text-lg">🔒</span>
+                <span className="font-semibold text-rose-800">执行前需要确认</span>
+              </div>
+              <ul className="space-y-1 text-sm text-rose-700">
+                {required.includes('confirm_paid') && (
+                  <li>• 可能额外收费（may_charge_extra=true）</li>
+                )}
+                {required.includes('confirm_high_cost') && (
+                  <li>• 高成本能力（billing_category=high_cost_confirm_required）</li>
+                )}
+                {required.includes('confirm_destructive') && (
+                  <li>• 破坏性操作（is_destructive=true）</li>
+                )}
+                {required.includes('confirm_asset_source') && (
+                  <li>• 素材来源/版权（requires_uploaded_asset=true）</li>
+                )}
+                {required.includes('confirm_long_running') && (
+                  <li>• 长任务执行（is_long_running=true）</li>
+                )}
+                {required.includes('confirm_existing_task') && (
+                  <li>• 需要已有 task_id / file_id（requires_existing_task=true）</li>
+                )}
+                {required.includes('confirm_quota') && (
+                  <li>• 超过字符阈值（tts-async）</li>
+                )}
+              </ul>
+              <div className="mt-3 text-xs text-rose-600 bg-rose-100 rounded p-2">
+                后端 RiskGate 会阻断未确认的执行请求。前端调用前请确保已在后端通过等效确认。
+              </div>
+            </div>
+          </section>
+        )
+      })()}
+
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
         <span>
           <span className="text-slate-400">上游：</span>
@@ -390,4 +432,20 @@ function operationRiskColor(risk: string): string {
     quota_guarded: 'text-orange-600',
   }
   return map[risk] ?? 'text-slate-600'
+}
+
+function getRequiredConfirmations(cap: import('../api').Capability): string[] {
+  const required: string[] = []
+  const bp = cap.billing_policy
+  const op = cap.operation_policy
+
+  if (bp.may_charge_extra) required.push('confirm_paid')
+  if (bp.billing_category === 'high_cost_confirm_required') required.push('confirm_high_cost')
+  if (op.is_destructive) required.push('confirm_destructive')
+  if (op.requires_uploaded_asset) required.push('confirm_asset_source')
+  if (op.is_long_running) required.push('confirm_long_running')
+  if (op.requires_existing_task) required.push('confirm_existing_task')
+  if (cap.id === 'tts-async') required.push('confirm_quota')
+
+  return required
 }

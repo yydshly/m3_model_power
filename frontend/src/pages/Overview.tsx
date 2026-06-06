@@ -55,6 +55,27 @@ export default function Overview() {
     opLongRunning: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'long_running').length,
     opQuotaGuarded: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'quota_guarded').length,
     opRequiresConfirm: registry.capabilities.filter((c) => c.operation_policy?.requires_operation_confirmation === true).length,
+    // confirmation gate stats
+    requiresAnyConfirm: registry.capabilities.filter((c) => {
+      const bp = c.billing_policy
+      const op = c.operation_policy
+      if (bp.may_charge_extra) return true
+      if (bp.billing_category === 'high_cost_confirm_required') return true
+      if (bp.requires_explicit_confirmation) return true
+      if (op.is_destructive) return true
+      if (op.requires_uploaded_asset) return true
+      if (op.is_long_running) return true
+      if (op.requires_existing_task) return true
+      if (c.id === 'tts-async') return true
+      return false
+    }).length,
+    confirmPaid: registry.capabilities.filter((c) => c.billing_policy?.may_charge_extra === true).length,
+    confirmHighCost: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'high_cost_confirm_required').length,
+    confirmDestructive: registry.capabilities.filter((c) => c.operation_policy?.is_destructive === true).length,
+    confirmAssetSource: registry.capabilities.filter((c) => c.operation_policy?.requires_uploaded_asset === true).length,
+    confirmLongRunning: registry.capabilities.filter((c) => c.operation_policy?.is_long_running === true).length,
+    confirmExistingTask: registry.capabilities.filter((c) => c.operation_policy?.requires_existing_task === true).length,
+    confirmQuota: registry.capabilities.filter((c) => c.id === 'tts-async').length,
   }
 
   return (
@@ -154,6 +175,23 @@ export default function Overview() {
             <GapStat label="长任务" value={stats.opLongRunning} sub="video 生成类" tone="purple" />
             <GapStat label="额度保护" value={stats.opQuotaGuarded} sub="tts-async" tone="orange" />
             <GapStat label="需操作确认" value={stats.opRequiresConfirm} sub="requires_operation_confirm" tone="rose" />
+          </div>
+        </section>
+      )}
+
+      {/* 确认门禁统计 */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">执行前确认门禁统计</h2>
+          <div className="grid grid-cols-8 gap-3">
+            <GapStat label="需任意确认" value={stats.requiresAnyConfirm} sub="默认阻断" tone="rose" />
+            <GapStat label="付费确认" value={stats.confirmPaid} sub="may_charge_extra" tone="rose" />
+            <GapStat label="高成本确认" value={stats.confirmHighCost} sub="high_cost_confirm" tone="red" />
+            <GapStat label="破坏性确认" value={stats.confirmDestructive} sub="is_destructive" tone="red" />
+            <GapStat label="素材确认" value={stats.confirmAssetSource} sub="requires_uploaded_asset" tone="amber" />
+            <GapStat label="长任务确认" value={stats.confirmLongRunning} sub="is_long_running" tone="purple" />
+            <GapStat label="已有任务确认" value={stats.confirmExistingTask} sub="requires_existing_task" tone="blue" />
+            <GapStat label="配额确认" value={stats.confirmQuota} sub="tts-async" tone="orange" />
           </div>
         </section>
       )}

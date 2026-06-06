@@ -475,5 +475,51 @@
 | quota_guarded 操作能力数 | 1 |
 | 需操作确认能力数 | 10 |
 
+## 9. 执行前确认门禁矩阵
+
+风险能力默认不会自动执行。必须通过显式确认参数（脚本）或前端确认流程后才允许调用。后端 `CapabilityInvoker` 内置 `RiskGate`，未确认时返回 `risk_gate_blocked` 错误。
+
+### 9.1 确认项说明
+
+| 确认项 | 触发条件 |
+|---|---|
+| `confirm_paid` | `billing_policy.may_charge_extra=true` |
+| `confirm_high_cost` | `billing_category=high_cost_confirm_required` |
+| `confirm_destructive` | `operation_policy.is_destructive=true` |
+| `confirm_asset_source` | `operation_policy.requires_uploaded_asset=true` |
+| `confirm_long_running` | `operation_policy.is_long_running=true` |
+| `confirm_existing_task` | `operation_policy.requires_existing_task=true`（需 payload 中有 task_id/file_id） |
+| `confirm_quota` | `tts-async` 字符数超阈值（>1000字需确认，>5000字硬阻断） |
+
+### 9.2 能力确认门禁矩阵
+
+| capability_id | required_confirmations | risk_gate_default_allowed | blocked_reasons |
+|---|---|---|---|
+| `voice-clone-upload-audio` | confirm_paid, confirm_asset_source | 否 | may_charge_extra=true, requires_uploaded_asset=true |
+| `voice-clone-upload-prompt` | confirm_paid, confirm_asset_source | 否 | may_charge_extra=true, requires_uploaded_asset=true |
+| `voice-clone-do` | confirm_paid, confirm_asset_source | 否 | may_charge_extra=true, requires_uploaded_asset=true |
+| `voice-design` | confirm_paid | 否 | may_charge_extra=true |
+| `voice-delete` | confirm_destructive | 否 | is_destructive=true |
+| `video-t2v` | confirm_high_cost, confirm_long_running | 否 | billing_category=high_cost_confirm_required, is_long_running=true |
+| `video-i2v` | confirm_high_cost, confirm_long_running | 否 | billing_category=high_cost_confirm_required, is_long_running=true |
+| `video-s2v` | confirm_high_cost, confirm_long_running | 否 | billing_category=high_cost_confirm_required, is_long_running=true |
+| `video-query` | confirm_existing_task | 否（无 task_id 时） | requires_existing_task=true 且 payload 无 task_id/file_id |
+| `video-download` | confirm_existing_task | 否（无 file_id 时） | requires_existing_task=true 且 payload 无 file_id |
+| `music-cover-prep` | confirm_paid, confirm_asset_source | 否 | may_charge_extra=true, requires_uploaded_asset=true |
+| `tts-async` | confirm_quota（字符数>1000时） | 字符数<=300时允许 | text_length > requires_confirmation_above_chars / hard_block_above_chars_without_confirm |
+| `image-i2i` | confirm_asset_source | 否 | requires_uploaded_asset=true |
+| `file-upload` | confirm_asset_source | 否 | requires_uploaded_asset=true |
+| `file-delete` | confirm_destructive | 否 | is_destructive=true |
+
+### 9.3 重要说明
+
+1. **风险能力默认阻断**：上表中的能力在未提供对应确认参数时，后端 `RiskGate` 会抛出 `risk_gate_blocked` 错误，不实际调用 MiniMax API。
+2. **脚本确认参数**：通过 `verify_minimax_capabilities.py` 的 `--confirm-paid`、`--confirm-destructive`、`--confirm-asset-source`、`--confirm-long-running`、`--confirm-existing-task`、`--confirm-quota` 参数提供确认。
+3. **tts-async 字符数保护**：
+   - text_length <= 300：默认允许
+   - text_length > 1000：需 `confirm_quota=true`，否则阻断
+   - text_length > 5000：无 `confirm_quota=true` 硬阻断
+4. **video-query / video-download**：即使提供 `confirm_existing_task=true`，若 payload 中无 `task_id`/`file_id` 仍会阻断。
+
 ---
 *本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*
