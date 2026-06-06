@@ -314,7 +314,7 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
             )
 
         # medium 能力特有字段（从 response.assets 统一填充）
-        is_medium = cap_id in ("tts-sync", "tts-ws", "image-t2i", "lyrics-gen", "music-gen")
+        is_medium = cap_id in ("tts-sync", "tts-ws", "tts-async", "image-t2i", "lyrics-gen", "music-gen")
 
         result.update({
             "latency_ms": latency_ms,
@@ -330,8 +330,13 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
         })
 
         # medium 能力特有字段（_handle_medium_result 保留以处理 asset_saved / asset_committed）
-        if is_medium:
+        # tts-async 有专用处理器，不走 _handle_medium_result（会误覆盖 full flow 字段）
+        if is_medium and cap_id != "tts-async":
             _handle_medium_result(cap_id, response.raw, result)
+
+        # tts-async 专用 full-flow 字段提取
+        if cap_id == "tts-async":
+            _handle_tts_async_result(response.raw, result)
 
     except NotImplementedCapability as exc:
         result.update({
@@ -450,6 +455,48 @@ def _verify_via_client(cap_id: str, api_key: str, started_at: str, result: dict)
         _handle_medium_result(cap_id, data, result)
 
     return result
+
+
+def _handle_tts_async_result(data: dict | None, result: dict) -> None:
+    """处理 tts-async full flow 验证结果。
+
+    data 来自 UnifiedResponse.raw，包含 create/poll/download 各环节的闭环状态。
+    """
+    if not data:
+        return
+
+    result["create_status"] = "success" if data.get("create_ok") else "failed"
+    result["task_id_present"] = bool(data.get("task_id"))
+    result["task_id"] = data.get("task_id")
+    result["task_token_present"] = bool(data.get("task_token_present"))
+    result["initial_file_id_present"] = bool(data.get("initial_file_id"))
+
+    # usage_characters 从 create_raw 根级别提取（API 将其放在根级而非 extra_info）
+    create_raw = data.get("create_raw") or {}
+    result["usage_characters"] = create_raw.get("usage_characters")
+
+    result["query_status"] = None  # query 隐含在 final_status 中
+    result["final_status"] = data.get("final_status")
+    result["final_file_id_present"] = bool(data.get("final_file_id"))
+    result["poll_attempts"] = data.get("poll_attempts")
+    result["download_attempted"] = data.get("download_attempted")
+    result["download_success"] = data.get("download_success")
+    result["audio_bytes"] = data.get("audio_bytes")
+    result["full_async_flow_verified"] = data.get("full_async_flow_verified")
+
+    # asset_saved 从 assets 列表推断
+    assets = result.get("assets") or []
+    if assets and isinstance(assets, list):
+        first_asset = assets[0]
+        result["asset_saved"] = bool(first_asset.get("path"))
+        result["asset_path"] = first_asset.get("path")
+        result["asset_size"] = first_asset.get("size_bytes")
+    else:
+        result["asset_saved"] = False
+        result["asset_path"] = None
+        result["asset_size"] = None
+
+    result["asset_committed"] = False
 
 
 def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
@@ -636,6 +683,37 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
             result["asset_saved"] = False
             result["asset_reference_saved"] = False
 
+    elif cap_id == "tts-async":
+        result["output_type"] = "audio"
+        if not (data and isinstance(data, dict)):
+            return
+
+        result["create_status"] = "success" if data.get("create_ok") else "failed"
+        result["task_id_present"] = bool(data.get("task_id"))
+        result["task_id"] = data.get("task_id")
+        result["task_token_present"] = bool(data.get("task_token_present"))
+        result["initial_file_id_present"] = bool(data.get("initial_file_id"))
+        result["usage_characters"] = data.get("create_raw", {}).get("extra_info", {}).get("usage_characters") if isinstance(data.get("create_raw"), dict) else None
+        result["query_status"] = None  # query is implicit in final_status
+        result["final_status"] = data.get("final_status")
+        result["final_file_id_present"] = bool(data.get("final_file_id"))
+        result["poll_attempts"] = data.get("poll_attempts")
+        result["download_attempted"] = data.get("download_attempted")
+        result["download_success"] = data.get("download_success")
+        result["audio_bytes"] = data.get("audio_bytes")
+        result["full_async_flow_verified"] = data.get("full_async_flow_verified")
+
+        # Determine asset_saved based on assets list if available
+        if result.get("assets") and len(result.get("assets", [])) > 0:
+            first_asset = result["assets"][0]
+            result["asset_saved"] = bool(first_asset.get("path"))
+            result["asset_path"] = first_asset.get("path")
+        else:
+            result["asset_saved"] = False
+            result["asset_path"] = None
+
+        result["asset_committed"] = False
+
 
 
 def _check_response_shape(cap_id: str, data) -> bool:
@@ -723,6 +801,14 @@ def main() -> None:
                         help="确认配额超额能力（tts-async 字符数超阈值）")
     parser.add_argument("--diagnose-auth", action="store_true",
                         help="打印 Key 诊断信息并退出")
+    parser.add_argument("--poll", nargs="?", const="true", default="true",
+                        help="tts-async 是否轮询（默认 true，可用 --poll false 关闭）")
+    parser.add_argument("--download", nargs="?", const="true", default="true",
+                        help="tts-async 是否下载（默认 true，可用 --download false 关闭）")
+    parser.add_argument("--max-poll-attempts", type=int, default=30,
+                        help="tts-async 最大轮询次数（默认 30）")
+    parser.add_argument("--poll-interval", type=float, default=2.0,
+                        help="tts-async 轮询间隔秒数（默认 2.0）")
     parser.add_argument("--capability",
                         help="只验收指定能力（如 tts-ws），与 --level 配合可精确指定单个能力")
     args = parser.parse_args()
@@ -776,6 +862,10 @@ def main() -> None:
         "confirm_long_running": bool(args.confirm_long_running),
         "confirm_existing_task": bool(args.confirm_existing_task),
         "confirm_quota": bool(args.confirm_quota),
+        "poll": args.poll == "true",
+        "download": args.download == "true",
+        "max_poll_attempts": int(args.max_poll_attempts),
+        "poll_interval": float(args.poll_interval),
     }
 
     # 决定调用哪些能力

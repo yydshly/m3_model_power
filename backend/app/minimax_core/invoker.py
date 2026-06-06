@@ -271,7 +271,16 @@ class CapabilityInvoker:
         if capability_id == "tts-ws":
             return await self._tts_ws_async(payload)
         if capability_id == "tts-async":
-            return await self._tts_async_http(payload)
+            # poll/download 通过 confirmations 传递（用于 full flow 验证）
+            do_poll = confirmations.get("poll", True)
+            do_download = confirmations.get("download", True)
+            return await self._tts_async_full_flow(
+                payload,
+                poll=do_poll,
+                download=do_download,
+                poll_interval=confirmations.get("poll_interval", 2.0),
+                max_poll_attempts=confirmations.get("max_poll_attempts", 30),
+            )
         if capability_id == "image-t2i":
             return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
@@ -551,38 +560,142 @@ class CapabilityInvoker:
 
     # ── TTS Async ─────────────────────────────────────────────────────────────
 
-    async def _tts_async_http(self, payload: dict) -> UnifiedResponse:
-        """tts-async — 异步 TTS，提交任务后返回 task_id。
+    async def _tts_async_full_flow(
+        self,
+        payload: dict,
+        *,
+        poll: bool = True,
+        download: bool = True,
+        poll_interval: float = 2.0,
+        max_poll_attempts: int = 30,
+    ) -> UnifiedResponse:
+        """tts-async 完整闭环：create → poll → download。
 
-        RiskGate 已在 invoke_async() 入口统一评估（字符数 quota guard）。
+        参数：
+          poll: 是否轮询等待任务完成（默认 True）
+          download: 是否下载音频文件（默认 True）
+          poll_interval: 轮询间隔秒数（默认 2.0）
+          max_poll_attempts: 最大轮询次数（默认 30）
+
+        返回 UnifiedResponse，包含：
+          - task_id, task_token, file_id, status
+          - assets（已下载的音频）
+          - usage（usage_characters, poll_attempts, text_length）
         """
+        # 1. 创建任务
         try:
-            raw = await self._native.tts_async_http(payload)
+            create_result = await self._native.tts_async_create(payload)
         except Exception as exc:
             raise UnifiedErrorException(
                 ok=False,
                 capability_id="tts-async",
                 error_type="upstream_error",
                 error_code=None,
-                message=str(exc),
+                message=f"tts_async_create failed: {exc}",
                 http_status=500,
                 retryable=False,
                 redacted=True,
             )
 
-        # 检查 MiniMax 业务状态码
-        ok, error_type, status_msg, http_status = parse_minimax_base_resp(raw)
-        if not ok:
-            raise _minimax_error("tts-async", error_type, status_msg, http_status or 200)
+        # 检查创建是否成功
+        if not create_result.get("ok"):
+            base_resp = create_result.get("base_resp") or {}
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-async",
+                error_type="minimax_api_error",
+                error_code=str(base_resp.get("status_code")),
+                message=base_resp.get("status_msg") or "tts_async_create returned non-zero status",
+                http_status=200,
+                retryable=False,
+                redacted=True,
+            )
 
-        # 异步任务返回 task_id
-        task_id = raw.get("task_id") or raw.get("data", {}).get("task_id") if isinstance(raw.get("data"), dict) else None
-        extra = raw.get("extra_info") or {}
-        audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
+        task_id = create_result.get("task_id")
+        task_token = create_result.get("task_token")
+        initial_file_id = create_result.get("file_id")
+        usage_characters = create_result.get("usage_characters")
+        create_raw = create_result.get("raw", {})
 
-        assets: list[AssetRef] = []
-        if task_id:
-            assets.append(AssetRef(
+        if not task_id:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-async",
+                error_type="output_missing",
+                error_code=None,
+                message="tts_async_create missing task_id in response",
+                http_status=200,
+                retryable=False,
+                redacted=True,
+            )
+
+        extra_info = create_raw.get("extra_info") or {}
+        audio_format = (extra_info.get("audio_format") if isinstance(extra_info, dict) else None) or "mp3"
+
+        # 2. 轮询（可选）
+        poll_attempts = 0
+        final_status: str | None = None
+        final_file_id: str | None = initial_file_id
+
+        if poll:
+            poll_result = await self._native.tts_async_poll(
+                task_id,
+                interval_seconds=poll_interval,
+                max_attempts=max_poll_attempts,
+            )
+            poll_attempts = poll_result.get("poll_attempts", 0)
+            final_status = poll_result.get("final_status")
+            final_file_id = poll_result.get("file_id") or final_file_id
+        else:
+            final_status = "Processing"
+            poll_attempts = 0
+
+        # 3. 下载文件（可选）
+        asset_refs: list[AssetRef] = []
+        asset_saved = False
+        audio_bytes: int | None = None
+
+        if download and final_file_id and final_status == "Success":
+            try:
+                # 尝试通过 files client 下载
+                content_bytes, content_type = self._files.retrieve_content(final_file_id)
+                audio_bytes = len(content_bytes)
+
+                # 保存到 runtime/assets/tts_async/
+                runtime_dir = (
+                    Path(__file__).resolve().parent.parent
+                    / "runtime" / "assets" / "tts_async"
+                )
+                runtime_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = int(time.time())
+                out_path = runtime_dir / f"tts_async_{task_id}_{timestamp}.{audio_format}"
+                try:
+                    out_path.write_bytes(content_bytes)
+                    asset_saved = True
+                except Exception:
+                    asset_saved = False
+
+                asset_refs.append(AssetRef(
+                    type="audio",
+                    format=audio_format,
+                    path=str(out_path.relative_to(runtime_dir.parent.parent)) if asset_saved else None,
+                    url=None,
+                    size_bytes=audio_bytes,
+                    committed=False,
+                ))
+            except Exception as exc:
+                # 下载失败，但 create/query 成功 → 分层记录
+                asset_refs.append(AssetRef(
+                    type="audio",
+                    format=audio_format,
+                    path=None,
+                    url=None,
+                    size_bytes=None,
+                    committed=False,
+                ))
+        elif final_file_id:
+            # 有 file_id 但不下载或下载未完成
+            asset_refs.append(AssetRef(
                 type="audio",
                 format=audio_format,
                 path=None,
@@ -591,19 +704,62 @@ class CapabilityInvoker:
                 committed=False,
             ))
 
+        # 4. 构造 task dict（只包含 id，不暴露 token）
+        task_info: dict[str, Any] = {
+            "task_id": task_id,
+            "task_token_present": bool(task_token),
+            "file_id": final_file_id,
+            "status": final_status,
+        }
+        if task_token:
+            task_info["task_token_redacted"] = f"{task_token[:4]}***{task_token[-4:]}" if len(task_token) > 8 else "***"
+
+        # 5. 判断完整闭环
+        full_async_flow_verified = (
+            bool(task_id)
+            and final_status == "Success"
+            and final_file_id is not None
+            and asset_saved
+            and audio_bytes is not None
+            and audio_bytes > 0
+        )
+
         return UnifiedResponse(
             ok=True,
             capability_id="tts-async",
             model=payload.get("model"),
             output_type="audio",
             text=None,
-            assets=assets,
-            task={"task_id": task_id},
+            assets=asset_refs,
+            task=task_info,
             usage={
+                "usage_characters": usage_characters,
+                "poll_attempts": poll_attempts,
                 "text_length": len(payload.get("text", "")),
             },
-            raw=raw,
+            raw={
+                "create_raw": create_raw,
+                "create_ok": create_result.get("ok"),
+                "task_id": task_id,
+                "task_token_present": bool(task_token),
+                "initial_file_id": initial_file_id,
+                "final_status": final_status,
+                "final_file_id": final_file_id,
+                "poll_attempts": poll_attempts,
+                "download_attempted": download,
+                "download_success": asset_saved and audio_bytes is not None,
+                "audio_bytes": audio_bytes,
+                "full_async_flow_verified": full_async_flow_verified,
+            },
         )
+
+    # 兼容旧名（保留 invoke_async 中的路由）
+    async def _tts_async_http(self, payload: dict) -> UnifiedResponse:
+        """tts-async — 提交异步任务（只创建，不轮询/下载）。
+
+        供直接调用的旧路径。
+        """
+        return await self._tts_async_full_flow(poll=False, download=False)
 
     # ── Image ────────────────────────────────────────────────────────────────
 

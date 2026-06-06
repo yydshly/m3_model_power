@@ -34,12 +34,178 @@ class MiniMaxNativeClient(MiniMaxBaseClient):
         """POST /v1/t2a_v2 — 文本转语音同步接口。"""
         return self.request_json("POST", "/t2a_v2", json=payload, timeout=30)
 
-    async def tts_async_http(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST /v1/t2a_async_v2 — 文本转语音异步接口（长文本）。
+    async def tts_async_create(self, payload: dict[str, Any], *, timeout: float = 60.0) -> dict[str, Any]:
+        """POST /v1/t2a_async_v2 — 异步 TTS 创建任务。
 
-        提交任务后返回 task_id，音频通过轮询任务状态获取。
+        成功响应解析：
+          - task_id, task_token, file_id, usage_characters
+          - base_resp.status_code / status_msg
+
+        失败时抛出异常或返回 ok=False 的 dict。
         """
-        return await self.request_json_async("POST", "/t2a_async_v2", json=payload, timeout=30)
+        raw = await self.request_json_async("POST", "/t2a_async_v2", json=payload, timeout=timeout)
+
+        # 检查业务状态码
+        base_resp = raw.get("base_resp") or {}
+        status_code = base_resp.get("status_code", 0)
+        status_msg = base_resp.get("status_msg")
+
+        if status_code != 0:
+            # 非零业务码视为失败
+            return {
+                "ok": False,
+                "base_resp": base_resp,
+                "task_id": None,
+                "task_token": None,
+                "file_id": None,
+                "usage_characters": None,
+                "raw": raw,
+            }
+
+        # 解析关键字段（task_id/token/file_id/usage_characters 在根级别）
+        task_id = raw.get("task_id")
+        task_token = raw.get("task_token")
+        file_id = raw.get("file_id")
+        extra_info = raw.get("extra_info") or {}
+        usage_characters = raw.get("usage_characters")
+        if usage_characters is None and isinstance(extra_info, dict):
+            usage_characters = extra_info.get("usage_characters")
+
+        return {
+            "ok": True,
+            "base_resp": base_resp,
+            "task_id": task_id,
+            "task_token": task_token,
+            "file_id": file_id,
+            "usage_characters": usage_characters,
+            "raw": raw,
+        }
+
+    async def tts_async_query(self, task_id: str | int, *, timeout: float = 30.0) -> dict[str, Any]:
+        """GET /v1/query/t2a_async_query_v2?task_id=... — 查询异步任务状态。
+
+        返回字段：
+          - task_id, status (Processing / Success / Failed / Expired), file_id
+          - base_resp
+        """
+        params = {"task_id": str(task_id)}
+        raw = await self.request_json_async("GET", "/query/t2a_async_query_v2", params=params, timeout=timeout)
+
+        base_resp = raw.get("base_resp") or {}
+        status_code = base_resp.get("status_code", 0)
+
+        if status_code != 0:
+            return {
+                "ok": False,
+                "base_resp": base_resp,
+                "task_id": str(task_id),
+                "status": None,
+                "file_id": None,
+                "raw": raw,
+            }
+
+        # 解析查询结果
+        result_data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+        status = result_data.get("status") or raw.get("status")
+        file_id = result_data.get("file_id") or raw.get("file_id")
+
+        return {
+            "ok": True,
+            "base_resp": base_resp,
+            "task_id": str(task_id),
+            "status": status,
+            "file_id": file_id,
+            "raw": raw,
+        }
+
+    async def tts_async_poll(
+        self,
+        task_id: str | int,
+        *,
+        interval_seconds: float = 2.0,
+        max_attempts: int = 30,
+    ) -> dict[str, Any]:
+        """轮询异步 TTS 任务直到完成/失败/超时。
+
+        规则：
+          - Success  → 返回成功
+          - Failed    → 返回 failed
+          - Expired   → 返回 expired
+          - Processing → 继续轮询
+          - 超过 max_attempts → timeout
+
+        返回结构包含：
+          - final_status, file_id, poll_attempts, task_info
+        """
+        import asyncio
+
+        for attempt in range(1, max_attempts + 1):
+            query_result = await self.tts_async_query(task_id)
+
+            if not query_result.get("ok"):
+                # 查询失败，记录当前 attempt 后返回
+                return {
+                    "ok": False,
+                    "final_status": "query_failed",
+                    "file_id": None,
+                    "poll_attempts": attempt,
+                    "task_id": str(task_id),
+                    "task_info": query_result,
+                }
+
+            status = query_result.get("status")
+
+            if status == "Success":
+                return {
+                    "ok": True,
+                    "final_status": "Success",
+                    "file_id": query_result.get("file_id"),
+                    "poll_attempts": attempt,
+                    "task_id": str(task_id),
+                    "task_info": query_result,
+                }
+            elif status in ("Failed", "failed"):
+                return {
+                    "ok": False,
+                    "final_status": "Failed",
+                    "file_id": query_result.get("file_id"),
+                    "poll_attempts": attempt,
+                    "task_id": str(task_id),
+                    "task_info": query_result,
+                }
+            elif status in ("Expired", "expired"):
+                return {
+                    "ok": False,
+                    "final_status": "Expired",
+                    "file_id": None,
+                    "poll_attempts": attempt,
+                    "task_id": str(task_id),
+                    "task_info": query_result,
+                }
+            else:
+                # Processing / 其他中间态，继续轮询
+                if attempt < max_attempts:
+                    await asyncio.sleep(interval_seconds)
+                    continue
+                # 最后一次尝试超时
+                return {
+                    "ok": False,
+                    "final_status": "timeout",
+                    "file_id": None,
+                    "poll_attempts": attempt,
+                    "task_id": str(task_id),
+                    "task_info": query_result,
+                }
+
+        # 永不触发（兜桥）
+        return {
+            "ok": False,
+            "final_status": "timeout",
+            "file_id": None,
+            "poll_attempts": max_attempts,
+            "task_id": str(task_id),
+            "task_info": None,
+        }
 
     async def tts_websocket(
         self,
