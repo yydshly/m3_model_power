@@ -222,3 +222,40 @@ export async function riskCheck(
   }
   return r.json()
 }
+
+// ── Verification index ───────────────────────────────────────────────
+
+export type VerificationSummary = {
+  in_scope_total: number
+  in_scope_verified: number
+  in_scope_unverified: number
+  in_scope_unverified_ids: string[]
+  completion_rate: number
+}
+
+export type VerificationIndex = {
+  schema_version: number
+  updated_at: string
+  updated_by: string
+  capabilities: Record<string, {
+    capability_id: string
+    best_status: string
+    verified: boolean
+    last_success: string | null
+    last_failure: string | null
+    source: string
+    evidence: Record<string, unknown>
+  }>
+}
+
+export async function getVerificationSummary(): Promise<VerificationSummary> {
+  const r = await fetch('/api/verification/summary')
+  if (!r.ok) throw new Error(`verification summary ${r.status}`)
+  return r.json()
+}
+
+export async function getVerificationIndex(): Promise<VerificationIndex> {
+  const r = await fetch('/api/verification/index')
+  if (!r.ok) throw new Error(`verification index ${r.status}`)
+  return r.json()
+}

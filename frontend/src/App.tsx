@@ -3,6 +3,7 @@ import CapabilityPage from './pages/Capability'
 import CategoryPage from './pages/Category'
 import ModelsPage from './pages/Models'
 import Overview from './pages/Overview'
+import TestConsole from './pages/TestConsole'
 import { RegistryProvider, useRegistry } from './store'
 
 export default function App() {
@@ -30,6 +31,7 @@ function Shell() {
             />
           ))}
           <NavItem to="/models-all" emoji="🧬" label="所有模型" />
+          <NavItem to="/test-console" emoji="🧪" label="测试控制台" />
         </nav>
         <div className="p-3 border-t border-slate-200 text-xs text-slate-500">
           {error ? (
@@ -48,6 +50,7 @@ function Shell() {
           <Route path="/category/:id" element={<CategoryPage />} />
           <Route path="/cap/:id" element={<CapabilityPage />} />
           <Route path="/models-all" element={<ModelsPage />} />
+          <Route path="/test-console" element={<TestConsole />} />
         </Routes>
       </main>
     </div>
