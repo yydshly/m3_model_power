@@ -16,6 +16,15 @@
 4. 之前 API Key 返回 1004 的记录仅作为诊断参考，**不作为 Token Plan 能力结论**
 5. 全量矩阵以 Token Plan Key 实测结果为唯一事实来源
 
+## Token Plan Key 配置状态（2026-06-06）
+
+| Key | 配置状态 | 说明 |
+|---|---|---|
+| `MINIMAX_TOKEN_PLAN_KEY` | ❌ 未配置（`token_plan_key_not_set`） | 需在 `backend/.env` 中配置后才能验收 native 多模态 |
+| `MINIMAX_API_KEY` | ✅ 已配置（`sk-cp-...`） | 仅用于可选诊断，不参与默认验收 |
+
+**当前状态**：`token_plan_key_not_set`，native 多模态（tts-sync / image-t2i / lyrics-gen / music-gen）验收已跳过。
+
 ---
 
 ## 重要说明：HTTP 200 ≠ MiniMax 业务成功
