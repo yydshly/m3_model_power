@@ -66,6 +66,10 @@ class Model(BaseModel):
     supports_thinking: bool = False
     thinking_can_disable: bool = False
     cost_level: Literal["quota", "low", "medium", "high", "unknown"] = "unknown"
+    # 发现方式与状态（用于前端展示）
+    discovery_method: Literal["models_api", "capability_probe", "manual_official"] | None = None
+    discovery_status: Literal["available", "unavailable", "not_applicable", "unknown"] | None = None
+    discovery_note: str = ""
     note: str = ""
     quota_eligible: bool = False  # true = 走 TokenPlanPlus 共享配额，false = 单独按用量计费
 

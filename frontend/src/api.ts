@@ -58,6 +58,9 @@ export type Model = {
   supports_thinking: boolean
   thinking_can_disable: boolean
   cost_level: 'quota' | 'low' | 'medium' | 'high' | 'unknown'
+  discovery_method: 'models_api' | 'capability_probe' | 'manual_official' | null
+  discovery_status: 'available' | 'unavailable' | 'not_applicable' | 'unknown' | null
+  discovery_note: string
   note: string
   quota_eligible: boolean
 }

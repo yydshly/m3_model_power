@@ -8,3 +8,19 @@ __pycache__/
 .DS_Store
 *.egg-info/
 .vite/
+
+# Backend runtime artifacts (verification results, audio/image assets)
+backend/runtime/
+
+# Frontend TypeScript build outputs
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+
+# Media assets from capability verification
+*.mp3
+*.wav
+*.flac
+*.png
+*.jpg
+*.jpeg
+*.mp4

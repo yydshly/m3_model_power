@@ -6,18 +6,24 @@
 #   family              chat | speech | image | video | music
 #   tier                flagship | highspeed | standard | hd | turbo | legacy | deprecated
 #   official_current    官方当前文档是否列出该模型
-#   live_available      真实 API /v1/models 或 /anthropic/v1/models 是否返回（null=未验收）
+#   live_available      真实 API /v1/models 是否返回（null=未验收，models_api 不返回 non-chat 模型）
 #   subscription_expected  用户订阅套餐是否覆盖该模型
-#   enabled             前端默认显示（false 则隐藏，可归入"历史兼容模型"折叠区）
+#   enabled             前端默认显示（false 则隐藏）
 #   context             最大上下文长度（仅 chat 系列）
 #   input_modalities   输入模态：[text] | [text, image, video]
 #   output_modalities   输出模态：[text] | [text, image, video, audio, music]
 #   protocols           [openai] | [anthropic] | [openai, anthropic] | [openai, anthropic, responses]
-#   capabilities        显式声明这个模型支持哪些 capability id；空则按 family 自动匹配
-#   supports_tools      是否支持工具调用
-#   supports_thinking   是否支持 thinking block
+#   capabilities        显式声明这个模型支持哪些 capability id
+#   supports_tools       是否支持工具调用
+#   supports_thinking    是否支持 thinking block
 #   thinking_can_disable thinking 是否可关闭
 #   cost_level           quota | low | medium | high | unknown
+#   discovery_method     models_api | capability_probe | manual_official | null
+#                         models_api = 通过 /v1/models 列表接口验证
+#                         capability_probe = 需要通过实际能力端点验证（如 tts-sync/image-t2i）
+#                         manual_official = 仅官方文档确认，未做 live 验证
+#   discovery_status    available | unavailable | not_applicable | unknown | null
+#   discovery_note      补充说明
 #   note                UI 提示文案
 #
 # 重要原则：
@@ -26,7 +32,7 @@
 models:
 
   # ===================== 对话 / LLM — 官方当前 =====================
-  # 官方文档：https://platform.minimaxi.com/docs/api-reference/text-anthropic-api
+  # verified via /v1/models OpenAI and Anthropic endpoints — both returned all 8 models
 
   - id: MiniMax-M3
     label: MiniMax M3
@@ -44,6 +50,9 @@ models:
     supports_thinking: true
     thinking_can_disable: true
     cost_level: medium
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 最新 M 系列语言模型，支持图像/视频输入；1M 上下文。
 
   - id: MiniMax-M2.7
@@ -62,6 +71,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: medium
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 标准档 M2.7，仅文本输入。
 
   - id: MiniMax-M2.7-highspeed
@@ -80,6 +92,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: quota
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 极速档 M2.7，走 TokenPlanPlus 共享配额。
 
   - id: MiniMax-M2.5
@@ -98,6 +113,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: medium
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 标准档 M2.5，仅文本输入。
 
   - id: MiniMax-M2.5-highspeed
@@ -116,6 +134,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: quota
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 极速档 M2.5，走 TokenPlanPlus 共享配额。
 
   - id: MiniMax-M2.1
@@ -134,6 +155,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: medium
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 标准档 M2.1，仅文本输入。
 
   - id: MiniMax-M2.1-highspeed
@@ -152,6 +176,9 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: quota
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 极速档 M2.1，走 TokenPlanPlus 共享配额。
 
   - id: MiniMax-M2
@@ -170,9 +197,13 @@ models:
     supports_thinking: true
     thinking_can_disable: false
     cost_level: medium
+    discovery_method: models_api
+    discovery_status: available
+    discovery_note: Confirmed via /v1/models (OpenAI + Anthropic endpoints).
     note: 标准档 M2，仅文本输入。
 
   # ===================== 对话 / LLM — 历史兼容 =====================
+  # not returned by /v1/models; verified via official documentation only
 
   - id: abab6.5s-chat
     label: abab 6.5s
@@ -190,6 +221,9 @@ models:
     supports_thinking: false
     thinking_can_disable: false
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代旗舰，已不在官方当前文档中，保留兼容。
 
   - id: abab6.5-chat
@@ -208,6 +242,9 @@ models:
     supports_thinking: false
     thinking_can_disable: false
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 历史版本，保留兼容。
 
   - id: abab6.5t-chat
@@ -226,6 +263,9 @@ models:
     supports_thinking: false
     thinking_can_disable: false
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: abab 6.5 变体。
 
   - id: abab6.5g-chat
@@ -244,10 +284,13 @@ models:
     supports_thinking: false
     thinking_can_disable: false
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: abab 6.5 变体。
 
   # ===================== 语音合成 — 官方当前 =====================
-  # 官方文档：https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
+  # not returned by /v1/models (only chat models are); verified via capability endpoint
 
   - id: speech-2.8-hd
     label: speech-2.8-hd
@@ -262,6 +305,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models (speech族不在列表范围); verify via tts-sync endpoint.
     note: 最新一代高保真语音合成。
 
   - id: speech-2.8-turbo
@@ -277,6 +323,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: low
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via tts-sync endpoint.
     note: 最新一代低延迟语音合成。
 
   - id: speech-2.6-hd
@@ -292,6 +341,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via tts-sync endpoint.
     note: 高保真语音合成。
 
   - id: speech-2.6-turbo
@@ -307,6 +359,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: low
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via tts-sync endpoint.
     note: 低延迟语音合成。
 
   - id: speech-02-hd
@@ -322,6 +377,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via tts-sync endpoint.
     note: 高保真合成，推荐用于成片/有声书。
 
   - id: speech-02-turbo
@@ -337,6 +395,9 @@ models:
     protocols: [native]
     capabilities: [tts-sync, tts-ws, tts-async, voice-clone-do, voice-design]
     cost_level: low
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via tts-sync endpoint.
     note: 低延迟优先，适合实时交互。
 
   # ===================== 语音合成 — 历史兼容 =====================
@@ -353,6 +414,9 @@ models:
     output_modalities: [audio]
     protocols: [native]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代高保真，已不在官方当前文档中。
 
   - id: speech-01-turbo
@@ -367,6 +431,9 @@ models:
     output_modalities: [audio]
     protocols: [native]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代低延迟，已不在官方当前文档中。
 
   - id: speech-01-240228
@@ -381,10 +448,13 @@ models:
     output_modalities: [audio]
     protocols: [native]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Deprecated model; not returned by /v1/models.
     note: 早期版本，已废弃。
 
   # ===================== 图像 — 官方当前 =====================
-  # 官方文档：https://platform.minimaxi.com/docs/api-reference/image-generation-t2i
+  # not returned by /v1/models; verified via image-t2i endpoint
 
   - id: image-01
     label: image-01
@@ -399,6 +469,9 @@ models:
     protocols: [native]
     capabilities: [image-t2i, image-i2i]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via image-t2i endpoint.
     note: 文生图 / 图生图主力，支持人物主体参考。
 
   - id: image-01-live
@@ -414,10 +487,13 @@ models:
     protocols: [native]
     capabilities: [image-t2i, image-i2i]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via image-t2i endpoint.
     note: 在 image-01 基础上额外支持多种画风设置。
 
   # ===================== 视频 — 官方当前 =====================
-  # 官方文档：https://platform.minimaxi.com/docs/api-reference/video-generation-t2v
+  # not returned by /v1/models; verified via video-t2v endpoint
 
   - id: MiniMax-Hailuo-2.3
     label: MiniMax Hailuo 2.3
@@ -432,6 +508,9 @@ models:
     protocols: [native]
     capabilities: [video-t2v, video-i2v, video-s2v]
     cost_level: high
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via video-t2v endpoint.
     note: 全新视频生成模型，肢体动作、物理表现与指令遵循能力升级。
 
   - id: MiniMax-Hailuo-2.3-Fast
@@ -447,6 +526,9 @@ models:
     protocols: [native]
     capabilities: [video-t2v, video-i2v, video-s2v]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via video-t2v endpoint.
     note: 生成速度提升，以更高性价比兼顾画质与表现力。
 
   - id: MiniMax-Hailuo-02
@@ -462,6 +544,9 @@ models:
     protocols: [native]
     capabilities: [video-t2v, video-i2v, video-s2v]
     cost_level: high
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via video-t2v endpoint.
     note: 支持更高分辨率和更长时长。
 
   # ===================== 视频 — 历史兼容 =====================
@@ -479,6 +564,9 @@ models:
     protocols: [native]
     capabilities: [video-t2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代文生视频，已不在官方当前文档中。
 
   - id: T2V-01-Director
@@ -494,6 +582,9 @@ models:
     protocols: [native]
     capabilities: [video-t2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 文生视频导演版，含运镜指令，已不在官方当前文档中。
 
   - id: I2V-01
@@ -509,6 +600,9 @@ models:
     protocols: [native]
     capabilities: [video-i2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代图生视频，已不在官方当前文档中。
 
   - id: I2V-01-live
@@ -524,6 +618,9 @@ models:
     protocols: [native]
     capabilities: [video-i2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 2D 角色专用图生视频，已不在官方当前文档中。
 
   - id: I2V-01-Director
@@ -539,6 +636,9 @@ models:
     protocols: [native]
     capabilities: [video-i2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 图生视频导演版，含运镜指令，已不在官方当前文档中。
 
   - id: S2V-01
@@ -554,6 +654,9 @@ models:
     protocols: [native]
     capabilities: [video-s2v]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 主体参考视频，已不在官方当前文档中。
 
   - id: video-01
@@ -568,10 +671,13 @@ models:
     output_modalities: [video]
     protocols: [native]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Deprecated model; not returned by /v1/models.
     note: 早期视频模型，已废弃。
 
   # ===================== 音乐 — 官方当前 =====================
-  # 官方文档：https://platform.minimaxi.com/docs/api-reference/music-generation
+  # not returned by /v1/models; verified via music-gen endpoint
 
   - id: music-2.6
     label: music-2.6
@@ -586,6 +692,9 @@ models:
     protocols: [native]
     capabilities: [music-gen]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via music-gen endpoint.
     note: 最新音乐生成模型，支持输入音乐灵感和歌词，生成 AI 音乐。
 
   - id: music-cover
@@ -601,6 +710,9 @@ models:
     protocols: [native]
     capabilities: [music-cover-prep]
     cost_level: medium
+    discovery_method: capability_probe
+    discovery_status: unknown
+    discovery_note: Not returned by /v1/models; verify via music-cover-prep endpoint.
     note: 翻唱生成，从参考音频生成 AI 音乐。
 
   - id: music-2.6-free
@@ -616,6 +728,9 @@ models:
     protocols: [native]
     capabilities: [music-gen]
     cost_level: low
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Not returned by /v1/models; subscription_expected=false (free tier only).
     note: 免费限速版，所有用户可用，单价更低但 RPM 也受限。
 
   # ===================== 音乐 — 历史兼容 =====================
@@ -633,6 +748,9 @@ models:
     protocols: [native]
     capabilities: [music-gen]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 上一代音乐模型，已不在官方当前文档中。
 
   - id: music-01
@@ -648,8 +766,10 @@ models:
     protocols: [native]
     capabilities: [music-gen]
     cost_level: unknown
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Legacy model; not returned by /v1/models.
     note: 早期音乐模型，已不在官方当前文档中。
 
   # ===================== 文件能力（无模型绑定）=====================
   # 文件能力不绑定模型，capabilities.yaml 中 model_family 留空
-

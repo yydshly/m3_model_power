@@ -168,9 +168,10 @@ def _verify_single(
     api_key: str,
 ) -> dict:
     started_at = datetime.now(timezone.utc).isoformat()
-    result = {
+    result: dict = {
         "capability_id": cap_id,
         "status": "skipped",
+        "level": "safe",
         "http_status": None,
         "model": None,
         "protocol": None,
@@ -181,6 +182,10 @@ def _verify_single(
         "error_message": None,
         "response_shape_ok": None,
         "sensitive_data_redacted": True,
+        # medium specific
+        "output_type": None,
+        "asset_saved": False,
+        "asset_committed": False,
     }
 
     # 判断是否为 Anthropic 协议
@@ -199,10 +204,10 @@ def _verify_single(
         "chat-responses-tokens": {"method": "POST", "path": "/v1/responses/input_tokens", "body": {"model": "MiniMax-M3", "input": "Hi"}},
         "file-list": {"method": "GET", "path": "/v1/files/list"},
         "voice-list": {"method": "POST", "path": "/v1/get_voice", "body": {"voice_type": "all"}},
-        "tts-sync": {"method": "POST", "path": "/v1/t2a_v2", "body": {"model": "speech-02-turbo", "text": "测试语音", "voice_setting": {"voice_id": "female-shaonu"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}}},
-        "image-t2i": {"method": "POST", "path": "/v1/image_generation", "body": {"model": "image-01", "prompt": "a cat", "aspect_ratio": "1:1", "n": 1}},
-        "lyrics-gen": {"method": "POST", "path": "/v1/lyrics_generation", "body": {"prompt": "a song about love"}},
-        "music-gen": {"method": "POST", "path": "/v1/music_generation", "body": {"model": "music-2.6", "lyrics": "##Verse1\nhello world", "audio_setting": {"sample_rate": 44100, "format": "mp3"}}},
+        "tts-sync": {"method": "POST", "path": "/v1/t2a_v2", "body": {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-shaonu"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}}},
+        "image-t2i": {"method": "POST", "path": "/v1/image_generation", "body": {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1}},
+        "lyrics-gen": {"method": "POST", "path": "/v1/lyrics_generation", "body": {"prompt": "夏天傍晚的风", "custom_mode": True}},
+        "music-gen": {"method": "POST", "path": "/v1/music_generation", "body": {"model": "music-2.6", "lyrics": "[verse]\n傍晚的风吹过窗台\n我把一天慢慢放下来", "audio_setting": {"sample_rate": 44100, "format": "mp3"}}},
         "voice-clone-do": {"method": "POST", "path": "/v1/voice_clone", "body": {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False}},
         "voice-design": {"method": "POST", "path": "/v1/voice_design", "body": {"prompt": "a calm female voice", "preview_text": "hello"}},
         "video-t2v": {"method": "POST", "path": "/v1/video_generation", "body": {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5}},
@@ -221,7 +226,7 @@ def _verify_single(
     cfg = cap_config[cap_id]
     url = f"{base_url.rstrip('/')}{cfg['path']}"
     body = cfg.get("body")
-    timeout = 60 if cap_id in ("video-t2v", "video-i2v", "video-s2v", "music-cover-prep", "tts-async") else 30
+    timeout = 60 if cap_id in ("video-t2v", "video-i2v", "video-s2v", "music-cover-prep", "tts-async", "music-gen") else 30
 
     t0 = time.monotonic()
     status_code, data, err = _call(cfg["method"], url, headers, body, timeout=timeout)
@@ -255,7 +260,65 @@ def _verify_single(
     result["response_shape_ok"] = shape_ok
     result["status"] = "success" if shape_ok else "success_with_warning"
     result["model"] = body.get("model") if body else None
+
+    # medium 能力特有字段
+    if cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen"):
+        result["level"] = "medium"
+        _handle_medium_result(cap_id, data, result)
+
     return result
+
+
+def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
+    """处理 medium 能力特有字段：output_type / asset_saved / asset_committed。"""
+    runtime_dir = Path(__file__).resolve().parent.parent / "runtime" / "capability_verification"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+
+    if cap_id == "tts-sync":
+        result["output_type"] = "audio"
+        if data and isinstance(data, dict):
+            audio_hex = (((data.get("data") or {}) or {}).get("audio")
+                        if isinstance(data.get("data"), dict) else data.get("audio"))
+            if audio_hex:
+                try:
+                    audio_bytes = bytes.fromhex(audio_hex)
+                    out_path = runtime_dir / "tts_sync_sample.mp3"
+                    out_path.write_bytes(audio_bytes)
+                    result["asset_saved"] = True
+                    result["asset_committed"] = False
+                except Exception:
+                    pass
+
+    elif cap_id == "image-t2i":
+        result["output_type"] = "image"
+        if data and isinstance(data, dict):
+            # image-t2i 返回 {data: {image_url: "...", ...}} 或 {data: {base64: "..."}}
+            img_url = (((data.get("data") or {}).get("image_url") or {}).get("image_url")
+                       if isinstance(data.get("data"), dict) else None)
+            img_base64 = (((data.get("data") or {}).get("base64") or {}).get("image_base64")
+                          if isinstance(data.get("data"), dict) else None)
+            if img_url or img_base64:
+                result["asset_saved"] = True
+                result["asset_committed"] = False
+
+    elif cap_id == "lyrics-gen":
+        result["output_type"] = "text"
+        if data and isinstance(data, dict):
+            lyrics = data.get("data", {}).get("lyrics") if isinstance(data.get("data"), dict) else data.get("lyrics")
+            if lyrics:
+                result["asset_saved"] = True
+                result["asset_committed"] = False
+
+    elif cap_id == "music-gen":
+        result["output_type"] = "music"
+        if data and isinstance(data, dict):
+            # music-gen 返回 {data: {music_url: "..."}} 或 task_id 异步
+            music_url = (((data.get("data") or {}).get("music_url") or {}).get("music_url")
+                         if isinstance(data.get("data"), dict) else data.get("music_url"))
+            task_id = data.get("task_id")
+            if music_url or task_id:
+                result["asset_saved"] = True
+                result["asset_committed"] = False
 
 
 def _check_response_shape(cap_id: str, data) -> bool:
@@ -338,6 +401,12 @@ def main() -> None:
         print("ERROR: high 级别需要 --confirm-cost --confirm-high-cost 双重确认。", file=sys.stderr)
         sys.exit(1)
 
+    # safe / medium / high 分级安全隔离
+    # --level safe      → 只跑 safe（默认）
+    # --level medium    → 只跑 medium（需 --confirm-cost）
+    # --level high      → 跑 medium + high（需双重确认）
+    # --level safe+medium → 只在本任务中用于 isolated medium 模式（不通过 arg 暴露）
+
     env = _load_env()
     api_key = env.get("MINIMAX_API_KEY", "")
     base_url = env.get("MINIMAX_BASE_URL", "https://api.minimaxi.com").rstrip("/")
@@ -351,7 +420,7 @@ def main() -> None:
     if args.level == "safe":
         cap_ids = CAPABILITY_GROUPS["safe"]
     elif args.level == "medium":
-        cap_ids = CAPABILITY_GROUPS["safe"] + CAPABILITY_GROUPS["medium"]
+        cap_ids = CAPABILITY_GROUPS["medium"]  # 仅 medium，不包含 safe
     else:
         cap_ids = CAPABILITY_GROUPS["safe"] + CAPABILITY_GROUPS["medium"] + CAPABILITY_GROUPS["high"]
 

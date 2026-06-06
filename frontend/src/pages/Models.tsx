@@ -27,16 +27,24 @@ export default function ModelsPage() {
     music: '音乐',
   }
 
-  function ModelRow({ m }: { m: Model }) {
-    const liveLabel =
-      m.live_available === true ? (
-        <span className="text-emerald-600">✓ 已验收</span>
-      ) : m.live_available === false ? (
-        <span className="text-red-600">✗ 不通</span>
-      ) : (
-        <span className="text-slate-400">— 未验收</span>
-      )
+  function DiscoveryBadge({ m }: { m: Model }) {
+    const method = m.discovery_method
+    const status = m.discovery_status
+    if (method === 'models_api' && status === 'available') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-700">models_api ✓</span>
+    }
+    if (method === 'capability_probe') {
+      if (status === 'available') return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-indigo-100 text-indigo-700">capability_probe ✓</span>
+      if (status === 'unknown') return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">capability_probe 待验收</span>
+      if (status === 'unavailable') return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-red-100 text-red-700">capability_probe ✗</span>
+    }
+    if (method === 'manual_official') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-600">官方文档</span>
+    }
+    return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-400">—</span>
+  }
 
+  function ModelRow({ m }: { m: Model }) {
     return (
       <tr key={m.id} className="border-t border-slate-100">
         <td className="px-3 py-2 font-mono text-xs">{m.id}</td>
@@ -54,17 +62,14 @@ export default function ModelsPage() {
             <span key={p} className="inline-block px-1 mr-1 bg-slate-100 rounded text-[10px]">{p}</span>
           ))}
         </td>
-        <td className="px-3 py-2 text-xs">{liveLabel}</td>
-        <td className="px-3 py-2 text-xs text-slate-500">{m.note}</td>
+        <td className="px-3 py-2"><DiscoveryBadge m={m} /></td>
+        <td className="px-3 py-2 text-xs text-slate-500 max-w-[200px] truncate" title={m.note}>{m.note}</td>
       </tr>
     )
   }
 
-  function FamilySection({ family, models, liveAvailable }: { family: string; models: Model[]; liveAvailable: boolean }) {
+  function FamilySection({ family, models }: { family: string; models: Model[] }) {
     const label = FAMILY_LABEL[family] ?? family
-    const rows = models
-    const shown = liveAvailable ? rows.filter((m) => m.enabled) : rows.filter((m) => m.enabled && !m.official_current)
-    if (!shown.length) return null
     return (
       <section key={family} className="mt-6">
         <h2 className="text-base font-semibold text-slate-800 mb-2">{label}</h2>
@@ -78,12 +83,12 @@ export default function ModelsPage() {
                 <th className="text-left px-3 py-2">计费</th>
                 <th className="text-left px-3 py-2">上下文/模态</th>
                 <th className="text-left px-3 py-2">协议</th>
-                <th className="text-left px-3 py-2">Live</th>
+                <th className="text-left px-3 py-2">验证方式</th>
                 <th className="text-left px-3 py-2">说明</th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((m) => (
+              {models.map((m) => (
                 <ModelRow key={m.id} m={m} />
               ))}
             </tbody>
@@ -93,40 +98,29 @@ export default function ModelsPage() {
     )
   }
 
+  const stats = {
+    total: registry.models.filter((m) => m.enabled).length,
+    modelsApiAvailable: registry.models.filter((m) => m.discovery_method === 'models_api' && m.discovery_status === 'available').length,
+    capabilityProbeAvailable: registry.models.filter((m) => m.discovery_method === 'capability_probe' && m.discovery_status === 'available').length,
+    capabilityProbePending: registry.models.filter((m) => m.discovery_method === 'capability_probe' && m.discovery_status === 'unknown').length,
+    manualOfficial: registry.models.filter((m) => m.discovery_method === 'manual_official').length,
+  }
+
   return (
     <div className="p-8 max-w-6xl">
       <h1 className="text-2xl font-semibold text-slate-900">模型清单</h1>
       <p className="text-sm text-slate-600 mt-1">
         配置来源 <code className="font-mono">backend/config/models.yaml</code>。
-        official_current / live_available / subscription_expected 三态独立维护。
+        discovery_method / discovery_status 说明验证方式与结果。
       </p>
 
-      {/* 统计概览 */}
-      <section className="mt-4 grid grid-cols-4 gap-3">
-        <StatBox
-          label="官方当前"
-          value={currentModels.length}
-          tone="emerald"
-          sub={`共 ${currentModels.length} 个官方主模型`}
-        />
-        <StatBox
-          label="实际可用"
-          value={registry.models.filter((m) => m.live_available === true).length}
-          tone="indigo"
-          sub="已验收（live=true）"
-        />
-        <StatBox
-          label="本地配置"
-          value={registry.models.filter((m) => m.enabled).length}
-          tone="slate"
-          sub="含历史兼容"
-        />
-        <StatBox
-          label="历史兼容"
-          value={legacyModels.length}
-          tone="amber"
-          sub="已废弃或过期"
-        />
+      {/* 验证方式统计 */}
+      <section className="mt-4 grid grid-cols-5 gap-3">
+        <StatBox label="models_api 已验证" value={stats.modelsApiAvailable} tone="emerald" sub="通过 /v1/models 确认" />
+        <StatBox label="capability_probe 可用" value={stats.capabilityProbeAvailable} tone="indigo" sub="能力端点实测可用" />
+        <StatBox label="capability_probe 待验收" value={stats.capabilityProbePending} tone="amber" sub="需通过能力端点验证" />
+        <StatBox label="官方文档" value={stats.manualOfficial} tone="slate" sub="仅官方文档列出" />
+        <StatBox label="总计" value={stats.total} tone="slate" sub="含历史兼容" />
       </section>
 
       {/* 官方当前模型 */}
@@ -136,8 +130,8 @@ export default function ModelsPage() {
           官方当前模型
         </h2>
         <p className="text-xs text-slate-500 mt-1">official_current: true，官方文档中列出的当前可用模型。</p>
-        {Object.entries(currentByFamily).map(([fam, models]) => (
-          <FamilySection key={fam} family={fam} models={models} liveAvailable={true} />
+        {Object.entries(currentByFamily).map(([fam, ms]) => (
+          <FamilySection key={fam} family={fam} models={ms} />
         ))}
       </section>
 
@@ -151,13 +145,11 @@ export default function ModelsPage() {
               <span className="text-xs text-slate-500 font-normal group-open:hidden">
                 （点击展开 {legacyModels.length} 个）▲
               </span>
-              <span className="text-xs text-slate-500 font-normal hidden group-open:block">
-                ▼
-              </span>
+              <span className="text-xs text-slate-500 font-normal hidden group-open:block">▼</span>
             </summary>
             <p className="text-xs text-slate-500 mt-1 mb-2">official_current: false 或 tier 为 legacy/deprecated，默认隐藏。</p>
-            {Object.entries(legacyByFamily).map(([fam, models]) => (
-              <FamilySection key={fam} family={fam} models={models} liveAvailable={false} />
+            {Object.entries(legacyByFamily).map(([fam, ms]) => (
+              <FamilySection key={fam} family={fam} models={ms} />
             ))}
           </details>
         </section>
@@ -168,14 +160,14 @@ export default function ModelsPage() {
 
 function StatBox({ label, value, tone, sub }: { label: string; value: number; tone: string; sub: string }) {
   const toneCls: Record<string, string> = {
-    emerald: 'text-emerald-600 border-emerald-200 bg-emerald-50',
-    indigo: 'text-indigo-600 border-indigo-200 bg-indigo-50',
-    amber: 'text-amber-600 border-amber-200 bg-amber-50',
-    slate: 'text-slate-700 border-slate-200 bg-slate-50',
+    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700',
+    slate: 'border-slate-200 bg-slate-50 text-slate-700',
   }
   return (
-    <div className={`rounded-lg border px-4 py-3 ${toneCls[tone]}`}>
-      <div className="text-2xl font-semibold">{value}</div>
+    <div className={`rounded-lg border px-3 py-2 text-center ${toneCls[tone]}`}>
+      <div className="text-xl font-semibold">{value}</div>
       <div className="text-xs font-medium mt-0.5">{label}</div>
       <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
     </div>
