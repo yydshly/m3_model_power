@@ -39,6 +39,14 @@ export default function Overview() {
     capabilityProbePending: registry.models.filter((m) => m.discovery_method === 'capability_probe' && m.discovery_status === 'unknown').length,
     officialCurrentNonLive: registry.models.filter((m) => m.official_current && m.live_available !== true && m.tier !== 'legacy' && m.tier !== 'deprecated').length,
     highspeedCount: registry.models.filter((m) => m.tier === 'highspeed').length,
+    // billing category stats
+    normalTokenPlanTest: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'normal_token_plan_test').length,
+    quotaSensitive: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'quota_sensitive').length,
+    paidConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'paid_confirm_required').length,
+    highCostConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'high_cost_confirm_required').length,
+    assetRequiredConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'asset_required_confirm_required').length,
+    mayChargeExtra: registry.capabilities.filter((c) => c.billing_policy?.may_charge_extra === true).length,
+    requiresExplicitConfirm: registry.capabilities.filter((c) => c.billing_policy?.requires_explicit_confirmation === true).length,
   }
 
   return (
@@ -107,6 +115,21 @@ export default function Overview() {
             <GapStat label="待验收" value={stats.capabilityProbePending} sub="capability_probe=unknown" tone="amber" />
             <GapStat label="未 live 验收" value={stats.officialCurrentNonLive} sub="official_current 且 live≠true" tone="orange" />
             <GapStat label="highspeed 档" value={stats.highspeedCount} sub="独立统计" tone="purple" />
+          </div>
+        </section>
+      )}
+
+      {/* 收费与风险统计 */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">收费与风险能力统计</h2>
+          <div className="grid grid-cols-6 gap-3">
+            <GapStat label="正常测试" value={stats.normalTokenPlanTest} sub="TokenPlan 正常验收" tone="emerald" />
+            <GapStat label="配额敏感" value={stats.quotaSensitive} sub="额度敏感能力" tone="amber" />
+            <GapStat label="需确认付费" value={stats.paidConfirmRequired} sub="voice-clone/design" tone="rose" />
+            <GapStat label="高成本" value={stats.highCostConfirmRequired} sub="video 类" tone="red" />
+            <GapStat label="素材型" value={stats.assetRequiredConfirmRequired} sub="music-cover" tone="orange" />
+            <GapStat label="可能额外收费" value={stats.mayChargeExtra} sub="may_charge_extra=true" tone="rose" />
           </div>
         </section>
       )}

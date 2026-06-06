@@ -61,6 +61,73 @@ export default function CapabilityPage() {
       <p className="text-sm text-slate-600 mt-2">{cap.desc}</p>
       {cap.notes && <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">{cap.notes}</div>}
 
+      {/* Billing policy display */}
+      <section className="mt-4">
+        {cap.billing_policy.requires_explicit_confirmation && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            <span className="text-rose-500 mt-0.5">⚠️</span>
+            <div>
+              <div className="font-semibold">该能力可能产生额外费用或高额度消耗，默认不会自动执行。</div>
+              <div className="text-xs mt-0.5 text-rose-600">
+                {cap.billing_policy.billing_note}
+                {cap.billing_policy.official_pricing_note && ` ${cap.billing_policy.official_pricing_note}`}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+            <div>
+              <span className="text-slate-500">计费类别：</span>
+              <span className={`font-medium ${billingCategoryColor(cap.billing_policy.billing_category)}`}>
+                {billingCategoryLabel(cap.billing_policy.billing_category)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">可能额外收费：</span>
+              <span className={cap.billing_policy.may_charge_extra ? 'text-rose-600 font-medium' : 'text-emerald-600'}>
+                {cap.billing_policy.may_charge_extra ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">消耗 TokenPlan 额度：</span>
+              <span className={cap.billing_policy.consumes_token_plan_quota ? 'text-amber-600' : 'text-slate-600'}>
+                {cap.billing_policy.consumes_token_plan_quota ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">需二次确认：</span>
+              <span className={cap.billing_policy.requires_explicit_confirmation ? 'text-rose-600 font-medium' : 'text-slate-600'}>
+                {cap.billing_policy.requires_explicit_confirmation ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">需认证：</span>
+              <span className={cap.billing_policy.requires_certification ? 'text-amber-600 font-medium' : 'text-slate-600'}>
+                {cap.billing_policy.requires_certification ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">需上传素材：</span>
+              <span className={cap.billing_policy.requires_uploaded_asset ? 'text-amber-600 font-medium' : 'text-slate-600'}>
+                {cap.billing_policy.requires_uploaded_asset ? '是' : '否'}
+              </span>
+            </div>
+          </div>
+          {cap.billing_policy.billing_note && (
+            <div className="mt-2 pt-2 border-t border-slate-200 text-slate-600">
+              <span className="text-slate-500">收费说明：</span>{cap.billing_policy.billing_note}
+            </div>
+          )}
+          {cap.billing_policy.official_pricing_note && (
+            <div className="mt-1 text-slate-600">
+              <span className="text-slate-500">官方价目：</span>{cap.billing_policy.official_pricing_note}
+            </div>
+          )}
+        </div>
+      </section>
+
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
         <span>
           <span className="text-slate-400">上游：</span>
@@ -162,4 +229,26 @@ export default function CapabilityPage() {
 function Notice({ tone, children }: { tone: 'amber' | 'slate'; children: React.ReactNode }) {
   const cls = tone === 'amber' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-slate-50 border-slate-200 text-slate-700'
   return <div className={`rounded border p-4 text-sm ${cls}`}>{children}</div>
+}
+
+function billingCategoryLabel(cat: string): string {
+  const map: Record<string, string> = {
+    normal_token_plan_test: '正常 TokenPlan 测试',
+    quota_sensitive: '配额敏感',
+    paid_confirm_required: '需确认付费',
+    high_cost_confirm_required: '高成本需确认',
+    asset_required_confirm_required: '素材/认证待准备',
+  }
+  return map[cat] ?? cat
+}
+
+function billingCategoryColor(cat: string): string {
+  const map: Record<string, string> = {
+    normal_token_plan_test: 'text-emerald-600',
+    quota_sensitive: 'text-amber-600',
+    paid_confirm_required: 'text-rose-600',
+    high_cost_confirm_required: 'text-red-600',
+    asset_required_confirm_required: 'text-orange-600',
+  }
+  return map[cat] ?? 'text-slate-600'
 }

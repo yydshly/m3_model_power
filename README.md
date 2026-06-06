@@ -257,6 +257,39 @@ python scripts/sync_minimax_models.py
 
 > **注意**：高成本能力（video-t2v / voice-clone-do 等）默认不自动触发，验收脚本 Level 3 需二次确认。
 
+## 收费与高成本能力提示
+
+### 已完成验收的范围
+
+本项目已完成 **TokenPlanPlus 极速档 low / medium** 能力验收，包括：
+
+- `chat-openai` / `chat-anthropic` / `chat-responses-create` / `chat-responses-tokens`（safe 验收）
+- `tts-sync`（model_level 验收，6 个 speech 模型全部成功）
+- `image-t2i`（model_level 验收，2 个 image 模型全部成功）
+- `lyrics-gen`（medium 验收）
+- `music-gen`（model_level 验收，music-2.6 成功）
+
+以上能力属于 `billing_category: normal_token_plan_test`，默认执行。
+
+### 不得默认执行的能力
+
+以下能力 `requires_explicit_confirmation: true`，**不得默认自动执行**：
+
+| 能力 | 类别 | 原因 |
+|---|---|---|
+| `voice-clone-upload-audio` / `voice-clone-upload-prompt` / `voice-clone-do` | `paid_confirm_required` | 音色克隆可能触发单独费用（9.9 元/音色）；需要上传参考音频；7 天内未调用音色会被删除 |
+| `voice-design` | `paid_confirm_required` | 音色设计可能触发单独费用（9.9 元/音色）；首次使用该音色合成时收费 |
+| `video-t2v` / `video-i2v` / `video-s2v` | `high_cost_confirm_required` | 视频生成属于高消耗能力，可能大量消耗 TokenPlan/Credits/视频资源包额度 |
+| `music-cover-prep` | `asset_required_confirm_required` | 需要参考音频，属于素材型能力；调用前需确认音频来源、版权、费用 |
+
+### 重要原则
+
+1. **HTTP 200 ≠ MiniMax 业务成功**：native API 响应必须检查 `base_resp.status_code`。
+2. **Token Plan Only**：`MINIMAX_TOKEN_PLAN_KEY` 是唯一参与默认验收的凭证。
+3. **不把这些未执行项算作失败**：pending_explicit_confirmation 是状态，不是错误。
+
+详情见 [docs/MINIMAX_FULL_CAPABILITY_MATRIX.md](docs/MINIMAX_FULL_CAPABILITY_MATRIX.md#6-收费--高成本能力提示矩阵)。
+
 ## 安全注意
 
 - API Key 仅存在 `backend/.env`，前端永远不接触 Key

@@ -313,7 +313,75 @@
 ### 5.13 chat-anthropic 模型级 probe 失败
 （无）
 
-## 6. Summary Statistics
+## 6. 收费 / 高成本能力提示矩阵
+
+> 以下能力已按 `billing_policy` 字段分类标记。标记为 `pending_explicit_confirmation` 的能力不得默认执行。
+
+### 6.1 计费分类说明
+
+| billing_category | 含义 | requires_explicit_confirmation |
+|---|---|---|
+| `normal_token_plan_test` | TokenPlanPlus 极速档正常测试范围，已完成验收 | false |
+| `quota_sensitive` | 消耗 TokenPlan 语音/字符额度，需关注用量 | false |
+| `paid_confirm_required` | 可能触发单独付费（音色克隆/音色设计），必须确认 | true |
+| `high_cost_confirm_required` | 视频生成属于高消耗能力，必须确认 | true |
+| `asset_required_confirm_required` | 需要参考音频/素材，必须确认 | true |
+
+### 6.2 能力收费矩阵
+
+| capability_id | billing_category | requires_explicit_confirmation | may_charge_extra | consumes_token_plan_quota | requires_certification | requires_uploaded_asset | current_verification_status | billing_note |
+|---|---|---|---|---|---|---|---|---|
+| `chat-anthropic` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `chat-openai` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `chat-responses-create` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `chat-responses-tokens` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `tts-sync` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | 消耗 TokenPlan 语音/字符额度 |
+| `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 消耗 TokenPlan 语音/字符额度 |
+| `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 长文本可能大量消耗额度 |
+| `voice-clone-upload-audio` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
+| `voice-clone-upload-prompt` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
+| `voice-clone-do` | paid_confirm_required | ✓ | ✓ | ✓ | ✓ | ✓ | pending_explicit_confirmation | 音色克隆官方价 9.9 元/音色 |
+| `voice-design` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✗ | pending_explicit_confirmation | 音色设计官方价 9.9 元/音色 |
+| `voice-list` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `voice-delete` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `image-t2i` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `image-i2i` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | pending | TokenPlanPlus 极速档共享配额 |
+| `video-t2v` | high_cost_confirm_required | ✓ | ✓ | ✓ | ✗ | ✗ | pending_explicit_confirmation | 视频生成高消耗，必须确认 |
+| `video-i2v` | high_cost_confirm_required | ✓ | ✓ | ✓ | ✗ | ✗ | pending_explicit_confirmation | 视频生成高消耗，必须确认 |
+| `video-s2v` | high_cost_confirm_required | ✓ | ✓ | ✓ | ✗ | ✗ | pending_explicit_confirmation | 视频生成高消耗，必须确认 |
+| `video-query` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 仅查询状态，不创建视频任务 |
+| `video-download` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 仅下载已有视频，不创建视频任务 |
+| `music-gen` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `music-cover-prep` | asset_required_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 需要参考音频，属于素材型能力 |
+| `lyrics-gen` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | medium 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `file-upload` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `file-list` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `file-retrieve` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `file-content` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `file-delete` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
+| `models-openai-list` | normal_token_plan_test | ✗ | ✗ | ✗ | ✗ | ✗ | safe 验收完成 | 纯查询接口，不消耗额度 |
+| `models-openai-retrieve` | normal_token_plan_test | ✗ | ✗ | ✗ | ✗ | ✗ | safe 验收完成 | 纯查询接口，不消耗额度 |
+| `models-anthropic-list` | normal_token_plan_test | ✗ | ✗ | ✗ | ✗ | ✗ | safe 验收完成 | 纯查询接口，不消耗额度 |
+| `models-anthropic-retrieve` | normal_token_plan_test | ✗ | ✗ | ✗ | ✗ | ✗ | safe 验收完成 | 纯查询接口，不消耗额度 |
+
+### 6.3 收费能力验收状态说明
+
+| 状态 | 含义 |
+|---|---|
+| `safe/medium/model_level 验收完成` | 属于 TokenPlan 正常测试范围，已完成对应层级验收 |
+| `pending` | 尚未进行验收，但不属于高成本/付费确认类别 |
+| `pending_explicit_confirmation` | 高成本或可能产生额外费用，必须用户明确确认后才执行 |
+
+### 6.4 重要说明
+
+1. **已完成验收的能力**（safe/medium/model_level 验收完成）属于 TokenPlanPlus 极速档正常测试范围。
+2. **voice-clone / voice-design** 可能触发单独音色费用（9.9 元/音色），调用前必须确认。
+3. **voice-clone** 需要上传参考音频素材，7 天内未正式调用音色会被删除。
+4. **video** 类能力属于高消耗，未执行，不得默认触发。
+5. **music-cover** 需要参考音频，属于素材型能力，未执行。
+6. `pending_explicit_confirmation` 不是失败，而是标记为"需确认后执行"。
+
+## 7. Summary Statistics
 
 | 维度 | 数量 |
 |---|---|
@@ -331,6 +399,13 @@
 | 能力总数 | 32 |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |
+| normal_token_plan_test 能力数 | 20 |
+| quota_sensitive 能力数 | 3 |
+| paid_confirm_required 能力数 | 4 |
+| high_cost_confirm_required 能力数 | 3 |
+| asset_required_confirm_required 能力数 | 1 |
+| 可能额外收费能力数 | 8 |
+| 需二次确认能力数 | 8 |
 
 ---
 *本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*

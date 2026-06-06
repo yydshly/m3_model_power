@@ -11,6 +11,24 @@ export type HealthResp = {
 
 export type CapabilityStatus = 'implemented' | 'planned' | 'unsupported'
 
+export type BillingCategory =
+  | 'normal_token_plan_test'
+  | 'quota_sensitive'
+  | 'paid_confirm_required'
+  | 'high_cost_confirm_required'
+  | 'asset_required_confirm_required'
+
+export type BillingPolicy = {
+  billing_category: BillingCategory
+  requires_explicit_confirmation: boolean
+  may_charge_extra: boolean
+  consumes_token_plan_quota: boolean
+  requires_certification: boolean
+  requires_uploaded_asset: boolean
+  billing_note: string
+  official_pricing_note: string
+}
+
 export type Category = {
   id: string
   label: string
@@ -39,6 +57,7 @@ export type Capability = {
   cost_level: 'none' | 'quota' | 'low' | 'medium' | 'high'
   cost_note: string
   has_handler: boolean
+  billing_policy: BillingPolicy
 }
 
 export type Model = {

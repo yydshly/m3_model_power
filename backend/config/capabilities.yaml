@@ -46,6 +46,15 @@ capabilities:
   - anthropic
   - llm
   - multimodal
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
     max_tokens: 1024
@@ -68,6 +77,15 @@ capabilities:
   - openai
   - llm
   - multimodal
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
     messages:
@@ -91,6 +109,15 @@ capabilities:
   tags:
   - responses
   - llm
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
     input: 请用一句话介绍 MiniMax
@@ -108,6 +135,15 @@ capabilities:
   tags:
   - responses
   - token
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
     input: 请用一句话介绍 MiniMax
@@ -122,6 +158,15 @@ capabilities:
   model_family: speech
   tags:
   - tts
+  billing_policy:
+    billing_category: quota_sensitive
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "消耗 TokenPlan 语音/字符额度；长文本或批量调用前需确认测试文本长度；已完成 model_level 验收"
+    official_pricing_note: ""
   example:
     model: speech-02-hd
     text: 你好，欢迎使用 MiniMax 语音合成
@@ -149,6 +194,15 @@ capabilities:
   - tts
   - stream
   notes: 前端 WS 客户端在 /cap/tts-ws 详情页，发送 task_start / task_continue 等事件
+  billing_policy:
+    billing_category: quota_sensitive
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "消耗 TokenPlan 语音/字符额度；长文本或批量调用前需确认测试文本长度；pending 正式验收"
+    official_pricing_note: ""
   example:
     event: task_start
     model: speech-02-turbo
@@ -171,6 +225,15 @@ capabilities:
   tags:
   - tts
   - long
+  billing_policy:
+    billing_category: quota_sensitive
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "消耗 TokenPlan 语音/字符额度；长文本可能大量消耗额度；pending 正式验收"
+    official_pricing_note: ""
   example:
     model: speech-02-hd
     text: （长文本，超过 5000 字时建议使用异步接口）
@@ -191,7 +254,15 @@ capabilities:
   - voice-clone
   - upload
   cost_level: quota
-  cost_note: 上传本身不计费；后续 voice-clone-do 训练会单独计费。
+  billing_policy:
+    billing_category: paid_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: true
+    billing_note: "音色复刻可能触发单独音色费用；首次使用复刻音色进行语音合成时收费；复刻音色 7 天内未正式调用会被删除；调用前需确认认证、素材和费用"
+    official_pricing_note: "Voice Cloning 官方按量价格为 9.9 元/音色；试听字符根据试听模型收费"
   example:
     purpose: voice_clone
 - id: voice-clone-upload-prompt
@@ -206,6 +277,15 @@ capabilities:
   tags:
   - voice-clone
   - upload
+  billing_policy:
+    billing_category: paid_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: true
+    billing_note: "音色复刻可能触发单独音色费用；首次使用复刻音色进行语音合成时收费；复刻音色 7 天内未正式调用会被删除；调用前需确认认证、素材和费用"
+    official_pricing_note: "Voice Cloning 官方按量价格为 9.9 元/音色；试听字符根据试听模型收费"
   example:
     purpose: prompt_audio
 - id: voice-clone-do
@@ -219,7 +299,15 @@ capabilities:
   tags:
   - voice-clone
   cost_level: high
-  cost_note: 单独计费！每次克隆训练按官方价目扣费（且按账号配额限制可保留的克隆音色数）。调用前请确认 voice_id 命名稳定。
+  billing_policy:
+    billing_category: paid_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: true
+    requires_uploaded_asset: true
+    billing_note: "音色复刻可能触发单独音色费用；首次使用复刻音色进行语音合成时收费；复刻音色 7 天内未正式调用会被删除；调用前需确认认证、素材和费用；pending 正式验收"
+    official_pricing_note: "Voice Cloning 官方按量价格为 9.9 元/音色；试听字符根据试听模型收费"
   example:
     file_id: 0
     voice_id: my_clone_001
@@ -236,7 +324,15 @@ capabilities:
   tags:
   - voice-design
   cost_level: medium
-  cost_note: 单独计费！每次设计生成扣费，建议先小步试 preview_text。
+  billing_policy:
+    billing_category: paid_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "音色设计可能触发单独音色费用；调用接口生成音色时不立即收音色设计费，但首次使用该音色进行语音合成时收费；接口内试听语音合成按字符收费；pending 正式验收"
+    official_pricing_note: "Voice Design 官方按量价格为 9.9 元/音色；试听语音合成 2 元/万字符"
   example:
     prompt: 一位温柔成熟的女性主播，声音明亮
     preview_text: 你好，这是一段试听文本
@@ -250,6 +346,15 @@ capabilities:
   status: implemented
   tags:
   - voice-mgmt
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     voice_type: all
 - id: voice-delete
@@ -262,6 +367,15 @@ capabilities:
   status: implemented
   tags:
   - voice-mgmt
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     voice_type: voice_cloning
     voice_id: my_clone_001
@@ -277,6 +391,15 @@ capabilities:
   tags:
   - image
   - t2i
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 model_level 验收"
+    official_pricing_note: ""
   example:
     model: image-01
     prompt: 一只在樱花树下打盹的橘猫，电影感光影
@@ -295,6 +418,15 @@ capabilities:
   tags:
   - image
   - i2i
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，pending 正式验收"
+    official_pricing_note: ""
   example:
     model: image-01
     prompt: 把这张图变成水彩风格
@@ -316,7 +448,15 @@ capabilities:
   - video
   - t2v
   cost_level: high
-  cost_note: 视频生成按时长 × 分辨率单独计费，单价较高，谨慎调用。
+  billing_policy:
+    billing_category: high_cost_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "视频生成属于高消耗能力，可能大量消耗 TokenPlan/Credits/视频资源包额度；必须单独确认后再执行；pending 正式验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-Hailuo-02
     prompt: 一只柴犬在海边奔跑，阳光明媚
@@ -336,7 +476,15 @@ capabilities:
   - video
   - i2v
   cost_level: high
-  cost_note: 视频生成单独计费，单价较高。
+  billing_policy:
+    billing_category: high_cost_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "视频生成属于高消耗能力，可能大量消耗 TokenPlan/Credits/视频资源包额度；必须单独确认后再执行；pending 正式验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-Hailuo-02
     prompt: 让画面中的人物挥手
@@ -356,7 +504,15 @@ capabilities:
   - video
   - s2v
   cost_level: high
-  cost_note: 视频生成单独计费，单价较高。
+  billing_policy:
+    billing_category: high_cost_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "视频生成属于高消耗能力，可能大量消耗 TokenPlan/Credits/视频资源包额度；必须单独确认后再执行；pending 正式验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-Hailuo-02
     prompt: 这位角色在公园里散步
@@ -375,6 +531,15 @@ capabilities:
   tags:
   - video
   - query
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额；仅查询状态，不创建视频任务；pending 正式验收"
+    official_pricing_note: ""
   example:
     task_id: ''
 - id: video-download
@@ -388,6 +553,15 @@ capabilities:
   tags:
   - video
   - download
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额；仅下载已有视频，不创建视频任务；pending 正式验收"
+    official_pricing_note: ""
   example:
     file_id: ''
 - id: music-gen
@@ -402,7 +576,15 @@ capabilities:
   tags:
   - music
   cost_level: medium
-  cost_note: 音乐生成按首计费。
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 model_level 验收（music-2.6）"
+    official_pricing_note: ""
   example:
     model: music-2.6
     lyrics: '##夜空中最亮的星
@@ -428,7 +610,15 @@ capabilities:
   - music
   - cover
   cost_level: medium
-  cost_note: 翻唱预处理按曲计费。
+  billing_policy:
+    billing_category: asset_required_confirm_required
+    requires_explicit_confirmation: true
+    may_charge_extra: true
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: true
+    billing_note: "翻唱需要参考音频，属于素材型能力；调用前需确认音频来源、版权、费用和是否执行翻唱流程；pending 正式验收"
+    official_pricing_note: ""
   example:
     purpose: song
 - id: lyrics-gen
@@ -441,6 +631,15 @@ capabilities:
   status: implemented
   tags:
   - lyrics
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 medium 验收"
+    official_pricing_note: ""
   example:
     prompt: 写一首关于夏夜星空的流行歌，有副歌
   requires_model: false
@@ -455,6 +654,15 @@ capabilities:
   multipart: true
   tags:
   - files
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     purpose: retrieval
   requires_model: false
@@ -468,6 +676,15 @@ capabilities:
   status: implemented
   tags:
   - files
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example: {}
   requires_model: false
 - id: file-retrieve
@@ -480,6 +697,15 @@ capabilities:
   status: implemented
   tags:
   - files
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     file_id: ''
   requires_model: false
@@ -494,6 +720,15 @@ capabilities:
   tags:
   - files
   - download
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     file_id: ''
   requires_model: false
@@ -507,6 +742,15 @@ capabilities:
   status: implemented
   tags:
   - files
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: true
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "TokenPlanPlus 极速档共享配额，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     file_id: ''
   requires_model: false
@@ -521,6 +765,15 @@ capabilities:
   tags:
   - models
   - openai
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: false
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "纯查询接口，不消耗额度，已完成 safe 验收"
+    official_pricing_note: ""
   example: {}
   requires_model: false
 - id: models-openai-retrieve
@@ -534,6 +787,15 @@ capabilities:
   tags:
   - models
   - openai
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: false
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "纯查询接口，不消耗额度，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
   requires_model: false
@@ -548,6 +810,15 @@ capabilities:
   tags:
   - models
   - anthropic
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: false
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "纯查询接口，不消耗额度，已完成 safe 验收"
+    official_pricing_note: ""
   example: {}
   requires_model: false
 - id: models-anthropic-retrieve
@@ -561,6 +832,15 @@ capabilities:
   tags:
   - models
   - anthropic
+  billing_policy:
+    billing_category: normal_token_plan_test
+    requires_explicit_confirmation: false
+    may_charge_extra: false
+    consumes_token_plan_quota: false
+    requires_certification: false
+    requires_uploaded_asset: false
+    billing_note: "纯查询接口，不消耗额度，已完成 safe 验收"
+    official_pricing_note: ""
   example:
     model: MiniMax-M3
   requires_model: false

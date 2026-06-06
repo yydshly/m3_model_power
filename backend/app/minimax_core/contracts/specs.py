@@ -6,6 +6,26 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+BillingCategory = Literal[
+    "normal_token_plan_test",
+    "quota_sensitive",
+    "paid_confirm_required",
+    "high_cost_confirm_required",
+    "asset_required_confirm_required",
+]
+
+
+class BillingPolicy(BaseModel):
+    billing_category: BillingCategory = "normal_token_plan_test"
+    requires_explicit_confirmation: bool = False
+    may_charge_extra: bool = False
+    consumes_token_plan_quota: bool = True
+    requires_certification: bool = False
+    requires_uploaded_asset: bool = False
+    billing_note: str = ""
+    official_pricing_note: str = ""
+
+
 class ModelSpec(BaseModel):
     """MiniMax 模型规格定义。
 
@@ -80,3 +100,4 @@ class CapabilitySpec(BaseModel):
     requires_model: bool = Field(
         default=True,
         description="该能力是否需要选择模型；false = 如 lyrics-gen / file-* / models-list，无需模型即可调用")
+    billing_policy: BillingPolicy = Field(default_factory=BillingPolicy)

@@ -19,6 +19,24 @@ from pydantic import BaseModel, Field
 # ── 类型别名（供旧代码兼容，不做重复定义）──────────────────────────────────────
 # 旧 Pydantic 模型保留在这里作为返回类型
 CapabilityStatus = Literal["implemented", "planned", "unsupported"]
+BillingCategory = Literal[
+    "normal_token_plan_test",
+    "quota_sensitive",
+    "paid_confirm_required",
+    "high_cost_confirm_required",
+    "asset_required_confirm_required",
+]
+
+
+class BillingPolicy(BaseModel):
+    billing_category: BillingCategory = "normal_token_plan_test"
+    requires_explicit_confirmation: bool = False
+    may_charge_extra: bool = False
+    consumes_token_plan_quota: bool = True
+    requires_certification: bool = False
+    requires_uploaded_asset: bool = False
+    billing_note: str = ""
+    official_pricing_note: str = ""
 
 
 class Category(BaseModel):
@@ -49,6 +67,7 @@ class Capability(BaseModel):
     cost_level: Literal["none", "quota", "low", "medium", "high"] = "quota"
     cost_note: str = ""
     requires_model: bool = True
+    billing_policy: BillingPolicy = Field(default_factory=BillingPolicy)
 
 
 class Model(BaseModel):
@@ -153,7 +172,9 @@ def _spec_to_capability(spec) -> Capability:
         model_family=spec.model_family,
         protocols=spec.protocols,
         requires_model=spec.requires_model,
+        billing_policy=spec.billing_policy,
     )
+
 
 
 # ── 核心委托 ────────────────────────────────────────────────────────────────

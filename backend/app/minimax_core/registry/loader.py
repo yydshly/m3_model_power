@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from ..contracts import CapabilitySpec, ModelSpec
+from ..contracts import BillingPolicy, CapabilitySpec, ModelSpec
 from .model_registry import ModelRegistry
 from .capability_registry import CapabilityRegistry
 
@@ -105,6 +105,18 @@ def load_capability_specs() -> list[CapabilitySpec]:
         status_str = raw.get("status", "planned")
         status = status_map.get(status_str, "planned")
 
+        raw_bp = raw.get("billing_policy", {})
+        billing_policy = BillingPolicy(
+            billing_category=raw_bp.get("billing_category", "normal_token_plan_test"),
+            requires_explicit_confirmation=bool(raw_bp.get("requires_explicit_confirmation", False)),
+            may_charge_extra=bool(raw_bp.get("may_charge_extra", False)),
+            consumes_token_plan_quota=bool(raw_bp.get("consumes_token_plan_quota", True)),
+            requires_certification=bool(raw_bp.get("requires_certification", False)),
+            requires_uploaded_asset=bool(raw_bp.get("requires_uploaded_asset", False)),
+            billing_note=raw_bp.get("billing_note", ""),
+            official_pricing_note=raw_bp.get("official_pricing_note", ""),
+        )
+
         spec = CapabilitySpec(
             id=cap_id,
             name=raw.get("label", cap_id),
@@ -123,6 +135,7 @@ def load_capability_specs() -> list[CapabilitySpec]:
             doc_url=raw.get("doc_url", ""),
             status=status,
             requires_model=bool(raw.get("requires_model", True)),
+            billing_policy=billing_policy,
         )
         specs.append(spec)
 
