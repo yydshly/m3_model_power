@@ -204,10 +204,10 @@ def _verify_single(
         "chat-responses-tokens": {"method": "POST", "path": "/v1/responses/input_tokens", "body": {"model": "MiniMax-M3", "input": "Hi"}},
         "file-list": {"method": "GET", "path": "/v1/files/list"},
         "voice-list": {"method": "POST", "path": "/v1/get_voice", "body": {"voice_type": "all"}},
-        "tts-sync": {"method": "POST", "path": "/v1/t2a_v2", "body": {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-shaonu"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}}},
+        "tts-sync": {"method": "POST", "path": "/v1/t2a_v2", "body": {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}}},
         "image-t2i": {"method": "POST", "path": "/v1/image_generation", "body": {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1}},
-        "lyrics-gen": {"method": "POST", "path": "/v1/lyrics_generation", "body": {"prompt": "夏天傍晚的风", "custom_mode": True}},
-        "music-gen": {"method": "POST", "path": "/v1/music_generation", "body": {"model": "music-2.6", "lyrics": "[verse]\n傍晚的风吹过窗台\n我把一天慢慢放下来", "audio_setting": {"sample_rate": 44100, "format": "mp3"}}},
+        "lyrics-gen": {"method": "POST", "path": "/v1/lyrics_generation", "body": {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"}},
+        "music-gen": {"method": "POST", "path": "/v1/music_generation", "body": {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}}},
         "voice-clone-do": {"method": "POST", "path": "/v1/voice_clone", "body": {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False}},
         "voice-design": {"method": "POST", "path": "/v1/voice_design", "body": {"prompt": "a calm female voice", "preview_text": "hello"}},
         "video-t2v": {"method": "POST", "path": "/v1/video_generation", "body": {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5}},
@@ -226,7 +226,7 @@ def _verify_single(
     cfg = cap_config[cap_id]
     url = f"{base_url.rstrip('/')}{cfg['path']}"
     body = cfg.get("body")
-    timeout = 60 if cap_id in ("video-t2v", "video-i2v", "video-s2v", "music-cover-prep", "tts-async", "music-gen") else 30
+    timeout = 180 if cap_id in ("video-t2v", "video-i2v", "video-s2v", "music-cover-prep", "tts-async", "music-gen") else 30
 
     t0 = time.monotonic()
     status_code, data, err = _call(cfg["method"], url, headers, body, timeout=timeout)
@@ -270,41 +270,67 @@ def _verify_single(
 
 
 def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
-    """处理 medium 能力特有字段：output_type / asset_saved / asset_committed。"""
-    runtime_dir = Path(__file__).resolve().parent.parent / "runtime" / "capability_verification"
+    """处理 medium 能力特有字段：output_type / asset_saved / asset_committed。
+    根据 MiniMax 官方响应结构解析。
+    """
+    runtime_dir = Path(__file__).resolve().parent.parent / "runtime" / "assets"
     runtime_dir.mkdir(parents=True, exist_ok=True)
 
     if cap_id == "tts-sync":
         result["output_type"] = "audio"
         if data and isinstance(data, dict):
-            audio_hex = (((data.get("data") or {}) or {}).get("audio")
-                        if isinstance(data.get("data"), dict) else data.get("audio"))
+            # data.audio is hex MP3; extra_info is a sibling of data (not nested inside it)
+            extra = data.get("extra_info") or {}
+            audio_format = (extra.get("audio_format") if isinstance(extra, dict) else "mp3") or "mp3"
+            data_dict = data.get("data") if isinstance(data.get("data"), dict) else None
+            audio_hex = data_dict.get("audio") if data_dict else None
             if audio_hex:
                 try:
                     audio_bytes = bytes.fromhex(audio_hex)
-                    out_path = runtime_dir / "tts_sync_sample.mp3"
+                    out_path = runtime_dir / f"tts_sync_sample.{audio_format}"
                     out_path.write_bytes(audio_bytes)
                     result["asset_saved"] = True
                     result["asset_committed"] = False
-                except Exception:
-                    pass
+                    result["asset_path"] = str(out_path.relative_to(runtime_dir.parent.parent))
+                    result["asset_size"] = len(audio_bytes)
+                    if isinstance(extra, dict):
+                        result["audio_length"] = extra.get("audio_length")
+                        result["audio_sample_rate"] = extra.get("audio_sample_rate")
+                        result["audio_format"] = extra.get("audio_format") or audio_format
+                        result["usage_characters"] = extra.get("usage_characters")
+                    else:
+                        result["audio_format"] = audio_format
+                except Exception as e:
+                    result["asset_save_error"] = str(e)
+            else:
+                result["audio_format"] = audio_format
 
     elif cap_id == "image-t2i":
         result["output_type"] = "image"
         if data and isinstance(data, dict):
-            # image-t2i 返回 {data: {image_url: "...", ...}} 或 {data: {base64: "..."}}
-            img_url = (((data.get("data") or {}).get("image_url") or {}).get("image_url")
-                       if isinstance(data.get("data"), dict) else None)
-            img_base64 = (((data.get("data") or {}).get("base64") or {}).get("image_base64")
-                          if isinstance(data.get("data"), dict) else None)
-            if img_url or img_base64:
-                result["asset_saved"] = True
+            # MiniMax image-t2i: {data: {image_urls: [...]}, metadata: {success_count, failed_count}}
+            img_data = data.get("data") if isinstance(data.get("data"), dict) else None
+            image_urls = img_data.get("image_urls") if img_data else None
+            metadata = data.get("metadata") or {}
+            success_count = int(metadata.get("success_count", 0)) if metadata.get("success_count") else 0
+            failed_count = int(metadata.get("failed_count", 0)) if metadata.get("failed_count") else 0
+            result["image_urls_count"] = len(image_urls) if image_urls else 0
+            result["first_image_url_present"] = bool(image_urls and len(image_urls) > 0)
+            result["success_count"] = success_count
+            result["failed_count"] = failed_count
+            result["task_id"] = data.get("id") or data.get("trace_id")
+            if image_urls and len(image_urls) > 0:
+                result["asset_saved"] = True  # URL已知，不下载图片
                 result["asset_committed"] = False
 
     elif cap_id == "lyrics-gen":
         result["output_type"] = "text"
         if data and isinstance(data, dict):
-            lyrics = data.get("data", {}).get("lyrics") if isinstance(data.get("data"), dict) else data.get("lyrics")
+            # lyrics-gen response is FLAT: {song_title, style_tags, lyrics, base_resp}
+            lyrics = data.get("lyrics") or ""
+            result["song_title"] = data.get("song_title") or ""
+            result["style_tags"] = data.get("style_tags") or ""
+            result["lyrics_preview"] = lyrics[:200] if lyrics else ""
             if lyrics:
                 result["asset_saved"] = True
                 result["asset_committed"] = False
@@ -312,11 +338,22 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
     elif cap_id == "music-gen":
         result["output_type"] = "music"
         if data and isinstance(data, dict):
-            # music-gen 返回 {data: {music_url: "..."}} 或 task_id 异步
-            music_url = (((data.get("data") or {}).get("music_url") or {}).get("music_url")
-                         if isinstance(data.get("data"), dict) else data.get("music_url"))
-            task_id = data.get("task_id")
-            if music_url or task_id:
+            # music-gen: {data: {audio: "..."} 或 {audio_url: "..."}, extra_info: {...}}
+            extra = data.get("extra_info") or {}
+            audio_url = None
+            audio_hex = None
+            audio_format = (extra.get("audio_format") or "mp3") if isinstance(extra, dict) else "mp3"
+            img_data = data.get("data") if isinstance(data.get("data"), dict) else None
+            if img_data:
+                audio_url = img_data.get("audio_url") or img_data.get("music_url")
+                audio_hex = img_data.get("audio")
+            result["audio_url_present"] = bool(audio_url)
+            result["audio_hex_present"] = bool(audio_hex)
+            result["audio_format"] = audio_format
+            result["music_duration"] = extra.get("music_duration") if isinstance(extra, dict) else None
+            result["music_sample_rate"] = extra.get("music_sample_rate") if isinstance(extra, dict) else None
+            result["bitrate"] = extra.get("bitrate") if isinstance(extra, dict) else None
+            if audio_url or audio_hex:
                 result["asset_saved"] = True
                 result["asset_committed"] = False
 
