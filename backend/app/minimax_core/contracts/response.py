@@ -1,4 +1,4 @@
-"""响应与错误结构：AssetRef / UnifiedResponse / UnifiedError。"""
+"""响应与错误结构：AssetRef / UnifiedResponse / UnifiedError / UnifiedErrorException。"""
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -42,19 +42,64 @@ class UnifiedResponse(BaseModel):
 
 
 class UnifiedError(BaseModel):
-    """统一错误结构。
+    """统一错误结构（数据模型，不支持 raise）。
 
-    minimax_core 发出的所有失败响应都使用这个结构。
-    敏感字段（API Key、订单号等）已被脱敏。
+    用于返回失败结果的结构化对象。
+    抛出时请使用 UnifiedErrorException。
     """
     ok: bool = Field(default=False, constant=True)
     capability_id: str = Field(..., description="失败的能力 id")
     error_type: Literal[
         "timeout", "invalid_params", "unauthorized", "quota_limited",
-        "rate_limited", "upstream_error", "network_error", "unknown"
+        "rate_limited", "upstream_error", "network_error",
+        "auth_or_token_mismatch",  # MiniMax 1004 鉴权失败
+        "minimax_api_error",        # MiniMax 其他业务错误码
+        "output_missing",           # HTTP 200 但产出缺失
+        "parser_mismatch",           # 响应格式不符合预期
+        "unknown"
     ] = Field(default="unknown")
     error_code: str | None = Field(default=None, description="上游错误码")
     message: str = Field(..., description="人类可读错误信息（已脱敏）")
     http_status: int | None = Field(default=None)
     retryable: bool = Field(default=False, description="是否可重试")
     redacted: bool = Field(default=True, constant=True, description="敏感信息已脱敏")
+
+
+class UnifiedErrorException(Exception):
+    """可抛出的 UnifiedError 封装异常。
+
+    CapabilityInvoker 抛出此异常，调用方通过 except UnifiedErrorException 捕获。
+    保留 UnifiedError 的结构化字段，同时支持 raise/except 语法。
+    """
+    def __init__(
+        self,
+        ok: bool = False,
+        capability_id: str = "unknown",
+        error_type: str = "unknown",
+        error_code: str | None = None,
+        message: str = "",
+        http_status: int | None = None,
+        retryable: bool = False,
+        redacted: bool = True,
+    ) -> None:
+        self.ok = ok
+        self.capability_id = capability_id
+        self.error_type = error_type
+        self.error_code = error_code
+        self.message = message
+        self.http_status = http_status
+        self.retryable = retryable
+        self.redacted = redacted
+        super().__init__(message)
+
+    def to_unified_error(self) -> UnifiedError:
+        return UnifiedError(
+            ok=self.ok,
+            capability_id=self.capability_id,
+            error_type=self.error_type,  # type: ignore[arg-type]
+            error_code=self.error_code,
+            message=self.message,
+            http_status=self.http_status,
+            retryable=self.retryable,
+            redacted=self.redacted,
+        )

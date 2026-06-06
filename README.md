@@ -166,6 +166,18 @@ abab6.5s-chat / abab6.5-chat / abab6.5t-chat / abab6.5g-chat / speech-01-hd / sp
 
 详情页 `Capability.tsx` 会自动根据配置切换面板。
 
+## ⚠️ 重要：HTTP 200 ≠ MiniMax 业务成功
+
+MiniMax native API（tts-sync / image-t2i / lyrics-gen / music-gen / voice-list 等）返回 HTTP 200，但**业务层状态码**在 `base_resp.status_code` 字段：
+
+| base_resp.status_code | 含义 | 验收判定 |
+|---|---|---|
+| 0 / null | 业务成功 | success |
+| 1004 | 鉴权 / Token 不匹配 | failed · auth_or_token_mismatch |
+| 其他非零 | 业务错误 | failed · minimax_api_error |
+
+**验收脚本和 CapabilityInvoker 必须检查 `base_resp.status_code`，不能仅凭 HTTP 200 判定 success。**
+
 ## 能力验收方式
 
 ### Level 1 — 安全验收（默认执行）
@@ -263,7 +275,7 @@ from app.minimax_core.contracts import VerificationResult
 | 子模块 | 职责 |
 |---|---|
 | `contracts/specs.py` | ModelSpec、CapabilitySpec — 模型和能力规格定义 |
-| `contracts/response.py` | AssetRef、UnifiedResponse、UnifiedError — 统一响应结构 |
+| `contracts/response.py` | AssetRef、UnifiedResponse、UnifiedError、UnifiedErrorException — 统一响应结构（`UnifiedErrorException` 支持 `raise` 语法） |
 | `contracts/verification.py` | VerificationResult — 验收结果结构 |
 | `guards/redaction.py` | redact_key / redact_url — 日志和响应脱敏 |
 

@@ -51,7 +51,7 @@ from app.minimax_core.clients.openai import MiniMaxOpenAIClient
 from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
 from app.minimax_core.clients.native import MiniMaxNativeClient
 from app.minimax_core.clients.files import MiniMaxFilesClient
-from app.minimax_core.contracts import AssetRef, VerificationResult
+from app.minimax_core.contracts import AssetRef, UnifiedErrorException, VerificationResult
 from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
 
 # CapabilityInvoker 支持的能力列表（全量 safe + medium）
@@ -279,6 +279,21 @@ def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict
         response = invoker.invoke(cap_id, payload)
         latency_ms = int((time.monotonic() - t0) * 1000)
         ended_at = datetime.now(timezone.utc).isoformat()
+
+        # 防御：即使 CapabilityInvoker 返回 ok=False 的响应（而非抛出异常），
+        # 也不应判定为 success。
+        if not response.ok:
+            # 构造一个与抛出的 UnifiedErrorException 等价的结构
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id=cap_id,
+                error_type=getattr(response, "error_type", None) or "unknown",
+                error_code=getattr(response, "error_code", None),
+                message=getattr(response, "message", None) or f"{cap_id} returned ok=False",
+                http_status=getattr(response, "http_status", None) or 200,
+                retryable=False,
+                redacted=True,
+            )
 
         # medium 能力特有字段（从 response.assets 统一填充）
         is_medium = cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen")

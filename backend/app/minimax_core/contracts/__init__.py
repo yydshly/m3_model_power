@@ -3,13 +3,13 @@ minimax_core.contracts — 可复用的数据结构定义。
 
 对外暴露：
     ModelSpec, CapabilitySpec, AssetRef,
-    UnifiedResponse, UnifiedError, VerificationResult,
+    UnifiedResponse, UnifiedError, UnifiedErrorException, VerificationResult,
     redaction helpers
 """
 from __future__ import annotations
 
 from .specs import CapabilitySpec, ModelSpec
-from .response import AssetRef, UnifiedError, UnifiedResponse
+from .response import AssetRef, UnifiedError, UnifiedErrorException, UnifiedResponse
 from .verification import VerificationResult
 
 __all__ = [
@@ -18,5 +18,6 @@ __all__ = [
     "AssetRef",
     "UnifiedResponse",
     "UnifiedError",
+    "UnifiedErrorException",
     "VerificationResult",
 ]
