@@ -77,6 +77,15 @@ frontend/
 | 资产 | file-upload（multipart）/ file-list / file-retrieve / file-content / file-delete |
 | 模型 | models-openai-list / models-openai-retrieve / models-anthropic-list / models-anthropic-retrieve |
 
+### tts-ws WebSocket 协议要点
+
+> 已接入 `minimax_core`：见 `MiniMaxNativeClient.tts_websocket()` + `CapabilityInvoker._tts_ws()`
+
+1. 连接 `wss://api.minimaxi.com/ws/v1/t2a_v2`，发送 `task_start`（含 `model`/`voice_setting`/`audio_setting`，**不含 text**）
+2. 收到 `task_started` 确认后，发送 `task_continue`（含 text）和 `task_finish`
+3. 服务端通过 `task_continued` JSON 事件的 `data.audio` 字段返回 hex 音频（**非二进制帧**）
+4. 全部接收完后收到 `task_finished`
+
 ## 官方当前模型（official_current: true）
 
 | Family | 模型 | 上下文 | 模态 | 协议 | 说明 |

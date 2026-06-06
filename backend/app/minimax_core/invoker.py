@@ -8,7 +8,7 @@
 
 支持的能力：
   chat-openai / chat-anthropic / chat-responses-create / chat-responses-tokens,
-  tts-sync / image-t2i / lyrics-gen / music-gen,
+  tts-sync / tts-ws / image-t2i / lyrics-gen / music-gen,
   file-list / voice-list,
   models-openai-list / models-anthropic-list / models-openai-retrieve / models-anthropic-retrieve
 
@@ -23,6 +23,8 @@
 """
 from __future__ import annotations
 
+import time
+from pathlib import Path
 from typing import Any
 
 from .contracts import AssetRef, UnifiedError, UnifiedErrorException, UnifiedResponse
@@ -191,6 +193,8 @@ class CapabilityInvoker:
             return self._chat_responses_tokens(payload)
         if capability_id == "tts-sync":
             return self._tts_sync(payload)
+        if capability_id == "tts-ws":
+            return self._tts_ws(payload)
         if capability_id == "image-t2i":
             return self._image_t2i(payload)
         if capability_id == "lyrics-gen":
@@ -343,6 +347,128 @@ class CapabilityInvoker:
             output_type="audio",
             assets=assets,
             raw=raw,
+        )
+
+    def _tts_ws(self, payload: dict) -> UnifiedResponse:
+        """WebSocket 流式 TTS。
+
+        协议（已验证）：
+          1. task_start（model / voice_setting / audio_setting，不含 text）
+          2. 收到 task_started 后，发送 task_continue（含 text）和 task_finish
+          3. 服务端通过 task_continued JSON 事件的 data.audio 字段返回 hex 音频
+          4. 全部音频接收完后收到 task_finished
+
+        成功返回 UnifiedResponse(ok=True, output_type="audio", assets=[AssetRef])。
+        失败时抛出 UnifiedErrorException。
+        """
+        try:
+            import asyncio as _asyncio
+            ws_result = _asyncio.run(self._native.tts_websocket(payload, timeout=60.0))
+        except NotImplementedError:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-ws",
+                error_type="not_implemented",
+                error_code=None,
+                message="tts-ws is not implemented in native client",
+                http_status=501,
+                retryable=False,
+                redacted=True,
+            )
+        except TimeoutError as exc:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-ws",
+                error_type="timeout",
+                error_code=None,
+                message=str(exc),
+                http_status=200,
+                retryable=False,
+                redacted=True,
+            )
+        except RuntimeError as exc:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-ws",
+                error_type="websocket_error",
+                error_code=None,
+                message=str(exc),
+                http_status=200,
+                retryable=False,
+                redacted=True,
+            )
+        except Exception as exc:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-ws",
+                error_type="unknown",
+                error_code=None,
+                message=str(exc),
+                http_status=500,
+                retryable=False,
+                redacted=True,
+            )
+
+        audio_bytes = ws_result.get("audio_bytes", b"")
+        audio_chunk_count = ws_result.get("audio_chunk_count", 0)
+        events = ws_result.get("events", [])
+
+        if not audio_bytes:
+            raise UnifiedErrorException(
+                ok=False,
+                capability_id="tts-ws",
+                error_type="output_missing",
+                error_code=None,
+                message="tts-ws connection succeeded but no audio bytes were received",
+                http_status=200,
+                retryable=False,
+                redacted=True,
+            )
+
+        # 写入 runtime 资产（与 tts-sync 行为一致）
+        runtime_dir = (
+            Path(__file__).resolve().parent.parent  # minimax_core
+            / "runtime" / "assets" / "tts_ws"
+        )
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = int(time.time())
+        audio_format = payload.get("audio_format", "mp3")
+        out_path = runtime_dir / f"tts_ws_{timestamp}.{audio_format}"
+        try:
+            out_path.write_bytes(audio_bytes)
+            committed = False
+        except Exception:
+            committed = False
+
+        asset_ref = AssetRef(
+            type="audio",
+            format=audio_format,
+            path=str(out_path.relative_to(runtime_dir.parent.parent)),
+            url=None,
+            size_bytes=len(audio_bytes),
+            committed=committed,
+        )
+
+        return UnifiedResponse(
+            ok=True,
+            capability_id="tts-ws",
+            model=payload.get("model", "speech-02-turbo"),
+            output_type="audio",
+            text=None,
+            assets=[asset_ref],
+            task=None,
+            usage={
+                "audio_chunk_count": audio_chunk_count,
+                "audio_bytes": len(audio_bytes),
+                "text_length": len(payload.get("text", "OK")),
+                "events": events,
+            },
+            raw={
+                "session_id": ws_result.get("session_id"),
+                "event_counts": {e: events.count(e) for e in set(events)},
+                "task_started": "task_started" in events,
+                "task_finished": "task_finished" in events or "task_done" in events,
+            },
         )
 
     # ── Image ────────────────────────────────────────────────────────────────

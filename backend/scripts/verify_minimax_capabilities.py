@@ -54,10 +54,10 @@ from app.minimax_core.clients.files import MiniMaxFilesClient
 from app.minimax_core.contracts import AssetRef, UnifiedErrorException, VerificationResult
 from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
 
-# CapabilityInvoker 支持的能力列表（全量 safe + medium）
+# CapabilityInvoker 支持的能力列表（全量 safe + medium + tts-ws）
 _INVOKER_SUPPORTED = {
     "chat-openai", "chat-anthropic", "chat-responses-create",
-    "chat-responses-tokens", "tts-sync", "image-t2i",
+    "chat-responses-tokens", "tts-sync", "tts-ws", "image-t2i",
     "lyrics-gen", "music-gen", "file-list", "voice-list",
     "models-openai-list", "models-anthropic-list",
     "models-openai-retrieve", "models-anthropic-retrieve",
@@ -197,6 +197,7 @@ CAPABILITY_GROUPS = {
     ],
     "medium": [
         "tts-sync",
+        "tts-ws",
         "image-t2i",
         "lyrics-gen",
         "music-gen",
@@ -260,6 +261,7 @@ _INVOKER_PAYLOADS: dict[str, dict] = {
     "chat-responses-create":  {"model": "MiniMax-M3", "input": "Hi"},
     "chat-responses-tokens":  {"model": "MiniMax-M3", "input": "Hi"},
     "tts-sync":               {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},
+    "tts-ws":                 {"model": "speech-02-turbo", "text": "OK", "voice_id": "female-tianmei", "speed": 1.0, "sample_rate": 32000, "audio_format": "mp3"},
     "image-t2i":              {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},
     "lyrics-gen":             {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},
     "music-gen":              {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},
@@ -709,6 +711,8 @@ def main() -> None:
                         help="确认配额超额能力（tts-async 字符数超阈值）")
     parser.add_argument("--diagnose-auth", action="store_true",
                         help="打印 Key 诊断信息并退出")
+    parser.add_argument("--capability",
+                        help="只验收指定能力（如 tts-ws），与 --level 配合可精确指定单个能力")
     args = parser.parse_args()
 
     # Diagnose mode
@@ -728,6 +732,19 @@ def main() -> None:
     # --level medium    → 只跑 medium（需 --confirm-cost）
     # --level high      → 跑 medium + high（需双重确认）
     # --level safe+medium → 只在本任务中用于 isolated medium 模式（不通过 arg 暴露）
+
+    # --capability 精确指定：跳过 level 分组，只跑单个能力（需 --confirm-cost 如果是 medium）
+    if args.capability:
+        cap_ids = [args.capability]
+        if args.level == "medium" and not args.confirm_cost:
+            print(f"ERROR: --capability {args.capability} 属于 medium 级别，需要 --confirm-cost。", file=sys.stderr)
+            sys.exit(1)
+    elif args.level == "safe":
+        cap_ids = CAPABILITY_GROUPS["safe"]
+    elif args.level == "medium":
+        cap_ids = CAPABILITY_GROUPS["medium"]  # 仅 medium，不包含 safe
+    else:
+        cap_ids = CAPABILITY_GROUPS["safe"] + CAPABILITY_GROUPS["medium"] + CAPABILITY_GROUPS["high"]
 
     env = _load_env()
     token_plan_key = env.get("MINIMAX_TOKEN_PLAN_KEY", "")

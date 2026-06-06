@@ -1,8 +1,8 @@
 # MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06T13:31:19Z
+> 生成时间：2026-06-06T14:45:00Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
-> 本轮更新：tts-ws WebSocket 流式验收完成（speech-02-turbo，极短文本，9 chunk/13KB）。
+> 本轮更新：tts-ws 已接入 minimax_core（MiniMaxNativeClient + CapabilityInvoker），返回 UnifiedResponse + AssetRef；probe_tts_ws.py 重构为复用 core client。
 
 ## 验收状态分层说明
 
