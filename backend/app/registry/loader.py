@@ -1,28 +1,25 @@
-"""app/registry/loader — 兼容层，内部委托给 minimax_core.registry。
+"""app/registry/loader — 纯兼容层，全部委托给 minimax_core.registry。
 
-本文件保留以下导出供旧代码兼容：
-  get_registry()         → minimax_core.registry.get_capability_registry() 的包装
-  reload_registry()      → 清除缓存后重新加载
-  Registry / Category / Capability / Model  ← 内部已迁移到 minimax_core，
-                                           本文件保留类型别名避免直接删库断裂
+本文件保留旧模块路径、函数名和类型别名，
+内部不再直接读取 YAML，而是委托 minimax_core.registry.loader，
+并将 ModelSpec/CapabilitySpec 转换为旧 Pydantic 模型。
 
-外部调用不变，内部事实源统一在 minimax_core.registry。
+外部调用不变：
+  get_registry()         → Registry（categories/capabilities/models + model_dump()）
+  reload_registry()      → 清除缓存
+  models_for_capability() → list[Model]（过滤后）
 """
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-import yaml
 from pydantic import BaseModel, Field
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
-
+# ── 类型别名（供旧代码兼容，不做重复定义）──────────────────────────────────────
+# 旧 Pydantic 模型保留在这里作为返回类型
 CapabilityStatus = Literal["implemented", "planned", "unsupported"]
 
-
-# ── 类型别名（供旧代码兼容）──────────────────────────────────────────────────
 
 class Category(BaseModel):
     id: str
@@ -51,6 +48,7 @@ class Capability(BaseModel):
     notes: str = ""
     cost_level: Literal["none", "quota", "low", "medium", "high"] = "quota"
     cost_note: str = ""
+    requires_model: bool = True
 
 
 class Model(BaseModel):
@@ -79,28 +77,26 @@ class Model(BaseModel):
 
 
 class Registry(BaseModel):
-    """兼容层 Registry 类，内部委托给 minimax_core.registry。"""
+    """兼容层 Registry，内部委托 minimax_core.registry。"""
     categories: list[Category]
     capabilities: list[Capability]
     models: list[Model]
 
-    def capabilities_by_category(self, cat_id: str) -> list[Capability]:
-        return [c for c in self.capabilities if c.category == cat_id]
+    def capabilities_by_category(self, cat_id: str) -> list[Category]:
+        return [c for c in self.categories if c.id == cat_id]
 
     def models_for_capability(self, cap_id: str) -> list[Model]:
-        """与 app/registry/loader.py 旧逻辑完全对齐。"""
+        """与旧逻辑完全对齐：只返回 enabled=True 的模型。"""
         cap = next((c for c in self.capabilities if c.id == cap_id), None)
-        if cap is None:
+        if not cap:
             return []
         out: list[Model] = []
         for m in self.models:
             if not m.enabled:
                 continue
-            # 显式绑定
             if cap_id in m.capabilities:
                 out.append(m)
                 continue
-            # family 匹配
             if cap.model_family and m.family == cap.model_family:
                 if cap.protocols:
                     if any(p in m.protocols for p in cap.protocols):
@@ -110,57 +106,96 @@ class Registry(BaseModel):
         return out
 
 
-# ── 内部 YAML 加载 ─────────────────────────────────────────────────────────
+# ── 转换函数 ────────────────────────────────────────────────────────────────
 
-def _load_yaml(path: Path) -> dict:
-    if not path.exists():
-        raise FileNotFoundError(f"缺少配置文件：{path}")
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} 顶层必须是 mapping")
-    return data
+def _spec_to_model(spec) -> Model:
+    """minimax_core ModelSpec → 旧 Model"""
+    return Model(
+        id=spec.id,
+        label=spec.label,
+        family=spec.family,
+        tier=spec.tier,
+        official_current=spec.official_current,
+        live_available=spec.live_available,
+        subscription_expected=spec.subscription_expected,
+        enabled=spec.enabled,
+        context=spec.context,
+        input_modalities=spec.input_modalities,
+        output_modalities=spec.output_modalities,
+        protocols=spec.protocols,
+        capabilities=spec.capabilities,
+        supports_tools=spec.supports_tools,
+        supports_thinking=spec.supports_thinking,
+        thinking_can_disable=spec.thinking_can_disable,
+        cost_level=spec.cost_level,
+        discovery_method=spec.discovery_method,
+        discovery_status=spec.discovery_status,
+        discovery_note=spec.discovery_note,
+        note=spec.note,
+        quota_eligible=spec.quota_eligible,
+    )
 
+
+def _spec_to_capability(spec) -> Capability:
+    """minimax_core CapabilitySpec → 旧 Capability"""
+    return Capability(
+        id=spec.id,
+        category=spec.category,
+        label=spec.name,
+        desc="",
+        doc_url=spec.doc_url,
+        method=spec.method,
+        mm_path=spec.endpoint,
+        status=spec.status,
+        streaming=spec.is_streaming,
+        async_job=spec.is_async,
+        multipart=spec.requires_upload,
+        model_family=spec.model_family,
+        protocols=spec.protocols,
+        requires_model=spec.requires_model,
+    )
+
+
+# ── 核心委托 ────────────────────────────────────────────────────────────────
 
 def _build_registry() -> Registry:
-    caps_doc = _load_yaml(CONFIG_DIR / "capabilities.yaml")
-    models_doc = _load_yaml(CONFIG_DIR / "models.yaml")
+    """从 minimax_core 加载并转换为旧 Registry 格式。"""
+    from app.minimax_core.registry.loader import get_model_registry, get_capability_registry
 
-    categories = [Category.model_validate(x) for x in caps_doc.get("categories", [])]
+    model_reg = get_model_registry()
+    cap_reg = get_capability_registry()
+
+    # categories 来自 capabilities.yaml（minimax_core 未暴露 categories，
+    # 暂时从 core loader 的原始 YAML 读取）
+    from app.minimax_core.registry.loader import load_yaml_configs
+    raw = load_yaml_configs()
+    categories = [Category.model_validate(c) for c in raw["categories"]]
     categories.sort(key=lambda c: c.order)
-    capabilities = [Capability.model_validate(x) for x in caps_doc.get("capabilities", [])]
-    models = [Model.model_validate(x) for x in models_doc.get("models", [])]
 
-    cat_ids = {c.id for c in categories}
-    cap_ids = {c.id for c in capabilities}
-    seen_cap_ids: set[str] = set()
-    for cap in capabilities:
-        if cap.id in seen_cap_ids:
-            raise ValueError(f"capability id 重复：{cap.id}")
-        seen_cap_ids.add(cap.id)
-        if cap.category not in cat_ids:
-            raise ValueError(f"capability {cap.id} 引用了不存在的 category：{cap.category}")
-    for m in models:
-        for cid in m.capabilities:
-            if cid not in cap_ids:
-                raise ValueError(f"model {m.id} 引用了不存在的 capability：{cid}")
+    models = [_spec_to_model(m) for m in model_reg.all()]
+    capabilities = [_spec_to_capability(c) for c in cap_reg.all()]
 
-    return Registry(categories=categories, capabilities=capabilities, models=models)
+    return Registry(
+        categories=categories,
+        capabilities=capabilities,
+        models=models,
+    )
 
 
 @lru_cache(maxsize=1)
 def get_registry() -> Registry:
-    """返回 Registry 单例（兼容层，内部委托给 minimax_core.registry）。"""
+    """返回 Registry 单例（委托 minimax_core.registry）。"""
     return _build_registry()
 
 
 def reload_registry() -> Registry:
     get_registry.cache_clear()
+    # 同时清除 core 缓存
+    from app.minimax_core.registry.loader import clear_registry_cache
+    clear_registry_cache()
     return get_registry()
 
 
-# ── 便捷函数（委托给 minimax_core.registry）───────────────────────────────
-
 def models_for_capability(cap_id: str) -> list[Model]:
-    """保留旧函数签名，内部委托给 get_registry()。"""
+    """保留旧函数签名，内部委托 get_registry()。"""
     return get_registry().models_for_capability(cap_id)

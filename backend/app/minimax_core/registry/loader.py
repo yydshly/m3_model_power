@@ -117,6 +117,7 @@ def load_capability_specs() -> list[CapabilitySpec]:
             cost_level=cost_level,
             doc_url=raw.get("doc_url", ""),
             status=status,
+            requires_model=bool(raw.get("requires_model", True)),
         )
         specs.append(spec)
 

@@ -77,3 +77,6 @@ class CapabilitySpec(BaseModel):
     cost_level: Literal["none", "quota", "low", "medium", "high"] = Field(default="quota")
     doc_url: str = Field(default="")
     status: Literal["implemented", "planned", "unsupported"] = Field(default="planned")
+    requires_model: bool = Field(
+        default=True,
+        description="该能力是否需要选择模型；false = 如 lyrics-gen / file-* / models-list，无需模型即可调用")

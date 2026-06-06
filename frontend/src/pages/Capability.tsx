@@ -74,7 +74,11 @@ export default function CapabilityPage() {
         ))}
       </div>
 
-      {models.length > 0 && (
+      {cap.requires_model === false ? (
+        <section className="mt-6">
+          <div className="text-xs text-slate-400 italic">该能力无需选择模型</div>
+        </section>
+      ) : models.length > 0 ? (
         <section className="mt-6">
           <div className="text-xs text-slate-500 mb-2">适用模型（来自 models.yaml）</div>
           <div className="flex flex-wrap gap-2">
@@ -88,7 +92,7 @@ export default function CapabilityPage() {
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       <hr className="my-6 border-slate-200" />
 

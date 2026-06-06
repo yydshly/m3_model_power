@@ -51,6 +51,14 @@ from app.minimax_core.clients.anthropic import MiniMaxAnthropicClient
 from app.minimax_core.clients.native import MiniMaxNativeClient
 from app.minimax_core.clients.files import MiniMaxFilesClient
 from app.minimax_core.contracts import AssetRef
+from app.minimax_core.invoker import CapabilityInvoker, NotImplementedCapability
+
+# CapabilityInvoker 支持的能力列表（safe + medium）
+_INVOKER_SUPPORTED = {
+    "chat-openai", "chat-anthropic", "chat-responses-create",
+    "chat-responses-tokens", "tts-sync", "image-t2i",
+    "lyrics-gen", "music-gen", "file-list", "voice-list",
+}
 RUNTIME_DIR = BACKEND / "runtime" / "capability_verification"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 DOCS_DIR = BACKEND.parent / "docs"
@@ -130,7 +138,7 @@ def _verify_single(
     cap_id: str,
     api_key: str,
 ) -> dict:
-    """使用 core 客户端验收单个能力。"""
+    """使用 CapabilityInvoker 验收单个能力。"""
     started_at = datetime.now(timezone.utc).isoformat()
     result: dict = {
         "capability_id": cap_id,
@@ -152,46 +160,106 @@ def _verify_single(
         "asset_committed": False,
     }
 
-    # 能力 → (client_type, method_name, body, timeout)
-    cap_client_config: dict[str, tuple[str, str, dict | None, float]] = {
-        "models-openai-list":    ("openai",  "list_models",           None,  30),
-        "models-anthropic-list":  ("anthropic", "list_models",        None,  30),
-        "models-openai-retrieve": ("openai",  "retrieve_model",       None,  30),
-        "models-anthropic-retrieve": ("anthropic", "retrieve_model",  None,  30),
-        "chat-openai":            ("openai",  "chat_completions",      {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},  30),
-        "chat-anthropic":         ("anthropic", "messages",            {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},  30),
-        "chat-responses-create":  ("openai",  "responses_create",     {"model": "MiniMax-M3", "input": "Hi"},  30),
-        "chat-responses-tokens": ("openai",  "responses_input_tokens", {"model": "MiniMax-M3", "input": "Hi"},  30),
-        "file-list":             ("files",   "list_files",             None,  30),
-        "voice-list":            ("native",  "voice_list",             {"voice_type": "all"},  30),
-        "tts-sync":              ("native",  "tts_http",               {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},  30),
-        "image-t2i":             ("native",  "image_generation",       {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},  30),
-        "lyrics-gen":            ("native",  "lyrics_generation",      {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},  30),
-        "music-gen":             ("native",  "music_generation",      {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},  180),
-        "voice-clone-do":        ("native",  "voice_clone",            {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False},  30),
-        "voice-design":          ("native",  "voice_design",           {"prompt": "a calm female voice", "preview_text": "hello"},  30),
-        "video-t2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5},  180),
-        "video-i2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "first_frame_image": "https://example.com/f.jpg", "duration": 5},  180),
-        "video-s2v":             ("native",  "video_generation",       {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "subject_reference": [{"type": "character", "image": ["https://example.com/s.jpg"]}]},  180),
-        "music-cover-prep":      ("native",  "music_generation",       {"purpose": "song"},  180),
-        "tts-async":             ("native",  "tts_http",               {"model": "speech-02-turbo", "text": "测试语音", "voice_setting": {"voice_id": "female-shaonu"}},  180),
-    }
+    # CapabilityInvoker 支持的能力走统一路径
+    if cap_id in _INVOKER_SUPPORTED:
+        return _verify_via_invoker(cap_id, api_key, started_at, result)
 
-    if cap_id not in cap_client_config:
+    # 其余能力（models-* / high / video 等）走旧 client 路径
+    return _verify_via_client(cap_id, api_key, started_at, result)
+
+
+# ── CapabilityInvoker 路径 ─────────────────────────────────────────────────
+
+# payload 映射
+_INVOKER_PAYLOADS: dict[str, dict] = {
+    "chat-openai":            {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},
+    "chat-anthropic":         {"model": "MiniMax-M3", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 16},
+    "chat-responses-create":  {"model": "MiniMax-M3", "input": "Hi"},
+    "chat-responses-tokens":  {"model": "MiniMax-M3", "input": "Hi"},
+    "tts-sync":               {"model": "speech-02-turbo", "text": "你好，这是 MiniMax 语音能力验收。", "voice_setting": {"voice_id": "female-tianmei"}, "audio_setting": {"sample_rate": 32000, "format": "mp3"}},
+    "image-t2i":              {"model": "image-01", "prompt": "一只白色小猫坐在窗边，简洁插画风格", "aspect_ratio": "16:9", "n": 1},
+    "lyrics-gen":             {"mode": "write_full_song", "prompt": "一首关于夏天傍晚的轻快民谣"},
+    "music-gen":              {"model": "music-2.6", "prompt": "轻快民谣，简单吉他伴奏", "lyrics": "[Verse]\n晚风吹过窗台\n我把一天慢慢放下来\n[Chorus]\n月光落在肩上\n心也变得安静起来", "stream": False, "output_format": "url", "audio_setting": {"sample_rate": 44100, "bitrate": 256000, "format": "mp3"}},
+    "file-list":              {},
+    "voice-list":             {"voice_type": "all"},
+}
+
+
+def _verify_via_invoker(cap_id: str, api_key: str, started_at: str, result: dict) -> dict:
+    """通过 CapabilityInvoker 调用能力。"""
+    payload = _INVOKER_PAYLOADS.get(cap_id, {})
+
+    invoker = CapabilityInvoker(api_key=api_key, timeout=180.0)
+    t0 = time.monotonic()
+
+    try:
+        response = invoker.invoke(cap_id, payload)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        result["latency_ms"] = latency_ms
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        result["response_shape_ok"] = response.ok
+        result["status"] = "success" if response.ok else "failed"
+        result["model"] = response.model
+        result["output_type"] = response.output_type
+
+        # medium 能力特有字段
+        if cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen"):
+            result["level"] = "medium"
+            _handle_medium_result(cap_id, response.raw, result)
+
+    except NotImplementedCapability as exc:
+        result["status"] = "skipped"
+        result["error_message"] = f"not_implemented: {exc.capability_id}"
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+
+    except Exception as exc:
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        result["latency_ms"] = latency_ms
+        result["ended_at"] = datetime.now(timezone.utc).isoformat()
+        result["status"] = "failed"
+        err_msg = str(exc)
+        if hasattr(exc, "http_status"):
+            result["http_status"] = exc.http_status
+        if hasattr(exc, "message"):
+            err_msg = exc.message
+        result["error_message"] = err_msg
+
+    return result
+
+
+# ── 旧 client 路径（models-* / high / video 等）──────────────────────────────
+
+_cap_client_config: dict[str, tuple[str, str, dict | None, float]] = {
+    "models-openai-list":     ("openai",   "list_models",           None,  30),
+    "models-anthropic-list":  ("anthropic","list_models",           None,  30),
+    "models-openai-retrieve": ("openai",   "retrieve_model",        None,  30),
+    "models-anthropic-retrieve": ("anthropic","retrieve_model",     None,  30),
+    "voice-clone-do":        ("native",   "voice_clone",           {"file_id": "dummy", "voice_id": "test_script_voice", "need_noise_reduction": False},  30),
+    "voice-design":          ("native",   "voice_design",          {"prompt": "a calm female voice", "preview_text": "hello"},  30),
+    "video-t2v":             ("native",   "video_generation",      {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "duration": 5},  180),
+    "video-i2v":             ("native",   "video_generation",      {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "first_frame_image": "https://example.com/f.jpg", "duration": 5},  180),
+    "video-s2v":             ("native",   "video_generation",      {"model": "MiniMax-Hailuo-02", "prompt": "a cat", "subject_reference": [{"type": "character", "image": ["https://example.com/s.jpg"]}]},  180),
+    "music-cover-prep":       ("native",   "music_generation",     {"purpose": "song"},  180),
+    "tts-async":             ("native",   "tts_http",             {"model": "speech-02-turbo", "text": "测试语音", "voice_setting": {"voice_id": "female-shaonu"}},  180),
+}
+
+
+def _verify_via_client(cap_id: str, api_key: str, started_at: str, result: dict) -> dict:
+    """对 CapabilityInvoker 未覆盖的能力（models-* / video / voice-clone）走 client 直接调用。"""
+    if cap_id not in _cap_client_config:
         result["status"] = "skipped"
         result["error_message"] = "no config for this capability"
         result["ended_at"] = datetime.now(timezone.utc).isoformat()
         return result
 
-    client_type, method_name, body, timeout = cap_client_config[cap_id]
+    client_type, method_name, body, timeout = _cap_client_config[cap_id]
 
-    # 创建客户端
     try:
         clients = {
-            "openai":   MiniMaxOpenAIClient(api_key=api_key, timeout=timeout),
+            "openai":    MiniMaxOpenAIClient(api_key=api_key, timeout=timeout),
             "anthropic": MiniMaxAnthropicClient(api_key=api_key, timeout=timeout),
-            "native":   MiniMaxNativeClient(api_key=api_key, timeout=timeout),
-            "files":    MiniMaxFilesClient(api_key=api_key, timeout=timeout),
+            "native":    MiniMaxNativeClient(api_key=api_key, timeout=timeout),
+            "files":     MiniMaxFilesClient(api_key=api_key, timeout=timeout),
         }
         client = clients[client_type]
     except Exception as exc:
@@ -200,7 +268,6 @@ def _verify_single(
         result["ended_at"] = datetime.now(timezone.utc).isoformat()
         return result
 
-    # 调用
     t0 = time.monotonic()
     status_code: int | None = None
     data: dict | None = None
@@ -212,7 +279,6 @@ def _verify_single(
         status_code = 200
     except Exception as exc:
         err = str(exc)
-        # 尝试从 UnifiedError 提取信息
         if hasattr(exc, "http_status"):
             status_code = exc.http_status
             err = exc.message if hasattr(exc, "message") else str(exc)
@@ -227,28 +293,24 @@ def _verify_single(
         result["error_message"] = err
         return result
 
-    if status_code == 401 or status_code == 403:
+    if status_code in (401, 403):
         result["status"] = "unauthorized"
         result["error_message"] = f"HTTP {status_code}"
         return result
-
     if status_code == 429:
         result["status"] = "quota_limited"
         result["error_message"] = "HTTP 429 Rate Limited"
         return result
-
     if status_code and status_code >= 400:
         result["status"] = "failed"
         result["error_message"] = f"HTTP {status_code}: {str(data)[:200]}"
         return result
 
-    # shape 检查
     shape_ok = _check_response_shape(cap_id, data)
     result["response_shape_ok"] = shape_ok
     result["status"] = "success" if shape_ok else "success_with_warning"
     result["model"] = body.get("model") if body else None
 
-    # medium 能力特有字段
     if cap_id in ("tts-sync", "image-t2i", "lyrics-gen", "music-gen"):
         result["level"] = "medium"
         _handle_medium_result(cap_id, data, result)

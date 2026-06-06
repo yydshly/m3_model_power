@@ -32,6 +32,7 @@ export type Capability = {
   async_job: boolean
   multipart: boolean
   model_family: string | null
+  requires_model: boolean
   tags: string[]
   example: Record<string, unknown>
   notes: string
