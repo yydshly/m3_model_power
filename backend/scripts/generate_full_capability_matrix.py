@@ -28,7 +28,7 @@ def ts() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-# ── 已知 probe 结果（来自已有验收报告，不调用新 API）──────────────────────────────
+# ── 已知 probe 结果（来自已有验收报告）──────────────────────────────
 # 键：capability_id，值：(probed_model, result, scope)
 # scope: "model_level" = 该能力所有支持模型均已逐项验收
 #        "capability_level" = 该能力已验收，但仅测了一个模型，未逐项验证所有模型
@@ -39,7 +39,8 @@ KNOWN_PROBE_RESULTS: dict[str, tuple[str | None, str, str]] = {
     "music-gen": ("music-2.6", "success", "capability_level"),
     "tts-sync": ("speech-02-turbo", "success", "capability_level"),
 }
-# chat 模型通过 /v1/models 验证（model_level）
+
+# chat 模型通过 /v1/models 验证（model_level via models_api）
 CHAT_MODEL_PROBE: dict[str, tuple[str, str]] = {
     m: ("live_api", "success") for m in [
         "MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed",
@@ -48,10 +49,49 @@ CHAT_MODEL_PROBE: dict[str, tuple[str, str]] = {
     ]
 }
 
+# 从 runtime report 加载最新 probe 结果（如果存在）
+def _load_live_probe_results() -> dict[str, dict]:
+    """加载 backend/runtime/reports/model_level_probe_report.json。"""
+    probe_path = REPORTS_DIR / "model_level_probe_report.json"
+    if not probe_path.exists():
+        return {}
+    try:
+        doc = json.loads(probe_path.read_text(encoding="utf-8"))
+        # 键："{model_id}|{capability_id}"
+        out: dict[str, dict] = {}
+        for r in doc.get("results", []):
+            key = f"{r['model_id']}|{r['capability_id']}"
+            out[key] = r
+        return out
+    except Exception:
+        return {}
+
+
+# ── 验收状态分层说明（Markdown）─────────────────────────────────────────────────
+VERIFICATION_TIER_EXPLANATION = """
+## 验收状态分层说明
+
+| 层级 | 状态名 | 含义 |
+|---|---|---|
+| L1 | `official_current` | 官方当前文档中列出 |
+| L2 | `models_api_verified` | 通过 `/v1/models` 或 `/anthropic/v1/models` 发现（仅 chat 模型） |
+| L3 | `capability_level_verified` | 能力端点已实测可用，但仅测了一个模型，未逐项验证所有模型 |
+| L4 | `model_level_verified` | 具体模型已作为请求中 `model` 参数单独调用成功 |
+| — | `not_probed` | 尚未进行任何实测 |
+| — | `high_cost_pending` | 成本或风险较高，暂不执行（video / voice-clone / voice-design 等） |
+| — | `not_applicable` | 不需要模型（如 lyrics-gen / file-* / models-*） |
+
+**重要说明**：
+- `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
+- `models_api_verified` ≠ `model_level_verified`
+- `capability_level_verified` ≠ 所有模型逐项验证
+- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
+"""
+
 
 # ── build data structures ───────────────────────────────────────────────────────
 
-def build_model_row(m) -> dict:
+def build_model_row(m, live_probe: dict | None = None) -> dict:
     """单个模型的矩阵行数据（含 capability_probe 字段）。"""
     # capability probe 状态判断
     discovery = m.discovery_method
@@ -94,6 +134,19 @@ def build_model_row(m) -> dict:
         probe_scope = "not_applicable"
         probed_by = None
 
+    # 用 live probe 结果覆盖默认推断
+    _probe_status = probe_status
+    _probed_by = probed_by
+    _probed_model = probed_model
+    _probe_scope = probe_scope
+    _probe_result = probe_result
+    if live_probe and live_probe.get("probe_status") in ("success", "failed"):
+        _probe_status = live_probe["probe_status"]
+        _probed_by = live_probe.get("probed_by", probed_by)
+        _probed_model = live_probe.get("probed_model", probed_model)
+        _probe_scope = live_probe.get("probe_scope", probe_scope)
+        _probe_result = live_probe.get("probe_result", probe_result)
+
     return {
         "model_id": m.id,
         "display_name": m.label,
@@ -118,11 +171,11 @@ def build_model_row(m) -> dict:
         "discovery_note": m.discovery_note,
         "note": m.note,
         # capability probe 明细
-        "capability_probe_status": probe_status,
-        "probed_by": probed_by,
-        "probed_model": probed_model,
-        "probe_scope": probe_scope,
-        "probe_result": probe_result,
+        "capability_probe_status": _probe_status,
+        "probed_by": _probed_by,
+        "probed_model": _probed_model,
+        "probe_scope": _probe_scope,
+        "probe_result": _probe_result,
     }
 
 
@@ -217,7 +270,7 @@ def build_model_to_capability_matrix(model_registry, cap_registry) -> dict:
     return out
 
 
-def build_gap_matrix(model_registry, cap_registry) -> dict:
+def build_gap_matrix(model_registry, cap_registry, live_probe: dict | None = None) -> dict:
     """计算各类缺口。"""
     models = model_registry.all()
     official = {m.id for m in models if m.official_current}
@@ -283,6 +336,25 @@ def build_gap_matrix(model_registry, cap_registry) -> dict:
         if m.discovery_method == "capability_probe" and m.discovery_status == "unknown":
             gap["models_not_individually_probed"].append(m.id)
 
+    # high_cost_pending（禁止自动执行的能力）
+    gap["high_cost_pending"] = [
+        "video-t2v", "video-i2v", "video-s2v",
+        "voice-clone-do", "voice-design",
+        "tts-async", "music-cover-prep",
+    ]
+
+    # chat probe 失败
+    gap["chat_openai_probe_failed"] = []
+    gap["chat_anthropic_probe_failed"] = []
+    if live_probe:
+        for key, r in live_probe.items():
+            if r.get("probe_status") == "failed":
+                cap_id = r.get("capability_id", "")
+                if cap_id == "chat-openai":
+                    gap["chat_openai_probe_failed"].append(r["model_id"])
+                elif cap_id == "chat-anthropic":
+                    gap["chat_anthropic_probe_failed"].append(r["model_id"])
+
     return gap
 
 
@@ -295,13 +367,9 @@ def render_markdown(data: dict) -> str:
     md("# MiniMax 全量能力覆盖矩阵")
     md("")
     md(f"> 生成时间：{ts()}")
-    md("> 本报告基于本地 registry 配置和已有验收报告生成，不调用真实 API。")
+    md("> 本报告基于本地 registry 配置和已有 probe 结果生成。")
     md("")
-    md("**Capability Probe 术语说明**：")
-    md("- `model_level_verified` = 模型已逐项通过 capability probe 或 /v1/models 验证")
-    md("- `capability_level_verified` = 能力已实测可用，但仅测了一个模型，未逐项验证所有支持模型")
-    md("- `not_probed` = 尚未进行任何实测")
-    md("- `not_applicable` = 不需要模型（如 lyrics-gen / file-* / models-*）")
+    md(VERIFICATION_TIER_EXPLANATION.strip())
     md("")
 
     # ── 1. Model Inventory Matrix ────────────────────────────────────────────
@@ -348,6 +416,21 @@ def render_markdown(data: dict) -> str:
     for r in data["protocol_matrix"]:
         md(f"| `{r['model_id']}` | {'✓' if r['openai_chat_supported'] else '—'} | {'✓' if r['anthropic_messages_supported'] else '—'} | {'✓' if r['responses_supported'] else '—'} | {'✓' if r['tool_use_supported'] else '—'} | {'✓' if r['thinking_supported'] else '—'} | {'✓' if r['thinking_can_disable'] else '—'} | {'✓' if r['multimodal_input_supported'] else '—'} |")
     md("")
+
+    # ── 2b. Probe Result Matrix ──────────────────────────────────────────────
+    if data.get("probe_results"):
+        md("## 2b. Probe Result Matrix")
+        md("")
+        md("| model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | output_present | error_type | last_probed_at |")
+        md("|---|---|---|---|---|---|---|---|---|---|")
+        for r in data["probe_results"]:
+            output_p = str(r.get("output_present", "—"))
+            http_s = str(r.get("http_status", "—"))
+            lat = str(r.get("latency_ms", "—")) if r.get("latency_ms") else "—"
+            err_type = r.get("error_type", "—") or "—"
+            last_p = r.get("last_probed_at", "—") or "—"
+            md(f"| `{r['model_id']}` | `{r['capability_id']}` | {r['protocol']} | {r['probe_scope']} | {r['probe_status']} | {http_s} | {lat} | {output_p} | {err_type} | {last_p} |")
+        md("")
 
     # ── 3. Capability Matrix ─────────────────────────────────────────────────
     md("## 3. Capability Matrix")
@@ -400,6 +483,9 @@ def render_markdown(data: dict) -> str:
         ("5.8 不适用于 /v1/models 的能力分类（file-*, models-*）", "not_applicable_to_models_api"),
         ("5.9 能力已验收但仅 capability_level（非 model_level）", "capability_level_not_model_level"),
         ("5.10 模型未逐项 probe（capability_probe 且 status=unknown）", "models_not_individually_probed"),
+        ("5.11 高成本暂缓（video / voice-clone / voice-design / tts-async / music-cover-prep）", "high_cost_pending"),
+        ("5.12 chat-openai 模型级 probe 失败", "chat_openai_probe_failed"),
+        ("5.13 chat-anthropic 模型级 probe 失败", "chat_anthropic_probe_failed"),
     ]
 
     for title, key in sections:
@@ -427,6 +513,8 @@ def render_markdown(data: dict) -> str:
     md(f"| capability_probe 待验收模型数 | {stats['capability_probe_pending']} |")
     md(f"| capability_level 验收能力数 | {stats['capability_level_verified_capabilities']} |")
     md(f"| model_level 已验收 chat 模型数（/v1/models） | {stats['model_level_verified_models']} |")
+    md(f"| model_level probe 成功（本次） | {stats['model_level_probe_success']} |")
+    md(f"| model_level probe 失败（本次） | {stats['model_level_probe_failed']} |")
     md(f"| 能力总数 | {stats['capabilities_total']} |")
     md(f"| requires_model=false 能力数 | {stats['requires_model_false_count']} |")
     md(f"| file-*/models-* 能力数 | {stats['files_models_capabilities']} |")
@@ -446,11 +534,34 @@ def main() -> None:
     models = model_registry.all()
     caps = cap_registry.all()
 
-    model_inventory = [build_model_row(m) for m in models]
+    # 加载 live probe 结果
+    live_probe = _load_live_probe_results()
+
+    # 构建 probe 结果列表（用于 Probe Result Matrix）
+    probe_results = list(live_probe.values())
+
+    model_inventory = [build_model_row(m, live_probe.get(f"{m.id}|{c.id}"))
+                       for m in models
+                       for c in cap_registry.all()
+                       if f"{m.id}|{c.id}" in live_probe]
+    # 没有 live probe 的模型各一行（去重）
+    probed_model_ids = {r["model_id"] for r in model_inventory}
+    for m in models:
+        if m.id not in probed_model_ids:
+            model_inventory.append(build_model_row(m, None))
+    # 全量按 model_id 去重（已 probe 的模型只留一行，取最新 probe）
+    seen_ids: set[str] = set()
+    deduped: list[dict] = []
+    for r in reversed(model_inventory):
+        if r["model_id"] not in seen_ids:
+            seen_ids.add(r["model_id"])
+            deduped.append(r)
+    model_inventory = list(reversed(deduped))
+
     protocol_matrix = [build_protocol_row(m) for m in models if m.family == "chat"]
     capability_matrix = [build_capability_row(c, cap_registry) for c in caps]
     model_to_capability = build_model_to_capability_matrix(model_registry, cap_registry)
-    gap_matrix = build_gap_matrix(model_registry, cap_registry)
+    gap_matrix = build_gap_matrix(model_registry, cap_registry, live_probe)
 
     official_ids = {m.id for m in models if m.official_current}
     non_legacy = [m for m in models if m.tier not in ("legacy", "deprecated")]
@@ -459,6 +570,9 @@ def main() -> None:
     cap_level = sum(1 for r in capability_matrix if r["capability_probe_status"] == "capability_level_verified")
     # model_level: chat models verified via /v1/models API
     model_level_verified_models = len([m for m in models if m.discovery_method == "models_api" and m.discovery_status == "available"])
+    # live probe results
+    live_probe_success = sum(1 for r in probe_results if r.get("probe_status") == "success")
+    live_probe_failed = sum(1 for r in probe_results if r.get("probe_status") == "failed")
 
     summary = {
         "official_current_total": len(official_ids),
@@ -470,6 +584,8 @@ def main() -> None:
         "capability_probe_pending": len([m for m in models if m.discovery_method == "capability_probe" and m.discovery_status == "unknown"]),
         "capability_level_verified_capabilities": cap_level,
         "model_level_verified_models": model_level_verified_models,
+        "model_level_probe_success": live_probe_success,
+        "model_level_probe_failed": live_probe_failed,
         "capabilities_total": len(caps),
         "requires_model_false_count": len([c for c in caps if c.requires_model is False]),
         "files_models_capabilities": len([c for c in caps if c.category in ("files", "models")]),
@@ -482,6 +598,7 @@ def main() -> None:
         "capability_matrix": capability_matrix,
         "model_to_capability": model_to_capability,
         "gap_matrix": gap_matrix,
+        "probe_results": probe_results,
         "summary": summary,
     }
 

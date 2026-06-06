@@ -129,7 +129,31 @@ frontend/
 
 highspeed 档位走 TokenPlanPlus 共享配额（`cost_level: quota`）。
 
-历史兼容模型（`official_current: false`，默认隐藏）:
+### 验收状态分层说明
+
+本项目对模型的验证分为以下层级：
+
+| 层级 | 状态名 | 含义 |
+|---|---|---|
+| L1 | `official_current` | 官方当前文档中列出 |
+| L2 | `models_api_verified` | 通过 `/v1/models` 或 `/anthropic/v1/models` 发现（仅 chat 模型） |
+| L3 | `capability_level_verified` | 能力端点已实测可用，但仅测了一个模型，未逐项验证所有模型 |
+| L4 | `model_level_verified` | 具体模型已作为请求中 `model` 参数单独调用成功 |
+| — | `not_probed` | 尚未进行任何实测 |
+| — | `high_cost_pending` | 成本或风险较高，暂不执行（video / voice-clone / voice-design 等） |
+| — | `not_applicable` | 不需要模型（如 lyrics-gen / file-* / models-*） |
+
+**重要说明**：
+
+- `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
+- `models_api_verified` ≠ `model_level_verified`
+- `capability_level_verified` ≠ 所有模型逐项验证
+- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- 本轮已对 8 个 chat 模型完成 `chat-openai` 模型级逐项 probe，全部成功
+- `chat-anthropic` 在 `max_tokens=4` 时返回 thinking block 而非 text，探针参数需调整
+- TTS/Image/Music 非 "失败"，而是探针参数（短文本/无参考图）下未产生可检测输出
+
+### music-2.6-free 特殊说明
 abab6.5s-chat / abab6.5-chat / abab6.5t-chat / abab6.5g-chat / speech-01-hd / speech-01-turbo / speech-01-240228 / T2V-01 / T2V-01-Director / I2V-01 / I2V-01-live / I2V-01-Director / S2V-01 / video-01 / music-1.5 / music-01
 
 ## 三种调用通道

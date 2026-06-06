@@ -1,13 +1,25 @@
 # MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06T08:57:09Z
-> 本报告基于本地 registry 配置和已有验收报告生成，不调用真实 API。
+> 生成时间：2026-06-06T09:24:34Z
+> 本报告基于本地 registry 配置和已有 probe 结果生成。
 
-**Capability Probe 术语说明**：
-- `model_level_verified` = 模型已逐项通过 capability probe 或 /v1/models 验证
-- `capability_level_verified` = 能力已实测可用，但仅测了一个模型，未逐项验证所有支持模型
-- `not_probed` = 尚未进行任何实测
-- `not_applicable` = 不需要模型（如 lyrics-gen / file-* / models-*）
+## 验收状态分层说明
+
+| 层级 | 状态名 | 含义 |
+|---|---|---|
+| L1 | `official_current` | 官方当前文档中列出 |
+| L2 | `models_api_verified` | 通过 `/v1/models` 或 `/anthropic/v1/models` 发现（仅 chat 模型） |
+| L3 | `capability_level_verified` | 能力端点已实测可用，但仅测了一个模型，未逐项验证所有模型 |
+| L4 | `model_level_verified` | 具体模型已作为请求中 `model` 参数单独调用成功 |
+| — | `not_probed` | 尚未进行任何实测 |
+| — | `high_cost_pending` | 成本或风险较高，暂不执行（video / voice-clone / voice-design 等） |
+| — | `not_applicable` | 不需要模型（如 lyrics-gen / file-* / models-*） |
+
+**重要说明**：
+- `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
+- `models_api_verified` ≠ `model_level_verified`
+- `capability_level_verified` ≠ 所有模型逐项验证
+- `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
 
 ## 1. Model Inventory Matrix
 
@@ -17,14 +29,14 @@
 
 | ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
 |---|---|---|---|---|---|---|---|---|---|
-| `MiniMax-M3` | flagship | ✓ | ✓ | ✓ | ✓ | 1,000,000 | text,image,video | openai,anthropic,responses | model_level_verified |
-| `MiniMax-M2.7` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | model_level_verified |
-| `MiniMax-M2.7-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | model_level_verified |
-| `MiniMax-M2.5` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | model_level_verified |
-| `MiniMax-M2.5-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | model_level_verified |
-| `MiniMax-M2.1` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | model_level_verified |
-| `MiniMax-M2.1-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | model_level_verified |
-| `MiniMax-M2` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | model_level_verified |
+| `MiniMax-M3` | flagship | ✓ | ✓ | ✓ | ✓ | 1,000,000 | text,image,video | openai,anthropic,responses | success |
+| `MiniMax-M2.7` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.7-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2.5` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.5-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2.1` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
+| `MiniMax-M2.1-highspeed` | highspeed | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai,anthropic | success |
+| `MiniMax-M2` | standard | ✓ | ✓ | ✓ | ✓ | 204,800 | text | openai | success |
 | `abab6.5s-chat` | legacy | ✗ | — | ✗ | ✗ | 245,760 | text | openai | not_probed |
 | `abab6.5-chat` | legacy | ✗ | — | ✗ | ✗ | 8,192 | text | openai | not_probed |
 | `abab6.5t-chat` | legacy | ✗ | — | ✗ | ✗ | 8,192 | text | openai | not_probed |
@@ -34,12 +46,12 @@
 
 | ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
 |---|---|---|---|---|---|---|---|---|---|
-| `speech-2.8-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `speech-2.8-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `speech-2.6-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `speech-2.6-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `speech-02-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `speech-02-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
+| `speech-2.8-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `speech-2.8-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `speech-2.6-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `speech-2.6-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `speech-02-hd` | hd | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `speech-02-turbo` | turbo | ✓ | — | ✓ | ✓ | — | text | native | failed |
 | `speech-01-hd` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
 | `speech-01-turbo` | legacy | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
 | `speech-01-240228` | deprecated | ✗ | — | ✗ | ✗ | — | text | native | not_probed |
@@ -48,8 +60,8 @@
 
 | ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
 |---|---|---|---|---|---|---|---|---|---|
-| `image-01` | flagship | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
-| `image-01-live` | flagship | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
+| `image-01` | flagship | ✓ | — | ✓ | ✓ | — | text | native | failed |
+| `image-01-live` | flagship | ✓ | — | ✓ | ✓ | — | text | native | failed |
 
 ### 视频
 
@@ -70,7 +82,7 @@
 
 | ID | tier | official_current | live | subscription_expected | enabled | context | input_modalities | protocols | capability_probe_status |
 |---|---|---|---|---|---|---|---|---|---|
-| `music-2.6` | flagship | ✓ | — | ✓ | ✓ | — | text | native | not_probed |
+| `music-2.6` | flagship | ✓ | — | ✓ | ✓ | — | text | native | failed |
 | `music-cover` | flagship | ✓ | — | ✓ | ✓ | — | text,audio | native | not_probed |
 | `music-2.6-free` | standard | ✓ | — | ✗ | ✗ | — | text | native | not_probed |
 | `music-cover-free` | standard | ✓ | — | ✗ | ✗ | — | text,audio | native | not_probed |
@@ -93,6 +105,32 @@
 | `abab6.5-chat` | ✓ | — | — | — | — | — | — |
 | `abab6.5t-chat` | ✓ | — | — | — | — | — | — |
 | `abab6.5g-chat` | ✓ | — | — | — | — | — | — |
+
+## 2b. Probe Result Matrix
+
+| model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | output_present | error_type | last_probed_at |
+|---|---|---|---|---|---|---|---|---|---|
+| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1557.9 | True | — | 2026-06-06T09:20:17Z |
+| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 1126.0 | True | — | 2026-06-06T09:20:18Z |
+| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1859.0 | True | — | 2026-06-06T09:20:20Z |
+| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1135.5 | True | — | 2026-06-06T09:20:21Z |
+| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1388.6 | True | — | 2026-06-06T09:20:22Z |
+| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 1119.0 | True | — | 2026-06-06T09:20:24Z |
+| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 776.6 | True | — | 2026-06-06T09:20:24Z |
+| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 896.7 | True | — | 2026-06-06T09:20:25Z |
+| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1767.2 | False | invoke_failed | 2026-06-06T09:20:27Z |
+| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 885.4 | False | invoke_failed | 2026-06-06T09:20:28Z |
+| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1447.6 | False | invoke_failed | 2026-06-06T09:20:29Z |
+| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1128.9 | False | invoke_failed | 2026-06-06T09:20:30Z |
+| `speech-2.8-hd` | `tts-sync` | native | model_level | failed | 200 | 336.2 | False | — | 2026-06-06T09:20:31Z |
+| `speech-2.8-turbo` | `tts-sync` | native | model_level | failed | 200 | 323.9 | False | — | 2026-06-06T09:20:31Z |
+| `speech-2.6-hd` | `tts-sync` | native | model_level | failed | 200 | 271.1 | False | — | 2026-06-06T09:20:31Z |
+| `speech-2.6-turbo` | `tts-sync` | native | model_level | failed | 200 | 301.1 | False | — | 2026-06-06T09:20:32Z |
+| `speech-02-hd` | `tts-sync` | native | model_level | failed | 200 | 286.8 | False | — | 2026-06-06T09:20:32Z |
+| `speech-02-turbo` | `tts-sync` | native | model_level | failed | 200 | 298.3 | False | — | 2026-06-06T09:20:32Z |
+| `image-01` | `image-t2i` | native | model_level | failed | 200 | 296.6 | False | — | 2026-06-06T09:20:33Z |
+| `image-01-live` | `image-t2i` | native | model_level | failed | 200 | 303.9 | False | — | 2026-06-06T09:20:33Z |
+| `music-2.6` | `music-gen` | native | model_level | failed | 200 | 312.4 | False | — | 2026-06-06T09:20:33Z |
 
 ## 3. Capability Matrix
 
@@ -201,10 +239,10 @@
 （无）
 
 ### 5.4 官方 chat 模型未在 live Anthropic 中返回（或协议不支持）
-- `MiniMax-M2.7`
+- `MiniMax-M2.1`
 - `MiniMax-M2`
 - `MiniMax-M2.5`
-- `MiniMax-M2.1`
+- `MiniMax-M2.7`
 
 ### 5.5 无支持模型的能力（requires_model=true）
 - `voice-clone-upload-audio`
@@ -260,6 +298,24 @@
 - `music-2.6`
 - `music-cover`
 
+### 5.11 高成本暂缓（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- `video-t2v`
+- `video-i2v`
+- `video-s2v`
+- `voice-clone-do`
+- `voice-design`
+- `tts-async`
+- `music-cover-prep`
+
+### 5.12 chat-openai 模型级 probe 失败
+（无）
+
+### 5.13 chat-anthropic 模型级 probe 失败
+- `MiniMax-M3`
+- `MiniMax-M2.7-highspeed`
+- `MiniMax-M2.5-highspeed`
+- `MiniMax-M2.1-highspeed`
+
 ## 6. Summary Statistics
 
 | 维度 | 数量 |
@@ -273,6 +329,8 @@
 | capability_probe 待验收模型数 | 13 |
 | capability_level 验收能力数 | 3 |
 | model_level 已验收 chat 模型数（/v1/models） | 8 |
+| model_level probe 成功（本次） | 8 |
+| model_level probe 失败（本次） | 13 |
 | 能力总数 | 32 |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |
