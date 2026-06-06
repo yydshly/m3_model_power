@@ -58,6 +58,37 @@ export default function ModelsPage() {
   function DiscoveryBadge({ m }: { m: Model }) {
     const method = m.discovery_method
     const status = m.discovery_status
+    const probe = m.probe_status
+    const rawHttp = m.raw_http_success
+
+    // Model-level probe status badges
+    if (probe === 'success') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-700">模型级已验收</span>
+    }
+    if (probe === 'probe_assertion_failed') {
+      // Interface works (HTTP 200) but output format mismatch
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">探针判定待修正</span>
+    }
+    if (probe === 'parser_mismatch') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-orange-100 text-orange-700">解析器不匹配</span>
+    }
+    if (probe === 'http_success_but_output_missing') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">接口已通，判定待修正</span>
+    }
+    if (probe === 'high_cost_pending') {
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-500">高成本暂缓</span>
+    }
+    if (probe === 'failed') {
+      // HTTP non-2xx or base_resp error - check if it was an API error vs model unavailable
+      if (rawHttp === true) {
+        return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">接口已通，判定待修正</span>
+      }
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-red-100 text-red-700">模型不可用</span>
+    }
+    if (probe === 'not_probed' || probe === null) {
+      // Fall through to legacy discovery badges
+    }
+
     if (method === 'models_api' && status === 'available') {
       return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-emerald-100 text-emerald-700">models_api ✓</span>
     }

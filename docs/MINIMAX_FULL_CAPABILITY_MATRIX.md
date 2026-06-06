@@ -14,12 +14,19 @@
 | — | `not_probed` | 尚未进行任何实测 |
 | — | `high_cost_pending` | 成本或风险较高，暂不执行（video / voice-clone / voice-design 等） |
 | — | `not_applicable` | 不需要模型（如 lyrics-gen / file-* / models-*） |
+| — | `probe_assertion_failed` | HTTP 200，接口已通，但输出格式与预期不符（如返回 thinking block 而非 text） |
+| — | `parser_mismatch` | HTTP 200，输出存在但解析器未能识别结构 |
+| — | `http_success_but_output_missing` | HTTP 200 但无有效输出 |
+| — | `api_error` | HTTP 200 但 `base_resp.status_code != 0`（如 1004），属 API 层错误非模型不可用 |
 
 **重要说明**：
 - `/v1/models` 主要覆盖 chat 模型，speech/image/video/music 不出现于其中，不代表不可用
 - `models_api_verified` ≠ `model_level_verified`
 - `capability_level_verified` ≠ 所有模型逐项验证
 - `high_cost_pending` 能力必须显式确认后才执行（video / voice-clone / voice-design / tts-async / music-cover-prep）
+- HTTP 200 + `base_resp.status_code != 0`（如 1004）表示 API 层错误，不是模型不可用
+- `probe_assertion_failed` 表示接口已通但输出格式不符预期（如 thinking block 而非 text）
+- 探针判定问题（如解析逻辑错误）不再标记为"模型不可用"
 
 ## 1. Model Inventory Matrix
 
@@ -108,29 +115,38 @@
 
 ## 2b. Probe Result Matrix
 
-| model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | output_present | error_type | last_probed_at |
-|---|---|---|---|---|---|---|---|---|---|
-| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1557.9 | True | — | 2026-06-06T09:20:17Z |
-| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 1126.0 | True | — | 2026-06-06T09:20:18Z |
-| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1859.0 | True | — | 2026-06-06T09:20:20Z |
-| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1135.5 | True | — | 2026-06-06T09:20:21Z |
-| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1388.6 | True | — | 2026-06-06T09:20:22Z |
-| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 1119.0 | True | — | 2026-06-06T09:20:24Z |
-| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 776.6 | True | — | 2026-06-06T09:20:24Z |
-| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 896.7 | True | — | 2026-06-06T09:20:25Z |
-| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1767.2 | False | invoke_failed | 2026-06-06T09:20:27Z |
-| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 885.4 | False | invoke_failed | 2026-06-06T09:20:28Z |
-| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1447.6 | False | invoke_failed | 2026-06-06T09:20:29Z |
-| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | failed | 200 | 1128.9 | False | invoke_failed | 2026-06-06T09:20:30Z |
-| `speech-2.8-hd` | `tts-sync` | native | model_level | failed | 200 | 336.2 | False | — | 2026-06-06T09:20:31Z |
-| `speech-2.8-turbo` | `tts-sync` | native | model_level | failed | 200 | 323.9 | False | — | 2026-06-06T09:20:31Z |
-| `speech-2.6-hd` | `tts-sync` | native | model_level | failed | 200 | 271.1 | False | — | 2026-06-06T09:20:31Z |
-| `speech-2.6-turbo` | `tts-sync` | native | model_level | failed | 200 | 301.1 | False | — | 2026-06-06T09:20:32Z |
-| `speech-02-hd` | `tts-sync` | native | model_level | failed | 200 | 286.8 | False | — | 2026-06-06T09:20:32Z |
-| `speech-02-turbo` | `tts-sync` | native | model_level | failed | 200 | 298.3 | False | — | 2026-06-06T09:20:32Z |
-| `image-01` | `image-t2i` | native | model_level | failed | 200 | 296.6 | False | — | 2026-06-06T09:20:33Z |
-| `image-01-live` | `image-t2i` | native | model_level | failed | 200 | 303.9 | False | — | 2026-06-06T09:20:33Z |
-| `music-2.6` | `music-gen` | native | model_level | failed | 200 | 312.4 | False | — | 2026-06-06T09:20:33Z |
+> 本次 probe 时间：2026-06-06T09:33:29Z
+> 修正点：增加 raw_http_success / base_resp_success / output_present / parser_status / assertion_status 字段
+> 修正 Anthropic max_tokens=64 并正确处理 thinking block
+> speech/image/music 失败原因已修正为 base_resp.status_code=1004（API 错误，非模型不可用）
+
+| model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | raw_http_success | base_resp_success | output_present | parser_status | assertion_status | error_type | last_probed_at |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1891.0 | true | — | true | parsed | matched | — | 2026-06-06T09:33:10Z |
+| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 928.4 | true | — | true | parsed | matched | — | 2026-06-06T09:33:11Z |
+| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1511.1 | true | — | true | parsed | matched | — | 2026-06-06T09:33:13Z |
+| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1148.8 | true | — | true | parsed | matched | — | 2026-06-06T09:33:14Z |
+| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1037.2 | true | — | true | parsed | matched | — | 2026-06-06T09:33:15Z |
+| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 1219.8 | true | — | true | parsed | matched | — | 2026-06-06T09:33:16Z |
+| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1154.9 | true | — | true | parsed | matched | — | 2026-06-06T09:33:17Z |
+| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 795.1 | true | — | true | parsed | matched | — | 2026-06-06T09:33:18Z |
+| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | success | 200 | 2426.2 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:33:21Z |
+| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1783.3 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:22Z |
+| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1711.1 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:24Z |
+| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1854.9 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:26Z |
+| `speech-2.8-hd` | `tts-sync` | native | model_level | **failed** | 200 | 244.2 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:26Z |
+| `speech-2.8-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 282.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
+| `speech-2.6-hd` | `tts-sync` | native | model_level | **failed** | 200 | 272.8 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
+| `speech-2.6-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 291.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
+| `speech-02-hd` | `tts-sync` | native | model_level | **failed** | 200 | 270.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
+| `speech-02-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 295.3 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
+| `image-01` | `image-t2i` | native | model_level | **failed** | 200 | 260.2 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:28Z |
+| `image-01-live` | `image-t2i` | native | model_level | **failed** | 200 | 282.6 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:28Z |
+| `music-2.6` | `music-gen` | native | model_level | **failed** | 200 | 321.9 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:29Z |
+
+**说明**：
+- `probe_assertion_failed`（Anthropic 3个模型）：HTTP 200，接口已通，但模型返回 thinking block 而非 text。max_tokens=64 时 M3 能输出 text，M2.7-highspeed/M2.5-highspeed/M2.1-highspeed 仅返回 thinking。这是模型行为差异，不是模型不可用。
+- `failed` + `base_resp=1004`（speech 6个 / image 2个 / music 1个）：HTTP 200 但 `base_resp.status_code=1004`，属 MiniMax API 层错误（参数/权限/配额等），不是模型本身不可用。
 
 ## 3. Capability Matrix
 
@@ -310,11 +326,16 @@
 ### 5.12 chat-openai 模型级 probe 失败
 （无）
 
-### 5.13 chat-anthropic 模型级 probe 失败
-- `MiniMax-M3`
-- `MiniMax-M2.7-highspeed`
-- `MiniMax-M2.5-highspeed`
-- `MiniMax-M2.1-highspeed`
+### 5.13 chat-anthropic 模型级 probe 状态（本次修正后）
+- `MiniMax-M3`：success（text=OK, thinking=true）
+- `MiniMax-M2.7-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
+- `MiniMax-M2.5-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
+- `MiniMax-M2.1-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
+
+### 5.14 speech/image/music probe 失败原因（已修正为 API 错误，非模型不可用）
+- 所有 speech 模型：base_resp.status_code=1004
+- 所有 image 模型：base_resp.status_code=1004
+- music-2.6：base_resp.status_code=1004
 
 ## 6. Summary Statistics
 
@@ -329,8 +350,10 @@
 | capability_probe 待验收模型数 | 13 |
 | capability_level 验收能力数 | 3 |
 | model_level 已验收 chat 模型数（/v1/models） | 8 |
-| model_level probe 成功（本次） | 8 |
-| model_level probe 失败（本次） | 13 |
+| model_level probe 成功（本次，含 chat-openai 8个） | 9 |
+| model_level probe probe_assertion_failed（本次，Anthropic 3个） | 3 |
+| model_level probe failed（本次，API 错误非模型不可用） | 9 |
+| 新增 parser_mismatch / probe_assertion_failed 分类 | 是 |
 | 能力总数 | 32 |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |

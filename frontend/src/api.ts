@@ -61,6 +61,19 @@ export type Model = {
   cost_level: 'quota' | 'low' | 'medium' | 'high' | 'unknown'
   discovery_method: 'models_api' | 'capability_probe' | 'manual_official' | null
   discovery_status: 'available' | 'unavailable' | 'not_applicable' | 'unknown' | null
+  /** probe_status reflects the latest model-level probe result:
+   * - 'success': probe passed
+   * - 'failed': HTTP error or base_resp error
+   * - 'probe_assertion_failed': HTTP 200 but output format mismatch (e.g., thinking block)
+   * - 'parser_mismatch': HTTP 200 but parser couldn't recognize output structure
+   * - 'http_success_but_output_missing': HTTP 200 but no valid output
+   * - 'high_cost_pending': high-cost capability not executed
+   * - 'not_probed': no probe performed yet
+   * - null: unknown / not applicable
+   */
+  probe_status: 'success' | 'failed' | 'probe_assertion_failed' | 'parser_mismatch' | 'http_success_but_output_missing' | 'high_cost_pending' | 'not_probed' | null
+  /** raw_http_success indicates if the last probe returned HTTP 200, regardless of content */
+  raw_http_success: boolean | null
   discovery_note: string
   note: string
   quota_eligible: boolean
