@@ -47,6 +47,14 @@ export default function Overview() {
     assetRequiredConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'asset_required_confirm_required').length,
     mayChargeExtra: registry.capabilities.filter((c) => c.billing_policy?.may_charge_extra === true).length,
     requiresExplicitConfirm: registry.capabilities.filter((c) => c.billing_policy?.requires_explicit_confirmation === true).length,
+    // operation risk stats
+    opNormal: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'normal').length,
+    opDestructive: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'destructive').length,
+    opAssetRequired: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'asset_required').length,
+    opExistingTaskOnly: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'existing_task_only').length,
+    opLongRunning: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'long_running').length,
+    opQuotaGuarded: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'quota_guarded').length,
+    opRequiresConfirm: registry.capabilities.filter((c) => c.operation_policy?.requires_operation_confirmation === true).length,
   }
 
   return (
@@ -130,6 +138,22 @@ export default function Overview() {
             <GapStat label="高成本" value={stats.highCostConfirmRequired} sub="video 类" tone="red" />
             <GapStat label="素材型" value={stats.assetRequiredConfirmRequired} sub="music-cover" tone="orange" />
             <GapStat label="可能额外收费" value={stats.mayChargeExtra} sub="may_charge_extra=true" tone="rose" />
+          </div>
+        </section>
+      )}
+
+      {/* 操作风险统计 */}
+      {stats && (
+        <section className="mt-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">操作风险能力统计</h2>
+          <div className="grid grid-cols-7 gap-3">
+            <GapStat label="普通操作" value={stats.opNormal} sub="normal" tone="emerald" />
+            <GapStat label="破坏性操作" value={stats.opDestructive} sub="file-delete/voice-delete" tone="red" />
+            <GapStat label="素材型" value={stats.opAssetRequired} sub="file-upload/图生图等" tone="amber" />
+            <GapStat label="仅已有任务" value={stats.opExistingTaskOnly} sub="video-query/download" tone="blue" />
+            <GapStat label="长任务" value={stats.opLongRunning} sub="video 生成类" tone="purple" />
+            <GapStat label="额度保护" value={stats.opQuotaGuarded} sub="tts-async" tone="orange" />
+            <GapStat label="需操作确认" value={stats.opRequiresConfirm} sub="requires_operation_confirm" tone="rose" />
           </div>
         </section>
       )}

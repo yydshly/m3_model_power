@@ -381,7 +381,68 @@
 5. **music-cover** 需要参考音频，属于素材型能力，未执行。
 6. `pending_explicit_confirmation` 不是失败，而是标记为"需确认后执行"。
 
-## 7. Summary Statistics
+## 7. 操作风险保护矩阵
+
+> 以下能力已按 `operation_policy` 字段分类标记，防止前端和脚本误触发危险操作。
+
+### 7.1 操作风险分类说明
+
+| operation_risk | 含义 | requires_operation_confirmation |
+|---|---|---|
+| `normal` | 普通操作，无特殊风险 | false |
+| `destructive` | 删除类操作，执行后不可恢复 | true |
+| `asset_required` | 需要上传/引用用户素材，需确认来源 | true |
+| `existing_task_only` | 只操作已有任务，不创建新任务 | false |
+| `long_running` | 长任务/高消耗能力，必须显式确认 | true |
+| `quota_guarded` | 有字符数阈值保护，超过需确认 | true |
+
+### 7.2 能力操作风险矩阵
+
+| capability_id | operation_risk | is_destructive | requires_uploaded_asset | requires_existing_task | is_long_running | operation_note |
+|---|---|---|---|---|---|---|
+| `chat-anthropic` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `chat-openai` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `chat-responses-create` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `chat-responses-tokens` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `tts-sync` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `tts-ws` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `tts-async` | quota_guarded | ✗ | ✗ | ✗ | ✓ | <=300字允许默认测试；>1000字需二次确认；>5000字无确认禁止执行 |
+| `voice-clone-upload-audio` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传参考音频；请确认素材来源、隐私、版权 |
+| `voice-clone-upload-prompt` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传 Prompt 文本；请确认素材来源、隐私 |
+| `voice-clone-do` | asset_required | ✗ | ✓ | ✗ | ✗ | 音色克隆训练；克隆音色 7 天未使用会被删除 |
+| `voice-design` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `voice-list` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `voice-delete` | destructive | ✓ | ✗ | ✗ | ✗ | 执行前请确认音色 ID，删除后可能无法恢复 |
+| `image-t2i` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `image-i2i` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要参考图；请确认素材来源、隐私和版权 |
+| `video-t2v` | long_running | ✗ | ✗ | ✗ | ✓ | 视频生成为长任务和高消耗能力，必须显式确认后执行 |
+| `video-i2v` | long_running | ✗ | ✗ | ✗ | ✓ | 视频生成为长任务和高消耗能力，必须显式确认后执行 |
+| `video-s2v` | long_running | ✗ | ✗ | ✗ | ✓ | 视频生成为长任务和高消耗能力，必须显式确认后执行 |
+| `video-query` | existing_task_only | ✗ | ✗ | ✓ | ✗ | 仅限已有任务：需要 task_id，不会自动创建视频任务 |
+| `video-download` | existing_task_only | ✗ | ✗ | ✓ | ✗ | 仅限已有任务：需要 file_id，不会自动创建视频任务 |
+| `music-gen` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `music-cover-prep` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传参考音频；请确认音频来源、版权 |
+| `lyrics-gen` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `file-upload` | asset_required | ✗ | ✓ | ✗ | ✗ | 需要上传文件；请确认文件来源、隐私和存储风险 |
+| `file-list` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `file-retrieve` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `file-content` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `file-delete` | destructive | ✓ | ✗ | ✗ | ✗ | 执行前请确认文件 ID，删除后可能无法恢复 |
+| `models-openai-list` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `models-openai-retrieve` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `models-anthropic-list` | normal | ✗ | ✗ | ✗ | ✗ | — |
+| `models-anthropic-retrieve` | normal | ✗ | ✗ | ✗ | ✗ | — |
+
+### 7.3 重要说明
+
+1. **file-delete / voice-delete** 是破坏性操作，执行前必须二次确认目标 ID。
+2. **file-upload / image-i2i / voice-clone-upload-audio / music-cover-prep** 是素材型操作，需确认素材来源、隐私和版权。
+3. **video-query / video-download** 仅限操作已有任务，不会自动创建视频任务。
+4. **tts-async** 有字符数保护：<=300字允许默认测试，>1000字需二次确认，>5000字无显式确认禁止执行。
+5. **video-t2v / video-i2v / video-s2v** 是长任务和高成本能力，必须用户显式确认后执行。
+6. 本轮不执行任何高成本、破坏性、素材型能力。
+
+## 8. Summary Statistics
 
 | 维度 | 数量 |
 |---|---|
@@ -406,6 +467,13 @@
 | asset_required_confirm_required 能力数 | 1 |
 | 可能额外收费能力数 | 8 |
 | 需二次确认能力数 | 8 |
+| normal 操作能力数 | 21 |
+| destructive 操作能力数 | 2 |
+| asset_required 操作能力数 | 5 |
+| existing_task_only 操作能力数 | 2 |
+| long_running 操作能力数 | 3 |
+| quota_guarded 操作能力数 | 1 |
+| 需操作确认能力数 | 10 |
 
 ---
 *本报告由 `backend/scripts/generate_full_capability_matrix.py` 自动生成*

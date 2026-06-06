@@ -26,6 +26,29 @@ class BillingPolicy(BaseModel):
     official_pricing_note: str = ""
 
 
+OperationRisk = Literal[
+    "normal",
+    "destructive",
+    "asset_required",
+    "existing_task_only",
+    "long_running",
+    "quota_guarded",
+]
+
+
+class OperationPolicy(BaseModel):
+    operation_risk: OperationRisk = "normal"
+    requires_operation_confirmation: bool = False
+    requires_uploaded_asset: bool = False
+    requires_existing_task: bool = False
+    is_destructive: bool = False
+    is_long_running: bool = False
+    max_default_chars: int | None = None
+    requires_confirmation_above_chars: int | None = None
+    hard_block_above_chars_without_confirm: int | None = None
+    operation_note: str | None = None
+
+
 class ModelSpec(BaseModel):
     """MiniMax 模型规格定义。
 
@@ -101,3 +124,4 @@ class CapabilitySpec(BaseModel):
         default=True,
         description="该能力是否需要选择模型；false = 如 lyrics-gen / file-* / models-list，无需模型即可调用")
     billing_policy: BillingPolicy = Field(default_factory=BillingPolicy)
+    operation_policy: OperationPolicy = Field(default_factory=OperationPolicy)

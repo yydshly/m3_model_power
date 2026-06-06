@@ -29,6 +29,27 @@ export type BillingPolicy = {
   official_pricing_note: string
 }
 
+export type OperationRisk =
+  | 'normal'
+  | 'destructive'
+  | 'asset_required'
+  | 'existing_task_only'
+  | 'long_running'
+  | 'quota_guarded'
+
+export interface OperationPolicy {
+  operation_risk: OperationRisk
+  requires_operation_confirmation: boolean
+  requires_uploaded_asset: boolean
+  requires_existing_task: boolean
+  is_destructive: boolean
+  is_long_running: boolean
+  max_default_chars?: number | null
+  requires_confirmation_above_chars?: number | null
+  hard_block_above_chars_without_confirm?: number | null
+  operation_note?: string | null
+}
+
 export type Category = {
   id: string
   label: string
@@ -58,6 +79,7 @@ export type Capability = {
   cost_note: string
   has_handler: boolean
   billing_policy: BillingPolicy
+  operation_policy: OperationPolicy
 }
 
 export type Model = {

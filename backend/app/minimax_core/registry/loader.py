@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-from ..contracts import BillingPolicy, CapabilitySpec, ModelSpec
+from ..contracts import BillingPolicy, CapabilitySpec, ModelSpec, OperationPolicy
 from .model_registry import ModelRegistry
 from .capability_registry import CapabilityRegistry
 
@@ -117,6 +117,20 @@ def load_capability_specs() -> list[CapabilitySpec]:
             official_pricing_note=raw_bp.get("official_pricing_note", ""),
         )
 
+        raw_op = raw.get("operation_policy", {})
+        operation_policy = OperationPolicy(
+            operation_risk=raw_op.get("operation_risk", "normal"),
+            requires_operation_confirmation=bool(raw_op.get("requires_operation_confirmation", False)),
+            requires_uploaded_asset=bool(raw_op.get("requires_uploaded_asset", False)),
+            requires_existing_task=bool(raw_op.get("requires_existing_task", False)),
+            is_destructive=bool(raw_op.get("is_destructive", False)),
+            is_long_running=bool(raw_op.get("is_long_running", False)),
+            max_default_chars=raw_op.get("max_default_chars"),
+            requires_confirmation_above_chars=raw_op.get("requires_confirmation_above_chars"),
+            hard_block_above_chars_without_confirm=raw_op.get("hard_block_above_chars_without_confirm"),
+            operation_note=raw_op.get("operation_note"),
+        )
+
         spec = CapabilitySpec(
             id=cap_id,
             name=raw.get("label", cap_id),
@@ -136,6 +150,7 @@ def load_capability_specs() -> list[CapabilitySpec]:
             status=status,
             requires_model=bool(raw.get("requires_model", True)),
             billing_policy=billing_policy,
+            operation_policy=operation_policy,
         )
         specs.append(spec)
 

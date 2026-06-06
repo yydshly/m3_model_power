@@ -128,6 +128,121 @@ export default function CapabilityPage() {
         </div>
       </section>
 
+      {/* Operation policy display */}
+      <section className="mt-4">
+        {cap.operation_policy.is_destructive && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <span className="text-red-500 mt-0.5">⚠️</span>
+            <div>
+              <div className="font-semibold">破坏性操作：执行前请确认资源 ID，删除后可能无法恢复。</div>
+              {cap.operation_policy.operation_note && (
+                <div className="text-xs mt-0.5 text-red-600">{cap.operation_policy.operation_note}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {cap.operation_policy.requires_uploaded_asset && !cap.operation_policy.is_destructive && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <span className="text-amber-500 mt-0.5">ℹ️</span>
+            <div>
+              <div className="font-semibold">素材要求：请确认素材来源、隐私、版权和文件大小。</div>
+              {cap.operation_policy.operation_note && (
+                <div className="text-xs mt-0.5 text-amber-600">{cap.operation_policy.operation_note}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {cap.operation_policy.requires_existing_task && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+            <span className="text-blue-500 mt-0.5">ℹ️</span>
+            <div>
+              <div className="font-semibold">仅限已有任务：需要 task_id / file_id，不会自动创建任务。</div>
+              {cap.operation_policy.operation_note && (
+                <div className="text-xs mt-0.5 text-blue-600">{cap.operation_policy.operation_note}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {cap.operation_policy.is_long_running && !cap.operation_policy.requires_existing_task && (
+          <div className="mb-3 flex items-start gap-2 rounded border border-purple-200 bg-purple-50 p-3 text-sm text-purple-800">
+            <span className="text-purple-500 mt-0.5">⏱️</span>
+            <div>
+              <div className="font-semibold">长任务 / 高消耗：执行前请确认额度和预期成本。</div>
+              {cap.operation_policy.operation_note && (
+                <div className="text-xs mt-0.5 text-purple-600">{cap.operation_policy.operation_note}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+            <div>
+              <span className="text-slate-500">操作风险类别：</span>
+              <span className={`font-medium ${operationRiskColor(cap.operation_policy.operation_risk)}`}>
+                {operationRiskLabel(cap.operation_policy.operation_risk)}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">破坏性操作：</span>
+              <span className={cap.operation_policy.is_destructive ? 'text-red-600 font-medium' : 'text-slate-600'}>
+                {cap.operation_policy.is_destructive ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">需要素材：</span>
+              <span className={cap.operation_policy.requires_uploaded_asset ? 'text-amber-600 font-medium' : 'text-slate-600'}>
+                {cap.operation_policy.requires_uploaded_asset ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">仅限已有任务：</span>
+              <span className={cap.operation_policy.requires_existing_task ? 'text-blue-600 font-medium' : 'text-slate-600'}>
+                {cap.operation_policy.requires_existing_task ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">长任务：</span>
+              <span className={cap.operation_policy.is_long_running ? 'text-purple-600 font-medium' : 'text-slate-600'}>
+                {cap.operation_policy.is_long_running ? '是' : '否'}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">需操作确认：</span>
+              <span className={cap.operation_policy.requires_operation_confirmation ? 'text-rose-600 font-medium' : 'text-slate-600'}>
+                {cap.operation_policy.requires_operation_confirmation ? '是' : '否'}
+              </span>
+            </div>
+            {cap.operation_policy.max_default_chars != null && (
+              <div>
+                <span className="text-slate-500">默认字符上限：</span>
+                <span className="text-slate-700">{cap.operation_policy.max_default_chars} 字</span>
+              </div>
+            )}
+            {cap.operation_policy.requires_confirmation_above_chars != null && (
+              <div>
+                <span className="text-slate-500">确认阈值：</span>
+                <span className="text-slate-700">{cap.operation_policy.requires_confirmation_above_chars} 字以上需确认</span>
+              </div>
+            )}
+            {cap.operation_policy.hard_block_above_chars_without_confirm != null && (
+              <div>
+                <span className="text-slate-500">无确认硬阻断：</span>
+                <span className="text-slate-700">{cap.operation_policy.hard_block_above_chars_without_confirm} 字以上禁止执行</span>
+              </div>
+            )}
+          </div>
+          {cap.operation_policy.operation_note && (
+            <div className="mt-2 pt-2 border-t border-slate-200 text-slate-600">
+              <span className="text-slate-500">操作说明：</span>{cap.operation_policy.operation_note}
+            </div>
+          )}
+        </div>
+      </section>
+
       <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
         <span>
           <span className="text-slate-400">上游：</span>
@@ -251,4 +366,28 @@ function billingCategoryColor(cat: string): string {
     asset_required_confirm_required: 'text-orange-600',
   }
   return map[cat] ?? 'text-slate-600'
+}
+
+function operationRiskLabel(risk: string): string {
+  const map: Record<string, string> = {
+    normal: '普通操作',
+    destructive: '破坏性操作',
+    asset_required: '素材型操作',
+    existing_task_only: '仅限已有任务',
+    long_running: '长任务',
+    quota_guarded: '额度保护',
+  }
+  return map[risk] ?? risk
+}
+
+function operationRiskColor(risk: string): string {
+  const map: Record<string, string> = {
+    normal: 'text-emerald-600',
+    destructive: 'text-red-600',
+    asset_required: 'text-amber-600',
+    existing_task_only: 'text-blue-600',
+    long_running: 'text-purple-600',
+    quota_guarded: 'text-orange-600',
+  }
+  return map[risk] ?? 'text-slate-600'
 }

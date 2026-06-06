@@ -290,6 +290,24 @@ python scripts/sync_minimax_models.py
 
 详情见 [docs/MINIMAX_FULL_CAPABILITY_MATRIX.md](docs/MINIMAX_FULL_CAPABILITY_MATRIX.md#6-收费--高成本能力提示矩阵)。
 
+## 操作风险保护层
+
+本项目不仅区分计费风险，也区分操作风险：
+
+| 操作风险类别 | 能力 | 说明 |
+|---|---|---|
+| 破坏性操作 | `file-delete` / `voice-delete` | 删除后不可恢复，执行前必须二次确认 |
+| 素材型操作 | `file-upload` / `image-i2i` / `voice-clone-upload-audio` / `voice-clone-upload-prompt` / `music-cover-prep` | 需确认素材来源、隐私、版权 |
+| 仅已有任务 | `video-query` / `video-download` | 只操作已有任务，不会自动创建视频任务 |
+| 长任务/高成本 | `video-t2v` / `video-i2v` / `video-s2v` | 必须用户显式确认后才执行 |
+| 额度保护 | `tts-async` | <=300字允许默认测试；>1000字需二次确认；>5000字无确认禁止执行 |
+
+**重要原则**：
+
+1. 未经确认，不执行高成本、破坏性、素材型能力。
+2. 操作风险保护与计费风险独立：同一个能力可能同时标记为高成本和长任务。
+3. 详情见 [docs/MINIMAX_FULL_CAPABILITY_MATRIX.md](docs/MINIMAX_FULL_CAPABILITY_MATRIX.md#7-操作风险保护矩阵)。
+
 ## 安全注意
 
 - API Key 仅存在 `backend/.env`，前端永远不接触 Key
