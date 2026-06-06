@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import {
   getVerificationIndex,
   getVerificationSummary,
+  getTestConsoleHistory,
   invoke,
   riskCheck,
   type Capability,
   type RiskCheckResult,
+  type TestConsoleHistoryItem,
   type VerificationIndex,
   type VerificationSummary,
 } from '../api'
@@ -165,6 +167,7 @@ function RiskCheckPanel({
   confirmations,
   onConfirmationsChange,
   onClose,
+  onDone,
 }: {
   cap: Capability
   payload: string
@@ -172,6 +175,7 @@ function RiskCheckPanel({
   confirmations: Record<string, boolean>
   onConfirmationsChange: (c: Record<string, boolean>) => void
   onClose: () => void
+  onDone?: () => void
 }) {
   const required = getRequiredConfirmations(cap)
   const [result, setResult] = useState<RiskCheckResult | null>(null)
@@ -190,8 +194,10 @@ function RiskCheckPanel({
     try {
       const r = await riskCheck(cap.id, parsedPayload as Record<string, unknown>, confirmations)
       setResult(r)
+      onDone?.()
     } catch (e: any) {
       setErr(e.message)
+      onDone?.()
     } finally {
       setLoading(false)
     }
@@ -273,6 +279,7 @@ function InvokePanel({
   confirmations,
   onConfirmationsChange,
   onClose,
+  onDone,
 }: {
   cap: Capability
   payload: string
@@ -280,6 +287,7 @@ function InvokePanel({
   confirmations: Record<string, boolean>
   onConfirmationsChange: (c: Record<string, boolean>) => void
   onClose: () => void
+  onDone?: () => void
 }) {
   const required = getRequiredConfirmations(cap)
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
@@ -305,8 +313,10 @@ function InvokePanel({
       } else {
         setResult(res)
       }
+      onDone?.()
     } catch (e: any) {
       setErr(String(e))
+      onDone?.()
     } finally {
       setLoading(false)
     }
@@ -388,6 +398,16 @@ export default function TestConsole() {
   const [filterScope, setFilterScope] = useState<string>('all')
   const [filterCat, setFilterCat] = useState<string>('all')
   const [search, setSearch] = useState<string>('')
+  const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+
+  const refreshHistory = () => {
+    getTestConsoleHistory(50)
+      .then(r => { setHistory(r.items); setHistoryErr(null) })
+      .catch((e: any) => setHistoryErr(e.message))
+  }
+
+  useEffect(() => { refreshHistory() }, [])
 
   useEffect(() => {
     getVerificationSummary()
@@ -474,6 +494,51 @@ export default function TestConsole() {
             style={{ width: `${Math.min(completionPct, 100)}%` }}
           />
         </div>
+      </div>
+
+      {/* ── History Panel ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-slate-800">调用历史</h3>
+          <button
+            onClick={refreshHistory}
+            className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+          >
+            刷新历史
+          </button>
+        </div>
+
+        {historyErr && (
+          <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        {history.length === 0 && !historyErr ? (
+          <p className="text-sm text-slate-400">暂无历史记录</p>
+        ) : (
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {history.map((item) => {
+              const ok = item.result?.ok ?? item.result?.allowed ?? false
+              const err = item.result?.error ?? (item.result?.blocked_reasons?.length ? item.result.blocked_reasons.join('; ') : null)
+              const time = item.created_at ? new Date(item.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
+              return (
+                <div key={item.id} className="flex items-start gap-3 text-xs border-b border-slate-100 pb-1 last:border-0">
+                  <span className="text-slate-400 shrink-0 w-20">{time}</span>
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${item.action === 'risk_check' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                    {item.action === 'risk_check' ? 'RC' : 'INV'}
+                  </span>
+                  <span className="font-mono text-slate-700">{item.capability_id}</span>
+                  <span className={`shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
+                    {ok ? '✓' : '✗'}
+                  </span>
+                  {err && <span className="text-red-500 truncate">{err}</span>}
+                  <span className="ml-auto text-slate-400 shrink-0">
+                    {item.payload_summary.payload_size_chars > 0 ? `${item.payload_summary.payload_size_chars} chars` : ''}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Filter bar ── */}
@@ -587,6 +652,7 @@ export default function TestConsole() {
               confirmations={confirmations[selectedCap.id] ?? {}}
               onConfirmationsChange={(c) => setConfirmations({ ...confirmations, [selectedCap.id]: c })}
               onClose={() => { setPanelType('none'); setSelectedCapId(null) }}
+              onDone={refreshHistory}
             />
           )}
           {panelType === 'invoke' && (
@@ -597,6 +663,7 @@ export default function TestConsole() {
               confirmations={confirmations[selectedCap.id] ?? {}}
               onConfirmationsChange={(c) => setConfirmations({ ...confirmations, [selectedCap.id]: c })}
               onClose={() => { setPanelType('none'); setSelectedCapId(null) }}
+              onDone={refreshHistory}
             />
           )}
         </div>

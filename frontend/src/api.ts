@@ -259,3 +259,33 @@ export async function getVerificationIndex(): Promise<VerificationIndex> {
   if (!r.ok) throw new Error(`verification index ${r.status}`)
   return r.json()
 }
+
+// ── Test Console History ──────────────────────────────────────────────
+
+export type TestConsoleHistoryItem = {
+  id: string
+  created_at: string
+  action: 'risk_check' | 'invoke'
+  capability_id: string
+  payload_summary: {
+    payload_keys: string[]
+    payload_size_chars: number
+    payload_preview: string
+  }
+  confirmations: Record<string, boolean>
+  result: {
+    ok?: boolean
+    allowed?: boolean
+    status?: number | null
+    error?: string | null
+    blocked_reasons?: string[]
+    required_confirmations?: string[]
+    warnings?: string[]
+  }
+}
+
+export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestConsoleHistoryItem[] }> {
+  const r = await fetch(`/api/history/test-console?limit=${limit}`)
+  if (!r.ok) throw new Error(`history ${r.status}`)
+  return r.json()
+}

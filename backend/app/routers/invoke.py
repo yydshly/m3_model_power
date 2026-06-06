@@ -15,6 +15,7 @@ from ..minimax.client import MiniMaxError
 from ..minimax_core.guards.risk_gate import evaluate_capability_risk
 from ..registry import HANDLERS, get_registry
 from ..minimax_core.registry.loader import get_capability_registry
+from ..minimax_core.verification.history_store import append_history
 
 router = APIRouter(prefix="/invoke", tags=["invoke"])
 
@@ -52,26 +53,47 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
     if core_cap is not None:
         decision = evaluate_capability_risk(core_cap, confirmations=confirmations, payload=payload)
         if not decision.allowed:
-            return JSONResponse(
-                status_code=403,
-                content={
-                    "error": "risk_gate_blocked",
-                    "message": (
-                        f"Capability '{cap.label}' requires explicit confirmation before execution. "
-                        f"Required: {decision.required_confirmations}. "
-                        f"Reasons: {'; '.join(decision.blocked_reasons)}"
-                    ),
-                    "blocked_reasons": decision.blocked_reasons,
-                    "required_confirmations": decision.required_confirmations,
-                    "warnings": decision.warnings,
-                },
+            content = {
+                "error": "risk_gate_blocked",
+                "message": (
+                    f"Capability '{cap.label}' requires explicit confirmation before execution. "
+                    f"Required: {decision.required_confirmations}. "
+                    f"Reasons: {'; '.join(decision.blocked_reasons)}"
+                ),
+                "blocked_reasons": decision.blocked_reasons,
+                "required_confirmations": decision.required_confirmations,
+                "warnings": decision.warnings,
+            }
+            append_history(
+                action="invoke",
+                capability_id=cap_id,
+                payload=payload,
+                confirmations=confirmations,
+                result={"ok": False, "allowed": False, **content},
             )
+            return JSONResponse(status_code=403, content=content)
 
     try:
         result = await handler(payload)
     except MiniMaxError as e:
+        content = {"error": "minimax_error", "status": e.status, "message": e.message}
+        append_history(
+            action="invoke",
+            capability_id=cap_id,
+            payload=payload,
+            confirmations=confirmations,
+            result={"ok": False, "error": e.error, "status": e.status, "message": e.message},
+        )
         return JSONResponse(
             status_code=502 if e.status >= 500 else e.status,
-            content={"error": "minimax_error", "status": e.status, "message": e.message},
+            content=content,
         )
-    return JSONResponse(content={"ok": True, "data": result})
+    content = {"ok": True, "data": result}
+    append_history(
+        action="invoke",
+        capability_id=cap_id,
+        payload=payload,
+        confirmations=confirmations,
+        result={"ok": True},
+    )
+    return JSONResponse(content=content)

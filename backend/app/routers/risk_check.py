@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..minimax_core.guards.risk_gate import evaluate_capability_risk
 from ..minimax_core.registry.loader import get_capability_registry
+from ..minimax_core.verification.history_store import append_history
 
 router = APIRouter(prefix="/capabilities", tags=["risk-check"])
 
@@ -37,4 +38,12 @@ async def risk_check(cap_id: str, body: RiskCheckRequest) -> dict:
         confirmations=body.confirmations or {},
         payload=body.payload or {},
     )
-    return decision.to_dict()
+    result = decision.to_dict()
+    append_history(
+        action="risk_check",
+        capability_id=cap_id,
+        payload=body.payload,
+        confirmations=body.confirmations,
+        result=result,
+    )
+    return result
