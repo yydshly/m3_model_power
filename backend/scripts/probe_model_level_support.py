@@ -22,7 +22,8 @@ probe 范围（--scope low-cost 默认）：
   python scripts/probe_model_level_support.py --chat             # 只测 chat
   python scripts/probe_model_level_support.py --speech           # 只测 speech
   python scripts/probe_model_level_support.py --image            # 只测 image
-  python scripts/probe_model_level_support.py --music             # 只测 music
+  python scripts/probe_model_level_support.py --music            # 只测 music
+  python scripts/probe_model_level_support.py --diagnose-auth    # 诊断鉴权配置
   python scripts/probe_model_level_support.py --dry-run          # 只打印，不执行
 
 输出：
@@ -64,6 +65,100 @@ def _load_env() -> dict:
             k, v = line.split("=", 1)
             env[k.strip()] = v.strip().strip('"').strip("'")
     return env
+
+
+def _redact_key(key: str) -> str:
+    """脱敏 Key，只显示前4后4位。"""
+    if not key or len(key) <= 8:
+        return "***"
+    return f"{key[:4]}***{key[-4:]}"
+
+
+# ── auth diagnosis ───────────────────────────────────────────────────────────────
+
+def diagnose_auth() -> dict:
+    """诊断 native API 鉴权配置，与 verify_minimax_capabilities.py 对齐。
+
+    诊断重点：
+    1. key 来源（MINIMAX_TOKEN_PLAN_KEY vs MINIMAX_API_KEY）
+    2. base_url / headers / endpoint 是否正确
+    3. group_id 是否被传递（verify 不传，probe 之前传了）
+    """
+    env = _load_env()
+
+    # Key source - 与 verify_minimax_capabilities.py 保持一致：只用 MINIMAX_API_KEY
+    token_plan_key = env.get("MINIMAX_TOKEN_PLAN_KEY", "")
+    api_key = env.get("MINIMAX_API_KEY", "")
+
+    key_source = "MINIMAX_API_KEY"
+    key_preview = _redact_key(api_key)
+    token_used = api_key
+
+    if token_plan_key and not api_key:
+        key_source = "MINIMAX_TOKEN_PLAN_KEY"
+        key_preview = _redact_key(token_plan_key)
+        token_used = token_plan_key
+
+    token_empty = not bool(token_used)
+    token_prefix = token_used[:4] if token_used else ""
+
+    # Native client base URL
+    native_base_url = "https://api.minimaxi.com/v1"
+
+    # Check headers that would be sent
+    headers_present = {
+        "authorization": bool(token_used),
+        "content_type": True,  # always present for JSON
+    }
+
+    # Endpoints
+    tts_endpoint = "/t2a_v2"
+    image_endpoint = "/image_generation"
+    music_endpoint = "/music_generation"
+
+    return {
+        "key_source": key_source,
+        "key_preview": key_preview,
+        "native_base_url": native_base_url,
+        "tts_endpoint": tts_endpoint,
+        "image_endpoint": image_endpoint,
+        "music_endpoint": music_endpoint,
+        "headers_present": headers_present,
+        "content_type": "application/json",
+        "token_empty": token_empty,
+        "token_prefix": token_prefix,
+        "has_token_plan_key": bool(token_plan_key),
+        "has_api_key": bool(api_key),
+        "group_id_from_env": env.get("MINIMAX_GROUP_ID", "") or None,
+    }
+
+
+def print_diagnose_auth_report() -> None:
+    """诊断模式：打印鉴权信息并退出。"""
+    d = diagnose_auth()
+    print("=" * 60)
+    print("Native API 鉴权诊断报告")
+    print("=" * 60)
+    print(f"  key_source:          {d['key_source']}")
+    print(f"  key_preview:         {d['key_preview']}")
+    print(f"  token_empty:         {d['token_empty']}")
+    print(f"  token_prefix:        {d['token_prefix']}")
+    print(f"  native_base_url:     {d['native_base_url']}")
+    print(f"  tts_endpoint:        {d['tts_endpoint']}")
+    print(f"  image_endpoint:      {d['image_endpoint']}")
+    print(f"  music_endpoint:      {d['music_endpoint']}")
+    print(f"  headers_present:     authorization={d['headers_present']['authorization']}, content_type={d['headers_present']['content_type']}")
+    print(f"  group_id_from_env:   {d['group_id_from_env'] or '(未设置)'}")
+    print(f"  has_token_plan_key: {d['has_token_plan_key']}")
+    print(f"  has_api_key:        {d['has_api_key']}")
+    print()
+    print("说明：")
+    print("  - 与 verify_minimax_capabilities.py 对齐：使用 MINIMAX_API_KEY")
+    print("  - native API 不传 group_id（verify 也不传）")
+    print("  - 1004 错误表示 Token/鉴权问题，非模型不可用")
+    print("=" * 60)
+    print()
+    print(json.dumps(d, ensure_ascii=False, indent=2))
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────────
@@ -115,8 +210,8 @@ def _chat_anthropic_via_httpx(
 ) -> tuple[dict, float, int]:
     """直接用 httpx 调 Anthropic messages。
 
-    修正：max_tokens=64（原来4太小，会触发thinking block截断）。
-    prompt 改为中文，避免 max_tokens=4 时回复不完整。
+    修正：max_tokens=256（原来4太小，会触发thinking block截断）。
+    prompt 改为英文 "Reply exactly: OK"，避免语言影响 max_tokens 利用率。
     """
     headers = {
         "x-api-key": api_key,
@@ -129,9 +224,9 @@ def _chat_anthropic_via_httpx(
 
     payload = {
         "model": model_id,
-        "max_tokens": 64,
+        "max_tokens": 256,
         "temperature": 0,
-        "messages": [{"role": "user", "content": "请只输出 OK 两个字，不要解释。"}],
+        "messages": [{"role": "user", "content": "Reply exactly: OK"}],
     }
     url = f"{ANTHROPIC_BASE}/messages"
     start = time.perf_counter()
@@ -184,7 +279,7 @@ def make_result(
 
 def _classify_status(
     http_status: int,
-    base_resp_success: bool | None,
+    base_resp_status: int | None,
     output_present: bool | None,
     parser_recognized: bool,
 ) -> tuple[str, str, str]:
@@ -194,7 +289,8 @@ def _classify_status(
 
     分类规则：
       HTTP non-2xx          → failed
-      HTTP 200 + base_resp.status_code != 0 → failed
+      HTTP 200 + base_resp.status_code == 1004 → auth_or_token_mismatch
+      HTTP 200 + base_resp.status_code != 0 && != 1004 → failed (api_error)
       HTTP 200 + base_resp.status_code == 0 + output_present + parser_recognized → success
       HTTP 200 + base_resp.status_code == 0 + output_present + NOT parser_recognized → parser_mismatch
       HTTP 200 + base_resp.status_code == 0 + NO output → http_success_but_output_missing
@@ -205,8 +301,11 @@ def _classify_status(
     if not raw_http_ok:
         return "failed", "http_non_2xx", "none"
 
-    if base_resp_success is False:
-        return "failed", "base_resp_nonzero", "none"
+    if base_resp_status == 1004:
+        return "auth_or_token_mismatch", "base_resp_1004", "auth_error"
+
+    if base_resp_status is not None and base_resp_status != 0:
+        return "failed", "base_resp_nonzero", "api_error"
 
     if output_present is True and parser_recognized:
         return "success", "parsed", "matched"
@@ -302,11 +401,11 @@ def probe_chat_openai(api_key: str, group_id: str | None, dry_run: bool = False)
 
 
 def probe_chat_anthropic(api_key: str, group_id: str | None, dry_run: bool = False) -> list[dict]:
-    """Anthropic probe：max_tokens=64，handle thinking block。
+    """Anthropic probe：max_tokens=256，handle thinking block。
 
     修正点：
-    1. max_tokens 4→64，避免回复被截断
-    2. prompt 改为中文"请只输出 OK 两个字，不要解释。"
+    1. max_tokens 4→256，避免回复被截断
+    2. prompt 改为英文 "Reply exactly: OK"
     3. 遍历 content blocks，识别 type==text 和 type==thinking
     4. 没有 text 但有 thinking → probe_assertion_failed（接口通了但输出格式不符预期）
     5. 没有 text 也没有 thinking → http_success_but_output_missing
@@ -393,11 +492,12 @@ def probe_speech(native_client: MiniMaxNativeClient, dry_run: bool = False) -> l
     """Speech TTS probe。
 
     修正点：
-    1. 直接取 response.get("data", {}).get("audio")，不再假设 data 是 dict 且有子结构
-    2. 从 extra_info 解析 audio_format, audio_length, audio_size
-    3. 检查 base_resp.status_code == 0
-    4. audio 可以 hex 解码且 size > 0 才算成功
-    5. data.audio 不存在但 raw 有其他音频字段 → parser_mismatch
+    1. 与 verify_minimax_capabilities.py 对齐：不传 group_id 给 native client
+    2. 直接取 response.get("data", {}).get("audio")
+    3. 从 extra_info 解析 audio_format, audio_length, audio_size
+    4. 检查 base_resp.status_code == 0 或 1004
+    5. audio 可以 hex 解码且 size > 0 才算成功
+    6. base_resp.status_code == 1004 → auth_or_token_mismatch
     """
     results = []
     for model_id in SPEECH_MODELS:
@@ -452,7 +552,7 @@ def probe_speech(native_client: MiniMaxNativeClient, dry_run: bool = False) -> l
 
             final_status, parser_status, assertion_status = _classify_status(
                 http_status=200,
-                base_resp_success=base_resp_success,
+                base_resp_status=base_resp_status,
                 output_present=output_present,
                 parser_recognized=parser_recognized,
             )
@@ -500,9 +600,10 @@ def probe_image(native_client: MiniMaxNativeClient, dry_run: bool = False) -> li
 
     修正点：
     1. payload 加 response_format="url"，不加 style（image-01-live 也不要传 style）
-    2. 检查 base_resp.status_code == 0
-    3. 解析 data.image_urls（列表）和 metadata.success_count/failed_count（可能是字符串，转 int）
-    4. success: len(image_urls) >= 1 AND int(success_count) >= 1
+    2. 与 verify 对齐：不传 group_id
+    3. 检查 base_resp.status_code == 0 或 1004
+    4. 解析 data.image_urls（列表）和 metadata.success_count/failed_count（可能是字符串，转 int）
+    5. success: len(image_urls) >= 1 AND int(success_count) >= 1
     """
     results = []
     for model_id in IMAGE_MODELS:
@@ -558,7 +659,7 @@ def probe_image(native_client: MiniMaxNativeClient, dry_run: bool = False) -> li
 
             final_status, parser_status, assertion_status = _classify_status(
                 http_status=200,
-                base_resp_success=base_resp_success,
+                base_resp_status=base_resp_status,
                 output_present=output_present,
                 parser_recognized=parser_recognized,
             )
@@ -604,11 +705,12 @@ def probe_music(native_client: MiniMaxNativeClient, dry_run: bool = False) -> li
     """Music generation probe。
 
     修正点：
-    1. 取 response.get("data", {}).get("audio")，不是 audio_url/music_url
-    2. audio 是 URL（以 http 开头）还是 hex 字符串
-    3. 检查 base_resp.status_code == 0
-    4. URL 不下载，只记录 audio_url_present=true
-    5. hex 记录 audio_hex_present=true
+    1. 与 verify 对齐：不传 group_id
+    2. 取 response.get("data", {}).get("audio")，不是 audio_url/music_url
+    3. audio 是 URL（以 http 开头）还是 hex 字符串
+    4. 检查 base_resp.status_code == 0 或 1004
+    5. URL 不下载，只记录 audio_url_present=true
+    6. hex 记录 audio_hex_present=true
     """
     results = []
     model_id = "music-2.6"
@@ -672,7 +774,7 @@ def probe_music(native_client: MiniMaxNativeClient, dry_run: bool = False) -> li
 
         final_status, parser_status, assertion_status = _classify_status(
             http_status=200,
-            base_resp_success=base_resp_success,
+            base_resp_status=base_resp_status,
             output_present=output_present,
             parser_recognized=parser_recognized,
         )
@@ -722,8 +824,14 @@ def main() -> None:
     parser.add_argument("--speech", action="store_true", help="Only probe speech models")
     parser.add_argument("--image", action="store_true", help="Only probe image models")
     parser.add_argument("--music", action="store_true", help="Only probe music models")
+    parser.add_argument("--diagnose-auth", action="store_true", help="Print auth diagnostics and exit")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without executing")
     args = parser.parse_args()
+
+    # Diagnose mode - print and exit
+    if args.diagnose_auth:
+        print_diagnose_auth_report()
+        return
 
     dry_run = args.dry_run or args.scope == "dry-run"
 
@@ -732,15 +840,18 @@ def main() -> None:
 
     if not dry_run:
         env = _load_env()
-        api_key = env.get("MINIMAX_TOKEN_PLAN_KEY") or env.get("MINIMAX_API_KEY", "")
+        # 与 verify_minimax_capabilities.py 对齐：只用 MINIMAX_API_KEY
+        api_key = env.get("MINIMAX_API_KEY", "")
         if not api_key:
-            print("ERROR: API key not configured", file=sys.stderr)
+            print("ERROR: MINIMAX_API_KEY not configured", file=sys.stderr)
             sys.exit(1)
+        # OpenAI/Anthropic chat 允许传 group_id（不影响 API 响应）
         group_id = env.get("MINIMAX_GROUP_ID") or None
+        # Native API 不传 group_id（与 verify 对齐）
         native_client = MiniMaxNativeClient(
             api_key=api_key,
             timeout=120.0,
-            group_id=group_id,
+            group_id=None,  # 与 verify 对齐，native API 不传 group_id
         )
     else:
         api_key = ""
@@ -783,10 +894,12 @@ def main() -> None:
     probe_assertion_failed = sum(1 for r in all_results if r["probe_status"] == "probe_assertion_failed")
     parser_mismatch = sum(1 for r in all_results if r["probe_status"] == "parser_mismatch")
     http_success_but_missing = sum(1 for r in all_results if r["probe_status"] == "http_success_but_output_missing")
+    auth_or_token_mismatch = sum(1 for r in all_results if r["probe_status"] == "auth_or_token_mismatch")
 
     print(f"Results: {success} success, {failed} failed, {skipped} skipped, "
           f"{probe_assertion_failed} probe_assertion_failed, {parser_mismatch} parser_mismatch, "
-          f"{http_success_but_missing} http_success_but_output_missing ({len(all_results)} total)")
+          f"{http_success_but_missing} http_success_but_output_missing, "
+          f"{auth_or_token_mismatch} auth_or_token_mismatch ({len(all_results)} total)")
 
     if not dry_run:
         report = {
@@ -800,6 +913,7 @@ def main() -> None:
                 "probe_assertion_failed": probe_assertion_failed,
                 "parser_mismatch": parser_mismatch,
                 "http_success_but_output_missing": http_success_but_missing,
+                "auth_or_token_mismatch": auth_or_token_mismatch,
             },
             "results": all_results,
         }

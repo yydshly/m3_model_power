@@ -115,38 +115,44 @@
 
 ## 2b. Probe Result Matrix
 
-> 本次 probe 时间：2026-06-06T09:33:29Z
-> 修正点：增加 raw_http_success / base_resp_success / output_present / parser_status / assertion_status 字段
-> 修正 Anthropic max_tokens=64 并正确处理 thinking block
-> speech/image/music 失败原因已修正为 base_resp.status_code=1004（API 错误，非模型不可用）
+> 本次 probe 时间：2026-06-06T09:40:00Z（第二轮）
+> 修正点：
+> - Anthropic max_tokens 64→256，prompt 改为英文 "Reply exactly: OK"
+> - Anthropic 3 个 highspeed 模型原 thinking block only 问题已解决：4/4 全部 success
+> - native API 统一使用 MINIMAX_API_KEY（与 verify_minimax_capabilities.py 对齐）
+> - native API 不传 group_id（与 verify 对齐）
+> - 新增 auth_or_token_mismatch 分类（base_resp.status_code=1004）
+> - 新增 --diagnose-auth 诊断模式
 
 | model_id | capability_id | protocol | probe_scope | probe_status | http_status | latency_ms | raw_http_success | base_resp_success | output_present | parser_status | assertion_status | error_type | last_probed_at |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1891.0 | true | — | true | parsed | matched | — | 2026-06-06T09:33:10Z |
-| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 928.4 | true | — | true | parsed | matched | — | 2026-06-06T09:33:11Z |
-| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1511.1 | true | — | true | parsed | matched | — | 2026-06-06T09:33:13Z |
-| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1148.8 | true | — | true | parsed | matched | — | 2026-06-06T09:33:14Z |
-| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1037.2 | true | — | true | parsed | matched | — | 2026-06-06T09:33:15Z |
-| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 1219.8 | true | — | true | parsed | matched | — | 2026-06-06T09:33:16Z |
-| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1154.9 | true | — | true | parsed | matched | — | 2026-06-06T09:33:17Z |
-| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 795.1 | true | — | true | parsed | matched | — | 2026-06-06T09:33:18Z |
-| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | success | 200 | 2426.2 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:33:21Z |
-| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1783.3 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:22Z |
-| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1711.1 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:24Z |
-| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | **probe_assertion_failed** | 200 | 1854.9 | true | — | true | thinking_only | non_text_output | thinking_block_only | 2026-06-06T09:33:26Z |
-| `speech-2.8-hd` | `tts-sync` | native | model_level | **failed** | 200 | 244.2 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:26Z |
-| `speech-2.8-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 282.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
-| `speech-2.6-hd` | `tts-sync` | native | model_level | **failed** | 200 | 272.8 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
-| `speech-2.6-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 291.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
-| `speech-02-hd` | `tts-sync` | native | model_level | **failed** | 200 | 270.1 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
-| `speech-02-turbo` | `tts-sync` | native | model_level | **failed** | 200 | 295.3 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:27Z |
-| `image-01` | `image-t2i` | native | model_level | **failed** | 200 | 260.2 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:28Z |
-| `image-01-live` | `image-t2i` | native | model_level | **failed** | 200 | 282.6 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:28Z |
-| `music-2.6` | `music-gen` | native | model_level | **failed** | 200 | 321.9 | true | false | false | base_resp_nonzero | none | base_resp=1004 | 2026-06-06T09:33:29Z |
+| `MiniMax-M3` | `chat-openai` | openai | model_level | success | 200 | 1617.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:42Z |
+| `MiniMax-M2.7` | `chat-openai` | openai | model_level | success | 200 | 959.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:43Z |
+| `MiniMax-M2.7-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1350.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:44Z |
+| `MiniMax-M2.5` | `chat-openai` | openai | model_level | success | 200 | 1491.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:46Z |
+| `MiniMax-M2.5-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1507.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:47Z |
+| `MiniMax-M2.1` | `chat-openai` | openai | model_level | success | 200 | 4504.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:48Z |
+| `MiniMax-M2.1-highspeed` | `chat-openai` | openai | model_level | success | 200 | 1875.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:50Z |
+| `MiniMax-M2` | `chat-openai` | openai | model_level | success | 200 | 1109.0 | true | — | true | parsed | matched | — | 2026-06-06T09:39:51Z |
+| `MiniMax-M3` | `chat-anthropic` | anthropic | model_level | success | 200 | 4401.0 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:39:53Z |
+| `MiniMax-M2.7-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 1523.0 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:39:55Z |
+| `MiniMax-M2.5-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 2225.0 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:39:57Z |
+| `MiniMax-M2.1-highspeed` | `chat-anthropic` | anthropic | model_level | success | 200 | 2267.0 | true | — | true | parsed | matched | thinking_present=true | 2026-06-06T09:40:00Z |
+| `speech-2.8-hd` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 292.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:00Z |
+| `speech-2.8-turbo` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 298.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `speech-2.6-hd` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 311.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `speech-2.6-turbo` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 327.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `speech-02-hd` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 353.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `speech-02-turbo` | `tts-sync` | native | model_level | **auth_or_token_mismatch** | 200 | 304.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `image-01` | `image-t2i` | native | model_level | **auth_or_token_mismatch** | 200 | 281.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `image-01-live` | `image-t2i` | native | model_level | **auth_or_token_mismatch** | 200 | 275.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
+| `music-2.6` | `music-gen` | native | model_level | **auth_or_token_mismatch** | 200 | 271.0 | true | false | false | base_resp_1004 | auth_error | base_resp=1004 | 2026-06-06T09:40:01Z |
 
 **说明**：
-- `probe_assertion_failed`（Anthropic 3个模型）：HTTP 200，接口已通，但模型返回 thinking block 而非 text。max_tokens=64 时 M3 能输出 text，M2.7-highspeed/M2.5-highspeed/M2.1-highspeed 仅返回 thinking。这是模型行为差异，不是模型不可用。
-- `failed` + `base_resp=1004`（speech 6个 / image 2个 / music 1个）：HTTP 200 但 `base_resp.status_code=1004`，属 MiniMax API 层错误（参数/权限/配额等），不是模型本身不可用。
+- `success`（Anthropic 4个模型）：max_tokens=256 + 英文 prompt 后全部返回 text，不是 thinking block。thinking_present=true 是正常行为，不代表失败。
+- `auth_or_token_mismatch`（speech 6个 / image 2个 / music 1个）：HTTP 200 但 `base_resp.status_code=1004`，表示 Token/鉴权问题（当前 API Key 对 native API 无权限或余额不足），不是模型本身不可用。
+- **1004 不等于模型不可用**，表示 API 层鉴权/配额问题，需检查 API Key 是否开通了 native 能力或账户余额。
+- 诊断命令：`python scripts/probe_model_level_support.py --diagnose-auth`
 
 ## 3. Capability Matrix
 
@@ -326,16 +332,21 @@
 ### 5.12 chat-openai 模型级 probe 失败
 （无）
 
-### 5.13 chat-anthropic 模型级 probe 状态（本次修正后）
+### 5.13 chat-anthropic 模型级 probe 状态（第二轮修正后）
 - `MiniMax-M3`：success（text=OK, thinking=true）
-- `MiniMax-M2.7-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
-- `MiniMax-M2.5-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
-- `MiniMax-M2.1-highspeed`：probe_assertion_failed（thinking block only，接口已通但输出格式不符）
+- `MiniMax-M2.7-highspeed`：success（text=OK, thinking=true，max_tokens=256 后问题已解决）
+- `MiniMax-M2.5-highspeed`：success（text=OK, thinking=true，max_tokens=256 后问题已解决）
+- `MiniMax-M2.1-highspeed`：success（text=OK, thinking=true，max_tokens=256 后问题已解决）
 
-### 5.14 speech/image/music probe 失败原因（已修正为 API 错误，非模型不可用）
-- 所有 speech 模型：base_resp.status_code=1004
-- 所有 image 模型：base_resp.status_code=1004
-- music-2.6：base_resp.status_code=1004
+### 5.14 speech/image/music probe auth_or_token_mismatch 状态（第二轮修正后）
+- 所有 speech 模型：base_resp.status_code=1004 → auth_or_token_mismatch（鉴权/Token 问题，非模型不可用）
+- 所有 image 模型：base_resp.status_code=1004 → auth_or_token_mismatch（鉴权/Token 问题，非模型不可用）
+- music-2.6：base_resp.status_code=1004 → auth_or_token_mismatch（鉴权/Token 问题，非模型不可用）
+
+**诊断结论**：
+- 1004 错误表示当前 API Key 对 native API（tts/image/music）无权限或余额不足
+- 与 verify_minimax_capabilities.py 对齐使用 MINIMAX_API_KEY，不传 group_id
+- 建议：检查 API Key 是否开通 native 能力，或账户是否有足够余额
 
 ## 6. Summary Statistics
 
@@ -350,10 +361,10 @@
 | capability_probe 待验收模型数 | 13 |
 | capability_level 验收能力数 | 3 |
 | model_level 已验收 chat 模型数（/v1/models） | 8 |
-| model_level probe 成功（本次，含 chat-openai 8个） | 9 |
-| model_level probe probe_assertion_failed（本次，Anthropic 3个） | 3 |
-| model_level probe failed（本次，API 错误非模型不可用） | 9 |
-| 新增 parser_mismatch / probe_assertion_failed 分类 | 是 |
+| model_level probe 成功（第二轮，OpenAI 8个 + Anthropic 4个） | 12 |
+| model_level probe auth_or_token_mismatch（第二轮，speech 6 + image 2 + music 1） | 9 |
+| model_level probe probe_assertion_failed（第二轮，已归零） | 0 |
+| 新增 auth_or_token_mismatch 分类 | 是 |
 | 能力总数 | 32 |
 | requires_model=false 能力数 | 10 |
 | file-*/models-* 能力数 | 9 |

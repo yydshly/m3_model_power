@@ -78,6 +78,10 @@ export default function ModelsPage() {
     if (probe === 'high_cost_pending') {
       return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-500">高成本暂缓</span>
     }
+    if (probe === 'auth_or_token_mismatch') {
+      // 1004 error - Token/鉴权问题，不是模型不可用
+      return <span className="inline-block px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">鉴权待排查</span>
+    }
     if (probe === 'failed') {
       // HTTP non-2xx or base_resp error - check if it was an API error vs model unavailable
       if (rawHttp === true) {
