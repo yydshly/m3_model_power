@@ -8,7 +8,7 @@ export default function ModelsPage() {
   const { registry } = useRegistry()
   if (!registry) return <div className="p-8 text-sm text-slate-500">加载中…</div>
 
-  const [fullMode, setFullMode] = useState(false)
+  const [fullMode, setFullMode] = useState(true)
   const [filters, setFilters] = useState({
     official_current: false,
     live_available: false,

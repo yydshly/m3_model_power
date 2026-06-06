@@ -733,6 +733,24 @@ models:
     discovery_note: Not returned by /v1/models; subscription_expected=false (free tier only).
     note: 免费限速版，所有用户可用，单价更低但 RPM 也受限。
 
+  - id: music-cover-free
+    label: music-cover-free
+    family: music
+    tier: standard
+    official_current: true
+    live_available: null
+    subscription_expected: false
+    enabled: false
+    input_modalities: [text, audio]
+    output_modalities: [music]
+    protocols: [native]
+    capabilities: [music-cover-prep]
+    cost_level: low
+    discovery_method: manual_official
+    discovery_status: not_applicable
+    discovery_note: Not returned by /v1/models; subscription_expected=false (free tier only).
+    note: 免费限速版翻唱预处理，所有用户可用。
+
   # ===================== 音乐 — 历史兼容 =====================
 
   - id: music-1.5
