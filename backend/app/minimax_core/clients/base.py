@@ -101,6 +101,8 @@ class MiniMaxBaseClient:
         timeout = timeout if timeout is not None else self._timeout
 
         extra: dict[str, str] = dict(headers) if headers else {}
+        # 合并 auth header（Bearer token）
+        extra.update(self.auth_header())
         if json is not None:
             extra["Content-Type"] = "application/json"
 

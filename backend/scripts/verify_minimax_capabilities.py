@@ -481,7 +481,7 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
                 duration_ms=extra.get("audio_length") if isinstance(extra, dict) else None,
                 committed=False,
             )
-            result["assets"] = [ref]
+            result["assets"] = [ref.model_dump()]
             result["audio_returned"] = True
             result["audio_payload_type"] = "hex"
             result["audio_format"] = audio_format
@@ -523,7 +523,7 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
                 size_bytes=None,
                 committed=False,
             )
-            result["assets"] = [ref]
+            result["assets"] = [ref.model_dump()]
             result["audio_returned"] = True
             result["audio_payload_type"] = "url"
             result["asset_saved"] = False
@@ -560,12 +560,17 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
         audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
         img_data = data.get("data") if isinstance(data.get("data"), dict) else None
         audio_url = img_data.get("audio_url") or img_data.get("music_url") if img_data else None
-        audio_hex = img_data.get("audio") if img_data else None
+        audio_raw = img_data.get("audio") if img_data else None
+        # audio_raw 可以是 URL 字符串（output_format=url）或 hex 字符串（output_format=hex）
+        audio_is_url = isinstance(audio_raw, str) and audio_raw.startswith("http")
+        if audio_is_url and not audio_url:
+            audio_url = audio_raw
+            audio_raw = None
 
-        result["audio_returned"] = bool(audio_url or audio_hex)
-        result["audio_payload_type"] = "url" if audio_url else ("hex" if audio_hex else "unknown")
+        result["audio_returned"] = bool(audio_url or audio_raw)
+        result["audio_payload_type"] = "url" if audio_url else ("hex" if audio_raw else "unknown")
         result["audio_url_present"] = bool(audio_url)
-        result["audio_hex_present"] = bool(audio_hex)
+        result["audio_hex_present"] = bool(audio_raw and not audio_is_url)
         result["audio_format"] = audio_format
         result["music_duration"] = extra.get("music_duration") if isinstance(extra, dict) else None
         result["music_sample_rate"] = extra.get("music_sample_rate") if isinstance(extra, dict) else None
@@ -581,12 +586,12 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
                 duration_ms=extra.get("music_duration") if isinstance(extra, dict) else None,
                 committed=False,
             )
-            result["assets"] = [ref]
+            result["assets"] = [ref.model_dump()]
             result["asset_saved"] = False
             result["asset_reference_saved"] = True
             result["asset_committed"] = False
-        elif audio_hex:
-            audio_bytes = bytes.fromhex(audio_hex)
+        elif audio_raw and not audio_is_url:
+            audio_bytes = bytes.fromhex(audio_raw)
             size_bytes = len(audio_bytes)
             out_path = runtime_dir / f"music_gen_sample.{audio_format}"
             try:
@@ -606,7 +611,7 @@ def _handle_medium_result(cap_id: str, data: dict | None, result: dict) -> None:
                 duration_ms=extra.get("music_duration") if isinstance(extra, dict) else None,
                 committed=False,
             )
-            result["assets"] = [ref]
+            result["assets"] = [ref.model_dump()]
             result["asset_saved"] = asset_saved
             result["asset_reference_saved"] = False
             result["asset_committed"] = False

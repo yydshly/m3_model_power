@@ -16,14 +16,59 @@
 4. 之前 API Key 返回 1004 的记录仅作为诊断参考，**不作为 Token Plan 能力结论**
 5. 全量矩阵以 Token Plan Key 实测结果为唯一事实来源
 
-## Token Plan Key 配置状态（2026-06-06）
+## Token Plan Key 配置状态（2026-06-06 更新）
 
 | Key | 配置状态 | 说明 |
 |---|---|---|
-| `MINIMAX_TOKEN_PLAN_KEY` | ❌ 未配置（`token_plan_key_not_set`） | 需在 `backend/.env` 中配置后才能验收 native 多模态 |
-| `MINIMAX_API_KEY` | ✅ 已配置（`sk-cp-...`） | 仅用于可选诊断，不参与默认验收 |
+| `MINIMAX_TOKEN_PLAN_KEY` | ✅ 已配置（SHA256 前8位: `db892eeb`） | 用于 TokenPlan native 多模态验收 |
+| `MINIMAX_API_KEY` | 不存在 | Token Plan Only 模式 |
 
-**当前状态**：`token_plan_key_not_set`，native 多模态（tts-sync / image-t2i / lyrics-gen / music-gen）验收已跳过。
+**当前状态**：TokenPlan Key 已配置，native 多模态验收全部通过（4/4 success）。
+
+---
+
+## TokenPlan Native 验收结果（2026-06-06）
+
+### native-only 最小探针
+
+| 能力 | 模型 | 结果 | 详情 |
+|---|---|---|---|
+| tts-sync | speech-02-turbo | ✅ success | base_resp.status_code=0, audio=14964B mp3 |
+| image-t2i | image-01 | ✅ success | base_resp.status_code=0, urls=1 |
+| music-gen | music-2.6 | ✅ success | base_resp.status_code=0, audio_url returned |
+
+### medium 验收（CapabilityInvoker 路径）
+
+| 能力 | 结果 | error_type | 详情 |
+|---|---|---|---|
+| tts-sync | ✅ success | — | base_resp=0, audio present |
+| image-t2i | ✅ success | — | base_resp=0, image_urls non-empty |
+| lyrics-gen | ✅ success | — | base_resp=0, lyrics text returned |
+| music-gen | ✅ success | — | base_resp=0, audio_url present |
+
+### 模型级 Probe 结果（speech 6 模型 + image 2 模型 + music-2.6）
+
+| 能力 | 模型数 | 成功 | 失败 |
+|---|---|---|---|
+| tts-sync | 6 (speech-2.8-hd/turbo, speech-2.6-hd/turbo, speech-02-hd/turbo) | 6 | 0 |
+| image-t2i | 2 (image-01, image-01-live) | 2 | 0 |
+| music-gen | 1 (music-2.6) | 1 | 0 |
+
+**结论**：TokenPlan Plus native 多模态能力全部验收通过，无需进一步诊断。
+
+---
+
+### ⚠️ 重要 Bug 修复：auth header 缺失
+
+**问题**：上一轮 `MINIMAX_TOKEN_PLAN_KEY` 配置正确但 native API 仍返回 1004。
+**根因**：`MiniMaxBaseClient.request_json()` 方法构建 HTTP 请求时，`Authorization: Bearer <token>` header 被遗漏，导致请求无认证信息。
+**修复**：在 `base.py` 的 `request_json()` 中，将 `self.auth_header()` 的返回值合并到请求 headers 中。
+**验证**：修复后 tts-sync / image-t2i / music-gen 全部返回 `base_resp.status_code=0`。
+
+### music-gen output_format=url 字段名修复
+
+**问题**：music-gen 响应中 `data.audio` 为 URL 字符串，但旧代码优先查找 `data.audio_url` / `data.music_url`。
+**修复**：新增 `audio_is_url` 检测逻辑，正确识别 `data.audio` 中的 URL。
 
 ---
 

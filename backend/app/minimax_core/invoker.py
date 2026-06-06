@@ -388,22 +388,25 @@ class CapabilityInvoker:
         audio_format = (extra.get("audio_format") if isinstance(extra, dict) else None) or "mp3"
         img_data = raw.get("data") if isinstance(raw.get("data"), dict) else None
         audio_url = img_data.get("audio_url") or img_data.get("music_url") if img_data else None
-        audio_hex = img_data.get("audio") if img_data else None
+        # data.audio 可以是 URL（output_format=url）或 hex（output_format=hex）
+        audio_raw = img_data.get("audio") if img_data else None
+        audio_is_url = isinstance(audio_raw, str) and audio_raw.startswith("http")
 
         assets: list[AssetRef] = []
-        if audio_url:
+        if audio_url or audio_is_url:
+            url = audio_url if audio_url else audio_raw
             assets.append(AssetRef(
                 type="audio",
                 format=audio_format,
                 path=None,
-                url=audio_url,
+                url=url,
                 size_bytes=None,
                 duration_ms=extra.get("music_duration") if isinstance(extra, dict) else None,
                 committed=False,
             ))
-        elif audio_hex:
+        elif audio_raw:
             try:
-                audio_bytes = bytes.fromhex(audio_hex)
+                audio_bytes = bytes.fromhex(audio_raw)
                 assets.append(AssetRef(
                     type="audio",
                     format=audio_format,
