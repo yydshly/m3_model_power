@@ -68,6 +68,132 @@ RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 DOCS_DIR = BACKEND.parent / "docs"
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Status priority for aggregate index (higher = better)
+_STATUS_PRIORITY = {
+    "full_async_flow_verified": 7,
+    "model_level_verified": 6,
+    "capability_level_verified": 5,
+    "success": 4,
+    "success_with_warning": 3,
+    "pending": 2,
+    "failed": 1,
+    "no_probe_record": 0,
+    "skipped": 0,
+    "unauthorized": 0,
+    "quota_limited": 0,
+    "risk_gate_blocked": 0,
+}
+
+
+def _better_status(existing: str | None, candidate: str) -> str:
+    if existing is None:
+        return candidate
+    return candidate if _STATUS_PRIORITY.get(candidate, -1) > _STATUS_PRIORITY.get(existing, -1) else existing
+
+
+def _safe_evidence(result: dict) -> dict:
+    """Strip sensitive fields from a verification result for storage in index."""
+    safe = {}
+    for key in (
+        "capability_id", "status", "level", "http_status", "model",
+        "protocol", "latency_ms", "output_type", "asset_saved",
+        "file_id", "content_present", "content_length",
+        "file_id_present", "file_size", "mime_type",
+        "audio_chunk_count", "audio_bytes",
+        "create_status", "task_id_present", "final_status",
+        "poll_attempts", "download_success", "full_async_flow_verified",
+    ):
+        if key in result and result[key] is not None:
+            safe[key] = result[key]
+    for forbidden in ("api_key", "authorization", "token", "content",
+                      "image_url", "image_urls", "audio_url", "path"):
+        if forbidden in result:
+            safe[forbidden] = "[REDACTED]"
+    return safe
+
+
+def _update_aggregate_index(new_results: list[dict]) -> None:
+    """Update the aggregate verification index with new results.
+
+    Strategy:
+    - Load existing aggregate index (if any)
+    - For each new result:
+        - If new status is better than existing, upgrade the record
+        - If new result is a failure and existing is a success, add last_failure
+          but DO NOT overwrite the successful best_status
+    - Save both runtime/all_verified.json and docs/MINIMAX_CAPABILITY_VERIFICATION_INDEX.json
+    """
+    runtime_index_path = RUNTIME_DIR / "all_verified.json"
+    docs_index_path = DOCS_DIR / "MINIMAX_CAPABILITY_VERIFICATION_INDEX.json"
+
+    # Load existing aggregate
+    aggregate: dict[str, dict] = {}
+    if runtime_index_path.exists():
+        try:
+            aggregate = json.loads(runtime_index_path.read_text(encoding="utf-8"))
+            aggregate = aggregate.get("capabilities", {})
+        except Exception:
+            aggregate = {}
+
+    # Merge new results
+    for r in new_results:
+        cid = r.get("capability_id")
+        if not cid:
+            continue
+        status = r.get("status", "no_probe_record")
+        is_success = status in ("success", "success_with_warning", "full_async_flow_verified",
+                                 "model_level_verified", "capability_level_verified")
+
+        existing = aggregate.get(cid, {})
+        existing_status = existing.get("best_status")
+
+        # Determine new best status
+        if is_success:
+            new_best = _better_status(existing_status, status)
+        else:
+            # Failures don't overwrite successes; they just add last_failure
+            if existing_status and _STATUS_PRIORITY.get(existing_status, 0) >= _STATUS_PRIORITY.get("success", 0):
+                new_best = existing_status  # keep existing success
+            else:
+                new_best = status
+
+        record = {
+            "capability_id": cid,
+            "best_status": new_best,
+            "verified": new_best in ("full_async_flow_verified", "model_level_verified",
+                                      "capability_level_verified", "success", "success_with_warning"),
+            "last_success": r.get("ended_at") if is_success else existing.get("last_success"),
+            "last_failure": r.get("ended_at") if not is_success else existing.get("last_failure"),
+            "source": "verify_minimax_capabilities.py",
+            "evidence": _safe_evidence(r),
+        }
+        aggregate[cid] = record
+
+    # Build full index document
+    index_doc = {
+        "schema_version": 1,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": "verify_minimax_capabilities.py",
+        "capabilities": aggregate,
+    }
+
+    # Write runtime version (full)
+    runtime_index_path.write_text(json.dumps(index_doc, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Write docs version (sanitised, committed)
+    def _sanitise(idx: dict) -> dict:
+        out = dict(idx)
+        out["capabilities"] = {}
+        for c_id, rec in idx.get("capabilities", {}).items():
+            safe = dict(rec)
+            evidence = {k: ("[RUNTIME_PATH]" if "path" in k.lower() and "runtime" in str(v).lower() else v)
+                        for k, v in safe.get("evidence", {}).items()}
+            safe["evidence"] = evidence
+            out["capabilities"][c_id] = safe
+        return out
+
+    docs_index_path.write_text(json.dumps(_sanitise(index_doc), ensure_ascii=False, indent=2), encoding="utf-8")
+
 
 def _redact(key: str) -> str:
     if not key or len(key) <= 8:
@@ -1071,23 +1197,10 @@ def main() -> None:
             merged[pid] = prev
     output["results"] = list(merged.values())
     output["total"] = len(output["results"])
-    out_path = RUNTIME_DIR / "latest.json"
-    # Merge mode: combine this run with existing latest.json (preserve cross-run history)
-    existing: dict = {}
-    if out_path.exists():
-        try:
-            with open(out_path, encoding="utf-8") as ef:
-                existing = json.load(ef)
-        except Exception:
-            existing = {}
-    merged = {r["capability_id"]: r for r in results}
-    for prev in existing.get("results", []):
-        pid = prev.get("capability_id")
-        if pid not in merged:
-            merged[pid] = prev
-    output["results"] = list(merged.values())
-    output["total"] = len(output["results"])
     out_path.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # Update aggregate verification index (non-destructive merge)
+    _update_aggregate_index(results)
     print("\r\n[OK] save " + str(out_path.relative_to(BACKEND)))
 
 

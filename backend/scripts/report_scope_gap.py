@@ -27,10 +27,45 @@ sys.path.insert(0, str(BACKEND))
 from app.minimax_core.registry.loader import get_capability_registry
 
 
+def _load_from_aggregate_index() -> dict[str, dict]:
+    """从累计验收索引读取所有已验证能力（优先读取 docs 版本）。
+
+    读取优先级：
+      1. docs/MINIMAX_CAPABILITY_VERIFICATION_INDEX.json（脱敏快照，可提交 Git）
+      2. backend/runtime/capability_verification/all_verified.json（本地完整版）
+
+    如果索引文件不存在，退回到 latest.json。
+    """
+    docs_index = BACKEND.parent / "docs" / "MINIMAX_CAPABILITY_VERIFICATION_INDEX.json"
+    runtime_index = BACKEND / "runtime" / "capability_verification" / "all_verified.json"
+
+    index_path = docs_index if docs_index.exists() else (runtime_index if runtime_index.exists() else None)
+    if index_path is None:
+        return _load_from_latest_json()
+
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception:
+        return _load_from_latest_json()
+
+    out = {}
+    for cid, rec in data.get("capabilities", {}).items():
+        if rec.get("verified"):
+            out[cid] = {
+                "source": f"aggregate_index ({index_path.name})",
+                "status": rec.get("best_status", "success"),
+                "level": rec.get("evidence", {}).get("level", "safe"),
+                "best_status": rec.get("best_status"),
+                "last_success": rec.get("last_success"),
+            }
+    return out
+
+
 def _load_from_latest_json() -> dict[str, dict]:
     """从 capability_verification/latest.json 读取最新结果。
 
     注意：latest.json 每次运行会被整体覆盖，不代表全量历史。
+    仅在 aggregate index 不存在时使用。
     """
     vfile = BACKEND / "runtime" / "capability_verification" / "latest.json"
     if not vfile.exists():
@@ -129,30 +164,44 @@ def _check_matrix_doc_for_tts_async() -> bool:
 
 
 def _aggregate_verified() -> dict[str, dict]:
-    """从所有来源聚合已验收能力。返回 {capability_id: info}。"""
+    """从所有来源聚合已验收能力。返回 {capability_id: info}。
+
+    读取优先级：
+      1. aggregate_index（累计索引，primary 权威来源）
+      2. Verification Report markdown（备用）
+      3. latest.json（备用）
+      4. model_level_probe_report.json（备用）
+      5. tts_ws_probe_report.json（备用）
+      6. Matrix 文档（lyrics-gen, tts-async 备用）
+    """
     verified = {}
 
-    # 1. Verification Report markdown（历次验收记录，权威来源）
+    # 1. Aggregate index（primary — 从 docs 或 runtime 读取）
+    for cid, info in _load_from_aggregate_index().items():
+        if cid not in verified:
+            verified[cid] = info
+
+    # 2. Verification Report markdown（补充不在索引中的记录）
     for cid, info in _load_from_verification_report().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 2. latest.json（最新运行结果，补充可能未写入报告的记录）
+    # 3. latest.json（补充不在索引中的记录）
     for cid, info in _load_from_latest_json().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 3. model_level_probe_report.json（chat/tts-sync/image-t2i/music-gen）
+    # 4. model_level_probe_report.json（补充）
     for cid, info in _load_from_model_level_probe().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 4. tts_ws_probe_report.json（tts-ws）
+    # 5. tts_ws_probe_report.json（补充）
     for cid, info in _load_from_tts_ws_probe().items():
         if cid not in verified:
             verified[cid] = info
 
-    # 5. Matrix 文档中明确记录的成功状态（tts-async, lyrics-gen）
+    # 6. Matrix 文档中明确记录的成功状态（tts-async, lyrics-gen 备用）
     if _check_matrix_doc_for_lyrics_gen() and "lyrics-gen" not in verified:
         verified["lyrics-gen"] = {"source": "MINIMAX_FULL_CAPABILITY_MATRIX.md (section 5.9b/6.2)", "status": "success"}
 

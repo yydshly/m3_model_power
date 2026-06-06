@@ -32,6 +32,11 @@ def ts() -> str:
 # 键：capability_id，值：(probed_model, result, scope)
 # scope: "model_level" = 该能力所有支持模型均已逐项验收
 #        "capability_level" = 该能力已验收，但仅测了一个模型，未逐项验证所有模型
+#        "full_async_flow" = 异步能力全链路验收（create→poll→download）
+#        "not_applicable" = 无需模型（如 lyrics-gen/file-*/models-*）
+#
+# 本模块现已优先从 docs/MINIMAX_CAPABILITY_VERIFICATION_INDEX.json 读取，
+# 以下 KNOWN_PROBE_RESULTS 仅作 fallback 使用。
 KNOWN_PROBE_RESULTS: dict[str, tuple[str | None, str, str]] = {
     # capability_id: (probed_model, result, scope)
     "image-t2i": ("image-01", "success", "capability_level"),
@@ -48,6 +53,32 @@ CHAT_MODEL_PROBE: dict[str, tuple[str, str]] = {
         "MiniMax-M2.1", "MiniMax-M2.1-highspeed", "MiniMax-M2",
     ]
 }
+
+# 从 aggregate index 加载 capability 验收状态（primary 来源）
+def _load_aggregate_capability_probe() -> dict[str, dict]:
+    """从 docs/MINIMAX_CAPABILITY_VERIFICATION_INDEX.json 读取 capability 级别验收状态。
+
+    返回 {capability_id: {"status": str, "source": str}}
+    """
+    idx_path = DOCS_DIR / "MINIMAX_CAPABILITY_VERIFICATION_INDEX.json"
+    if not idx_path.exists():
+        idx_path = REPORTS_DIR.parent / "capability_verification" / "all_verified.json"
+    if not idx_path.exists():
+        return {}
+    try:
+        doc = json.loads(idx_path.read_text(encoding="utf-8"))
+        out: dict[str, dict] = {}
+        for cid, rec in doc.get("capabilities", {}).items():
+            out[cid] = {
+                "status": rec.get("best_status", "no_probe_record"),
+                "verified": rec.get("verified", False),
+                "source": rec.get("source", "unknown"),
+                "last_success": rec.get("last_success"),
+            }
+        return out
+    except Exception:
+        return {}
+
 
 # 从 runtime report 加载最新 probe 结果（如果存在）
 def _load_live_probe_results() -> dict[str, dict]:
@@ -201,14 +232,31 @@ def build_protocol_row(m) -> dict:
     }
 
 
-def build_capability_row(c, cap_registry) -> dict:
-    """单个能力的矩阵行（含 capability_probe 明细）。"""
+def build_capability_row(c, cap_registry, agg_probe: dict | None = None) -> dict:
+    """单个能力的矩阵行（含 capability_probe 明细）。
+
+    agg_probe: 从 aggregate index 加载的 {capability_id: {status, verified, source}} 字典。
+    """
     models = cap_registry.models_for_capability(c.id)
     supported_ids = [m.id for m in models]
     default = cap_registry.default_model_for_capability(c.id)
 
-    # capability probe 状态判断
-    if c.requires_model is False:
+    # capability probe 状态判断（优先使用 aggregate index）
+    if agg_probe and c.id in agg_probe:
+        info = agg_probe[c.id]
+        cap_probe_status = info.get("status", "not_probed")
+        probed_by = info.get("source")
+        probed_model = None
+        probe_result = "success" if info.get("verified") else "failed"
+        if cap_probe_status == "model_level_verified":
+            probe_scope = "model_level"
+        elif cap_probe_status in ("capability_level_verified", "full_async_flow_verified"):
+            probe_scope = "capability_level"
+        elif cap_probe_status == "not_applicable":
+            probe_scope = "not_applicable"
+        else:
+            probe_scope = "not_probed"
+    elif c.requires_model is False:
         cap_probe_status = "not_applicable"
         probed_by = None
         probed_model = None
@@ -534,6 +582,8 @@ def main() -> None:
     models = model_registry.all()
     caps = cap_registry.all()
 
+    # 加载 aggregate capability probe 状态（primary 来源）
+    agg_probe = _load_aggregate_capability_probe()
     # 加载 live probe 结果
     live_probe = _load_live_probe_results()
 
@@ -559,7 +609,7 @@ def main() -> None:
     model_inventory = list(reversed(deduped))
 
     protocol_matrix = [build_protocol_row(m) for m in models if m.family == "chat"]
-    capability_matrix = [build_capability_row(c, cap_registry) for c in caps]
+    capability_matrix = [build_capability_row(c, cap_registry, agg_probe) for c in caps]
     model_to_capability = build_model_to_capability_matrix(model_registry, cap_registry)
     gap_matrix = build_gap_matrix(model_registry, cap_registry, live_probe)
 

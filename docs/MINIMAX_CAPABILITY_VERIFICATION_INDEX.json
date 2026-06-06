@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-06-06T18:56:03.350868+00:00",
+  "updated_by": "rebuild_verification_index.py",
+  "capabilities": {
+    "tts-async": {
+      "capability_id": "tts-async",
+      "best_status": "full_async_flow_verified",
+      "verified": true,
+      "last_success": null,
+      "last_failure": null,
+      "source": "MINIMAX_FULL_CAPABILITY_MATRIX.md (section 5.9b)",
+      "evidence": {
+        "note": "full_async_flow verified per Matrix doc"
+      }
+    },
+    "lyrics-gen": {
+      "capability_id": "lyrics-gen",
+      "best_status": "capability_level_verified",
+      "verified": true,
+      "last_success": null,
+      "last_failure": null,
+      "source": "MINIMAX_FULL_CAPABILITY_MATRIX.md (section 5.9b/6.2)",
+      "evidence": {
+        "note": "medium verification complete per Matrix doc"
+      }
+    },
+    "file-list": {
+      "capability_id": "file-list",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T18:44:26.014289+00:00",
+      "last_failure": null,
+      "source": "MINIMAX_CAPABILITY_VERIFICATION_REPORT.md",
+      "evidence": {
+        "note": "success per Verification Report markdown"
+      }
+    },
+    "file-content": {
+      "capability_id": "file-content",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T18:44:06.930755+00:00",
+      "last_failure": null,
+      "source": "latest.json",
+      "evidence": {
+        "capability_id": "file-content",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 328,
+        "asset_saved": false,
+        "file_id": "406389554938387",
+        "content_present": true,
+        "content_length": 86
+      }
+    },
+    "file-retrieve": {
+      "capability_id": "file-retrieve",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T18:43:44.805979+00:00",
+      "last_failure": null,
+      "source": "latest.json",
+      "evidence": {
+        "capability_id": "file-retrieve",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 328,
+        "asset_saved": false,
+        "file_id": "406389554938387"
+      }
+    },
+    "file-upload": {
+      "capability_id": "file-upload",
+      "best_status": "success",
+      "verified": true,
+      "last_success": "2026-06-06T18:43:00.837492+00:00",
+      "last_failure": null,
+      "source": "latest.json",
+      "evidence": {
+        "capability_id": "file-upload",
+        "status": "success",
+        "level": "safe",
+        "http_status": 200,
+        "latency_ms": 359,
+        "asset_saved": false,
+        "file_id": 406389554938387,
+        "file_id_present": true,
+        "file_size": 68,
+        "mime_type": "text/plain"
+      }
+    },
+    "chat-openai": {
+      "capability_id": "chat-openai",
+      "best_status": "model_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T11:27:23Z",
+      "last_failure": null,
+      "source": "model_level_probe_report.json",
+      "evidence": {
+        "capability_id": "chat-openai",
+        "http_status": 200,
+        "protocol": "openai",
+        "latency_ms": 1844.0
+      }
+    },
+    "chat-anthropic": {
+      "capability_id": "chat-anthropic",
+      "best_status": "model_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T11:27:35Z",
+      "last_failure": null,
+      "source": "model_level_probe_report.json",
+      "evidence": {
+        "capability_id": "chat-anthropic",
+        "http_status": 200,
+        "protocol": "anthropic",
+        "latency_ms": 3628.8
+      }
+    },
+    "tts-sync": {
+      "capability_id": "tts-sync",
+      "best_status": "model_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T11:27:41Z",
+      "last_failure": null,
+      "source": "model_level_probe_report.json",
+      "evidence": {
+        "capability_id": "tts-sync",
+        "http_status": 200,
+        "protocol": "native",
+        "latency_ms": 877.5
+      }
+    },
+    "image-t2i": {
+      "capability_id": "image-t2i",
+      "best_status": "model_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T11:28:04Z",
+      "last_failure": null,
+      "source": "model_level_probe_report.json",
+      "evidence": {
+        "capability_id": "image-t2i",
+        "http_status": 200,
+        "protocol": "native",
+        "latency_ms": 8023.5
+      }
+    },
+    "music-gen": {
+      "capability_id": "music-gen",
+      "best_status": "model_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T11:28:37Z",
+      "last_failure": null,
+      "source": "model_level_probe_report.json",
+      "evidence": {
+        "capability_id": "music-gen",
+        "http_status": 200,
+        "protocol": "native",
+        "latency_ms": 33133.1
+      }
+    },
+    "tts-ws": {
+      "capability_id": "tts-ws",
+      "best_status": "capability_level_verified",
+      "verified": true,
+      "last_success": "2026-06-06T14:00:29Z",
+      "last_failure": null,
+      "source": "tts_ws_probe_report.json",
+      "evidence": {
+        "capability_id": "tts-ws",
+        "status": "success",
+        "http_or_ws_status": "connected",
+        "model": "speech-02-turbo",
+        "latency_ms": 924.2,
+        "audio_chunk_count": 9,
+        "asset_saved": true
+      }
+    }
+  }
+}
