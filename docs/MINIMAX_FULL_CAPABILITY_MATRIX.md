@@ -1,7 +1,8 @@
 # MiniMax 全量能力覆盖矩阵
 
-> 生成时间：2026-06-06T12:03:53Z
+> 生成时间：2026-06-06T13:31:19Z
 > 本报告基于本地 registry 配置和已有 probe 结果生成。
+> 本轮更新：tts-ws WebSocket 流式验收完成（speech-02-turbo，极短文本，9 chunk/13KB）。
 
 ## 验收状态分层说明
 
@@ -143,7 +144,7 @@
 | `chat-responses-create` | Responses API | chat | ✓ | chat | quota | implemented | MiniMax-M3 | MiniMax-M3 | not_probed | — | not_probed |
 | `chat-responses-tokens` | Responses Token 估算 | chat | ✓ | chat | quota | implemented | MiniMax-M3 | MiniMax-M3 | not_probed | — | not_probed |
 | `tts-sync` | T2A 同步 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | capability_level_verified | speech-02-turbo | capability_level |
-| `tts-ws` | T2A WebSocket 流式 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
+| `tts-ws` | T2A WebSocket 流式 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-02-turbo | capability_level_verified | speech-02-turbo | capability_level |
 | `tts-async` | T2A 异步长文本 | voice | ✓ | speech | quota | implemented | speech-2.8-hd,speech-2.8-turbo,speech-2.6-hd,speech-2.6-turbo,speech-02-hd,speech-02-turbo | speech-2.8-hd | not_probed | — | not_probed |
 | `voice-clone-upload-audio` | 克隆-上传音频 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
 | `voice-clone-upload-prompt` | 克隆-上传 Prompt 文本 | voice | ✓ | — | quota | implemented | — | — | not_probed | — | not_probed |
@@ -336,7 +337,7 @@
 | `chat-responses-create` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `chat-responses-tokens` | normal_token_plan_test | ✗ | ✗ | ✓ | ✗ | ✗ | safe 验收完成 | TokenPlanPlus 极速档共享配额 |
 | `tts-sync` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | model_level 验收完成 | 消耗 TokenPlan 语音/字符额度 |
-| `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 消耗 TokenPlan 语音/字符额度 |
+| `tts-ws` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | capability_level_verified（speech-02-turbo，单轮9 chunk/13KB音频） | 消耗 TokenPlan 语音/字符额度；已用极短文本验证流式音频正常返回 |
 | `tts-async` | quota_sensitive | ✗ | ✗ | ✓ | ✗ | ✗ | pending | 长文本可能大量消耗额度 |
 | `voice-clone-upload-audio` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
 | `voice-clone-upload-prompt` | paid_confirm_required | ✓ | ✓ | ✓ | ✗ | ✓ | pending_explicit_confirmation | 音色复刻可能触发单独音色费用 |
