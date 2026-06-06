@@ -11,18 +11,66 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# 敏感字段黑名单，不记录原始值
+# ── Constants ─────────────────────────────────────────────────────────
+
+_HISTORY_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+_HISTORY_KEEP_LINES = 1000
+_DEFAULT_HISTORY_LIMIT = 50
+_MAX_HISTORY_LIMIT = 200
+_PREVIEW_MAX_CHARS = 500
+_MAX_RECURSION_DEPTH = 3
+_MAX_LIST_ITEMS = 10
+_MAX_STR_CHARS = 200
+
+# ── Sensitive key detection ────────────────────────────────────────────
+
 _SENSITIVE_KEYS = frozenset([
+    # Exact matches
     "api_key", "authorization", "token", "secret",
     "password", "bearer", "x_api_key", "x_api_secret",
+    "access_token", "refresh_token", "id_token",
+    "client_secret", "private_key", "jwt",
+    "cookie", "set_cookie", "session", "session_id",
 ])
 
-_PREVIEW_MAX_CHARS = 500
+# Substrings that trigger redaction (case-insensitive checked on key.lower())
+_SENSITIVE_SUBSTRINGS = frozenset([
+    "secret", "token", "password", "authorization",
+    "cookie", "session", "private", "jwt",
+])
 
 
 def _is_sensitive_key(key: str) -> bool:
     k = key.lower()
-    return k in _SENSITIVE_KEYS or k.startswith("x_") or "_secret" in k
+    if k in _SENSITIVE_KEYS:
+        return True
+    if any(sub in k for sub in _SENSITIVE_SUBSTRINGS):
+        return True
+    if k.startswith("x_"):
+        return True
+    return False
+
+
+# ── Recursive redaction ────────────────────────────────────────────────
+
+def redact_value(value: Any, depth: int = 0) -> Any:
+    """递归脱敏 value，超过深度限制返回截断标记。"""
+    if depth > _MAX_RECURSION_DEPTH:
+        return "[TRUNCATED_DEPTH]"
+
+    if isinstance(value, dict):
+        return {
+            k: "[REDACTED]" if _is_sensitive_key(k) else redact_value(v, depth + 1)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            redact_value(item, depth + 1)
+            for item in value[:_MAX_LIST_ITEMS]
+        ]
+    if isinstance(value, str):
+        return value[:_MAX_STR_CHARS]
+    return value
 
 
 def summarize_payload(payload: dict | None) -> dict:
@@ -30,22 +78,62 @@ def summarize_payload(payload: dict | None) -> dict:
     if payload is None:
         return {"payload_keys": [], "payload_size_chars": 0, "payload_preview": ""}
 
-    keys = list(payload.keys())
+    # 递归脱敏后再构建预览
+    safe_payload = redact_value(payload)
+    safe_str = json.dumps(safe_payload, ensure_ascii=False)
+    preview = safe_str[:_PREVIEW_MAX_CHARS]
+    if len(safe_str) > _PREVIEW_MAX_CHARS:
+        preview += "..."
+
+    keys = [k for k in payload.keys() if not _is_sensitive_key(k)]
     size_chars = sum(len(str(v)) for v in payload.values())
-    # 构建预览，只截取前 _PREVIEW_MAX_CHARS
-    safe_pairs = [
-        f'"{k}":"[REDACTED]"' if _is_sensitive_key(k) else f'"{k}":{json.dumps(str(v)[:200], ensure_ascii=False)}'
-        for k, v in list(payload.items())[:20]
-    ]
-    preview = "{" + ",".join(safe_pairs) + "}"
-    if len(preview) > _PREVIEW_MAX_CHARS:
-        preview = preview[:_PREVIEW_MAX_CHARS] + "..."
 
     return {
-        "payload_keys": [k for k in keys if not _is_sensitive_key(k)],
+        "payload_keys": keys,
         "payload_size_chars": size_chars,
         "payload_preview": preview,
     }
+
+
+# ── History file management ────────────────────────────────────────────
+
+def normalize_limit(limit: int | None, *, default: int = _DEFAULT_HISTORY_LIMIT, max_limit: int = _MAX_HISTORY_LIMIT) -> int:
+    """将 limit 参数规整到合法区间。"""
+    if limit is None:
+        return default
+    try:
+        n = int(limit)
+    except (TypeError, ValueError):
+        return default
+    if n < 1:
+        return 1
+    if n > max_limit:
+        return max_limit
+    return n
+
+
+def compact_history_if_needed() -> None:
+    """如果 history.jsonl 超过 _HISTORY_MAX_BYTES，只保留最后 _HISTORY_KEEP_LINES 行。"""
+    try:
+        path = _ensure_dir().joinpath("history.jsonl")
+        if not path.exists():
+            return
+        if path.stat().st_size < _HISTORY_MAX_BYTES:
+            return
+
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+
+        if len(lines) <= _HISTORY_KEEP_LINES:
+            return
+
+        # 只保留最后 _HISTORY_KEEP_LINES 行
+        trimmed = lines[-_HISTORY_KEEP_LINES:]
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(trimmed)
+    except Exception:
+        # compact 失败不影响主流程
+        pass
 
 
 def append_history(
@@ -66,17 +154,17 @@ def append_history(
             "confirmations": confirmations or {},
             "result": result,
         }
-        _ensure_dir().joinpath("history.jsonl").append_text(
-            json.dumps(record, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        path = _ensure_dir().joinpath("history.jsonl")
+        path.append_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+        compact_history_if_needed()
     except Exception:
         # 写失败不影响主流程，吞掉
         pass
 
 
-def list_history(limit: int = 50) -> list[dict]:
+def list_history(limit: int = _DEFAULT_HISTORY_LIMIT) -> list[dict]:
     """读取最近 N 条历史记录，返回列表（最新优先）。"""
+    safe_limit = normalize_limit(limit)
     path = _ensure_dir().joinpath("history.jsonl")
     if not path.exists():
         return []
@@ -88,6 +176,8 @@ def list_history(limit: int = 50) -> list[dict]:
     except Exception:
         return []
 
+    # 只读取最后 safe_limit*2 行以避免过度 IO（取最新时不需要全读）
+    # 但保留兜底：lines 可能少于预期
     records = []
     for line in reversed(lines):
         line = line.strip()
@@ -97,7 +187,7 @@ def list_history(limit: int = 50) -> list[dict]:
             records.append(json.loads(line))
         except Exception:
             continue
-        if len(records) >= limit:
+        if len(records) >= safe_limit:
             break
     return records
 
