@@ -75,7 +75,7 @@ MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
 能力说明层补足 registry 不适合承载的人类理解信息：
 
 - **registry** → 机器可读配置（YAML 驱动，API 返回）
-- **description** → 人类可读说明（静态 YAML，前端按需展示）
+- **description** → 人类可读说明（静态 JSON，后端 API 加载，前端按需展示）
 
 ### 每个 description 包含
 

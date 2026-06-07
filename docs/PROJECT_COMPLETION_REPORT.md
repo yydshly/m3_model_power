@@ -109,7 +109,7 @@ backend/runtime/test_console/history.jsonl
 
 - 不保存完整 payload，只保存摘要
 - 敏感 key（api_key / token / password / secret 等）递归脱敏
-- 支持嵌套结构深度脱敏（最大深度 10 层）
+- 支持嵌套结构深度脱敏（最大深度 3 层，超过后返回 `[TRUNCATED_DEPTH]`）
 
 ### 脱敏字段
 
@@ -140,7 +140,7 @@ backend/runtime/test_console/history.jsonl
 | 图片 URL（http/https） | `<img>` 预览，支持长 URL 不截断 |
 | 音频 URL（http/https，.mp3/.wav 等） | `<audio controls>` |
 | 音频 URL（长文本） | 完整 URL，不截断 |
-| file_id / task_id | 文件/任务信息卡片 |
+| file_id / filename / mime_type / content_length | 文件信息卡片 |
 
 ### 校验结果
 
@@ -203,4 +203,4 @@ cd frontend && npm run build && cd ..
 | `b1ec819` | test: validate capability descriptions |
 | `b2e1960` | feat: add capability descriptions |
 | `4ade606` | fix: convert nested Pydantic models to dicts in _spec_to_capability |
-| `docs` | docs: summarize test console and capability layer |
+| `98a9a71` | docs: summarize test console and capability layer |
