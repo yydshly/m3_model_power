@@ -115,25 +115,34 @@ type Props = {
   data: unknown
   /** Optional unified audio source (used by ResultBanner to avoid double-extraction) */
   audioSource?: AudioSource | null
+  /** Skip the AudioTaskStatus card if AudioBanner already showed it */
+  skipAudioTaskCard?: boolean
+  /** Skip rendering primary assets of these kinds (e.g. ['image'] when ImageComparePreview already shows them) */
+  skipPrimaryKinds?: string[]
 }
 
-export default function AssetResultPreview({ data, audioSource: providedAudio }: Props) {
+export default function AssetResultPreview({ data, audioSource: providedAudio, skipAudioTaskCard, skipPrimaryKinds }: Props) {
   const assets = extractAssetRefs(data)
   const audioSource = providedAudio ?? extractAudioSource(data)
 
-  if (!assets.length && !audioSource) {
+  // Filter out assets whose kinds should be skipped
+  const filteredAssets = skipPrimaryKinds
+    ? assets.filter(a => !skipPrimaryKinds.includes(a.kind))
+    : assets
+
+  if (!filteredAssets.length && !audioSource) {
     return <JsonView data={data} />
   }
 
   return (
     <div className="space-y-3">
-      {/* Task status (music-gen pending results) */}
-      {audioSource?.kind === 'task' && (
+      {/* Task status (music-gen pending results) — skip if AudioBanner already showed it */}
+      {!skipAudioTaskCard && audioSource?.kind === 'task' && (
         <AudioTaskStatus audio={audioSource} />
       )}
 
       {/* Standard asset previews */}
-      {assets.map((asset, i) => {
+      {filteredAssets.map((asset, i) => {
         if (asset.kind === 'audio') return <AudioPreviewWithError key={i} item={asset} />
         if (asset.kind === 'image') return <ImagePreview key={i} item={asset} />
         if (asset.kind === 'file') return <FilePreview key={i} item={asset} />
@@ -141,7 +150,7 @@ export default function AssetResultPreview({ data, audioSource: providedAudio }:
       })}
       <details className="mt-2">
         <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
-          完整结果{assets.length > 0 ? `（${assets.length} 个资产）` : ''}
+          完整结果{filteredAssets.length > 0 ? `（${filteredAssets.length} 个资产）` : ''}
         </summary>
         <div className="mt-2">
           <JsonView data={data} />

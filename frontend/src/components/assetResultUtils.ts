@@ -50,12 +50,18 @@ function hexToBlobUrl(hex: string, mime = 'audio/mpeg'): string {
   return URL.createObjectURL(blob)
 }
 
+function detectAudioMimeFromHex(hex: string): 'audio/mpeg' | 'audio/wav' {
+  const prefix = hex.slice(0, 8).toLowerCase()
+  if (prefix.startsWith('52494646')) return 'audio/wav' // "RIFF" → WAV
+  return 'audio/mpeg'
+}
+
 function _extractAudio(data: unknown, depth: number): AudioSource | null {
   if (depth > AUDIO_MAX_DEPTH || data == null || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
 
   // 1. Direct URL fields (most common — check first for speed)
-  for (const key of ['audio_url', 'music_url', 'voice_url', 'speech_url', 'audio_file', 'url', 'file_url']) {
+  for (const key of ['audio_url', 'music_url', 'voice_url', 'speech_url', 'download_url', 'audio_file', 'url', 'file_url']) {
     const val = d[key]
     if (typeof val === 'string' && val) {
       if (val.startsWith('http://') || val.startsWith('https://')) {
@@ -153,7 +159,7 @@ export function audioSourceToSrc(audio: AudioSource): string {
   if (audio.kind === 'url') return audio.src
   if (audio.kind === 'data_url') return audio.src
   if (audio.kind === 'base64') return `data:audio/mpeg;base64,${audio.src}`
-  if (audio.kind === 'hex') return hexToBlobUrl(audio.src)
+  if (audio.kind === 'hex') return hexToBlobUrl(audio.src, detectAudioMimeFromHex(audio.src))
   return ''
 }
 

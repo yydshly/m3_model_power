@@ -14,6 +14,11 @@ Checks:
 10. Status-type music-gen results don't render a fake audio player.
 11. AssetResultPreview uses unified audio extraction.
 12. docs/RESULT_EXPERIENCE_AUDIT.md exists.
+13. extractAudioSource supports download_url field.
+14. hex audio uses detectAudioMimeFromHex (WAV vs MP3 MIME).
+15. ImageComparePreview is responsive (grid-cols-1 md:grid-cols-2).
+16. AssetResultPreview supports skipPrimaryKinds / skipAudioTaskCard dedupe props.
+17. InvokeResultView passes dedupe/compact props to AssetResultPreview.
 """
 from __future__ import annotations
 
@@ -271,6 +276,103 @@ def check_audit_doc_exists() -> bool:
     return True
 
 
+def check_audio_supports_download_url() -> bool:
+    """13. extractAudioSource supports download_url field."""
+    content = read(_ASSET_UTILS)
+
+    if "'download_url'" not in content and '"download_url"' not in content:
+        print("FAIL: extractAudioSource does not search 'download_url' field")
+        return False
+
+    print("PASS: extractAudioSource supports 'download_url' field")
+    return True
+
+
+def check_wav_mime_detection() -> bool:
+    """14. hex audio uses detectAudioMimeFromHex for correct WAV vs MP3 MIME."""
+    content = read(_ASSET_UTILS)
+
+    if "detectAudioMimeFromHex" not in content:
+        print("FAIL: detectAudioMimeFromHex not found in assetResultUtils.ts")
+        return False
+
+    # Must return audio/wav for RIFF magic
+    if "52494646" not in content and "RIFF" not in content:
+        print("FAIL: detectAudioMimeFromHex does not check for WAV RIFF magic")
+        return False
+
+    # audioSourceToSrc must use detectAudioMimeFromHex
+    if "detectAudioMimeFromHex" not in content:
+        print("FAIL: audioSourceToSrc does not call detectAudioMimeFromHex")
+        return False
+
+    print("PASS: detectAudioMimeFromHex correctly identifies WAV vs MP3 MIME")
+    return True
+
+
+def check_image_compare_responsive() -> bool:
+    """15. ImageComparePreview uses responsive grid (grid-cols-1 md:grid-cols-2)."""
+    content = read(_RUNNER)
+
+    # Find ImageComparePreview component
+    idx = content.find("function ImageComparePreview")
+    if idx == -1:
+        print("FAIL: ImageComparePreview not found")
+        return False
+
+    # Extract the component body (up to next function)
+    next_func = content.find("\nfunction ", idx + 1)
+    comp_body = content[idx:next_func if next_func != -1 else len(content)]
+
+    if "grid-cols-1 md:grid-cols-2" not in comp_body:
+        print("FAIL: ImageComparePreview does not use grid-cols-1 md:grid-cols-2")
+        return False
+
+    print("PASS: ImageComparePreview uses responsive grid-cols-1 md:grid-cols-2")
+    return True
+
+
+def check_asset_preview_skip_props() -> bool:
+    """16. AssetResultPreview supports skipPrimaryKinds / skipAudioTaskCard dedupe props."""
+    content = read(_ASSET_PREVIEW)
+
+    has_skip = "skipPrimaryKinds" in content or "skipAudioTaskCard" in content
+    if not has_skip:
+        print("FAIL: AssetResultPreview does not have skipPrimaryKinds or skipAudioTaskCard prop")
+        return False
+
+    print("PASS: AssetResultPreview supports dedupe props (skipPrimaryKinds / skipAudioTaskCard)")
+    return True
+
+
+def check_invoke_result_view_passes_dedupe_props() -> bool:
+    """17. InvokeResultView passes dedupe/compact props to AssetResultPreview."""
+    content = read(_RUNNER)
+
+    # Find InvokeResultView function
+    idx = content.find("function InvokeResultView")
+    if idx == -1:
+        print("FAIL: InvokeResultView not found in CapabilityRunner.tsx")
+        return False
+
+    # Extract the function body
+    next_func = content.find("\nfunction ", idx + 1)
+    func_body = content[idx:next_func if next_func != -1 else len(content)]
+
+    # Must pass skipPrimaryKinds or skipAudioTaskCard or assetPreviewProps to AssetResultPreview
+    has_dedupe = (
+        "skipPrimaryKinds" in func_body or
+        "skipAudioTaskCard" in func_body or
+        "assetPreviewProps" in func_body
+    )
+    if not has_dedupe:
+        print("FAIL: InvokeResultView does not pass dedupe props to AssetResultPreview")
+        return False
+
+    print("PASS: InvokeResultView passes dedupe/compact props to AssetResultPreview")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Result Experience checks")
@@ -289,6 +391,11 @@ def main():
         ("Task-status audio shows task card, not fake player", check_no_fake_player_for_task_status),
         ("AssetResultPreview uses unified audio logic", check_asset_preview_uses_unified_audio),
         ("RESULT_EXPERIENCE_AUDIT.md exists", check_audit_doc_exists),
+        ("extractAudioSource supports download_url", check_audio_supports_download_url),
+        ("WAV hex uses correct audio/wav MIME via detectAudioMimeFromHex", check_wav_mime_detection),
+        ("ImageComparePreview uses responsive grid-cols-1 md:grid-cols-2", check_image_compare_responsive),
+        ("AssetResultPreview supports dedupe props", check_asset_preview_skip_props),
+        ("InvokeResultView passes dedupe props to AssetResultPreview", check_invoke_result_view_passes_dedupe_props),
     ]
 
     all_passed = True

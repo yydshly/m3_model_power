@@ -463,7 +463,7 @@ function ImageComparePreview({ referenceUrl, generatedUrl }: { referenceUrl: str
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-medium text-violet-700">🖼 图片结果对比</span>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Reference image */}
         <div className="space-y-1">
           <p className="text-[10px] text-slate-500 font-medium">参考图</p>
@@ -521,8 +521,8 @@ function ImageComparePreview({ referenceUrl, generatedUrl }: { referenceUrl: str
 
 // ── Result banner ──────────────────────────────────────────────────────────────
 
-function AudioBanner({ data }: { data: unknown }) {
-  const audio = extractAudioSource(data)
+function AudioBanner({ data, audioSource: providedAudio }: { data: unknown; audioSource?: ReturnType<typeof extractAudioSource> | null }) {
+  const audio = providedAudio ?? extractAudioSource(data)
   const audioRef = useRef<HTMLAudioElement>(null)
   const [loadError, setLoadError] = useState(false)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -801,9 +801,22 @@ function InvokeResultView({
     )
   }
 
+  // Extract audio once so we can pass it to both ResultBanner and AssetResultPreview
+  const audioSource = resultType === 'audio' ? extractAudioSource(result.data) : null
+
+  // Determine dedupe params for AssetResultPreview to avoid double-rendering
+  const assetPreviewProps: React.ComponentProps<typeof AssetResultPreview> =
+    resultType === 'audio'
+      ? { data: result.data, audioSource, skipAudioTaskCard: true }
+      : resultType === 'image'
+      ? { data: result.data, skipPrimaryKinds: ['image'] }
+      : { data: result.data }
+
   return (
     <div className="mt-4">
-      <ResultBanner resultType={resultType} data={result.data} template={template} values={values} />
+      {resultType === 'audio'
+        ? <AudioBanner data={result.data} audioSource={audioSource} />
+        : <ResultBanner resultType={resultType} data={result.data} template={template} values={values} />}
 
       {/* Chain buttons per capability */}
       {resultType === 'voice_list' && (
@@ -878,7 +891,7 @@ function InvokeResultView({
       )}
 
       <div className="mt-3">
-        <AssetResultPreview data={result.data} />
+        <AssetResultPreview {...assetPreviewProps} />
       </div>
     </div>
   )
