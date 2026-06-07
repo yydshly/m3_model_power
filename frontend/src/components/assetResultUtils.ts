@@ -28,6 +28,7 @@ function truncate(str: string, maxLen: number): string {
 const MAX_DEPTH = 4
 const MAX_ITEMS = 10
 const MAX_STR_LEN = 300
+// MAX_URL_LEN is for display labels only. Never truncate the actual media src URL.
 const MAX_URL_LEN = 120
 
 interface FoundAssets {
@@ -43,7 +44,7 @@ function _extract(current: unknown, depth: number, found: FoundAssets): void {
     const url = current.trim()
     if (url.startsWith('http://') || url.startsWith('https://')) {
       if (isAudioUrl(url)) {
-        found.items.push({ kind: 'audio', url: truncate(url, MAX_URL_LEN), label: truncate(url, MAX_URL_LEN) })
+        found.items.push({ kind: 'audio', url, label: truncate(url, MAX_URL_LEN) })
         found.count++
       } else if (isImageUrl(url)) {
         found.items.push({ kind: 'image', url, label: truncate(url, MAX_URL_LEN) })
@@ -86,7 +87,7 @@ function _extract(current: unknown, depth: number, found: FoundAssets): void {
         const val = rec[field] as string
         if ((val.startsWith('http://') || val.startsWith('https://')) && found.count < MAX_ITEMS) {
           if (isAudioUrl(val)) {
-            found.items.push({ kind: 'audio', url: truncate(val, MAX_URL_LEN), label: `${field}: ${truncate(val, MAX_URL_LEN)}` })
+            found.items.push({ kind: 'audio', url: val, label: `${field}: ${truncate(val, MAX_URL_LEN)}` })
             found.count++
           } else if (isImageUrl(val)) {
             found.items.push({ kind: 'image', url: val, label: `${field}: ${truncate(val, MAX_URL_LEN)}` })
