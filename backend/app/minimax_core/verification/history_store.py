@@ -453,9 +453,10 @@ def append_history(
         path = _ensure_dir().joinpath("history.jsonl")
         path.append_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
         compact_history_if_needed()
-    except Exception:
+    except Exception as e:
         # 写失败不影响主流程，吞掉
-        pass
+        import sys
+        print(f"[history] append failed: {e}", file=sys.stderr)
 
 
 def list_history(limit: int = _DEFAULT_HISTORY_LIMIT) -> list[dict]:

@@ -4,6 +4,7 @@ import {
   getVerificationIndex,
   getVerificationSummary,
   getTestConsoleHistory,
+  getHistoryStatus,
   getCapabilityDescriptions,
   invoke,
   riskCheck,
@@ -13,6 +14,7 @@ import {
   type TestConsoleHistoryItem,
   type VerificationIndex,
   type VerificationSummary,
+  type HistoryStatusResp,
 } from '../api'
 import { useRegistry } from '../store'
 import AssetResultPreview from '../components/AssetResultPreview'
@@ -365,6 +367,9 @@ function InvokePanel({
           className={`w-full font-mono text-xs border rounded p-2 ${payloadErr ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
         />
         {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
+        <p className="text-[10px] text-amber-600 mt-1">
+          ⚠️ 这里的 payload 必须是 MiniMax handler 接收的真实 JSON，不是 Runner 表单字段。
+        </p>
       </div>
 
       <button
@@ -404,6 +409,7 @@ export default function TestConsole() {
   const [search, setSearch] = useState<string>('')
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyStatus, setHistoryStatus] = useState<HistoryStatusResp | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'>('all')
   const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
@@ -419,10 +425,17 @@ export default function TestConsole() {
     }
   }, [urlCapId, registry])
 
+  const refreshHistoryStatus = () => {
+    getHistoryStatus()
+      .then(s => setHistoryStatus(s))
+      .catch(() => setHistoryStatus(null))
+  }
+
   const refreshHistory = () => {
     getTestConsoleHistory(50)
       .then(r => { setHistory(r.items); setHistoryErr(null) })
       .catch((e: any) => setHistoryErr(e.message))
+    refreshHistoryStatus()
   }
 
   useEffect(() => { refreshHistory() }, [])
@@ -487,8 +500,16 @@ export default function TestConsole() {
       {/* ── Advanced console banner ── */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 flex items-start gap-3">
         <span className="text-base">🧪</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-700">这是高级测试控制台，适合开发者调试 JSON payload。</p>
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-sm font-medium text-slate-700">高级测试 = 开发者 raw JSON 调试台。</p>
+          <p className="text-xs text-slate-500">
+            它直接调用 <code className="bg-slate-100 px-1 rounded">/api/invoke/{'{capability_id}'}</code>，不会自动套用能力体验页的表单模板。
+          </p>
+          <div className="flex flex-wrap gap-4 text-[10px] text-slate-400 mt-1">
+            <span>💡 <strong>能力体验：</strong>推荐普通测试，表单化、带提示、带结果预览</span>
+            <span>⚠️ <strong>高级测试：</strong>开发者使用，手写 JSON payload</span>
+            <span>📖 <strong>能力详情：</strong>查看 API、风险、计费、scope、说明</span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             如果你只是想直接体验能力，请使用
             <Link to="/capability-runner" className="text-sky-600 hover:underline ml-1">「能力体验」</Link>
@@ -549,7 +570,14 @@ export default function TestConsole() {
       {/* ── History Panel ── */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-semibold text-slate-800">调用历史</h3>
+          <h3 className="font-semibold text-slate-800">
+            调用历史
+            {historyStatus?.exists && (
+              <span className="ml-2 text-[10px] text-slate-400 font-normal">
+                {historyStatus.record_count} 条 · {historyStatus.last_modified ? new Date(historyStatus.last_modified).toLocaleString() : '无修改时间'}
+              </span>
+            )}
+          </h3>
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={filterHistoryAction}
@@ -583,7 +611,25 @@ export default function TestConsole() {
         )}
 
         {history.length === 0 && !historyErr ? (
-          <p className="text-sm text-slate-400">暂无历史记录</p>
+          <div className="text-xs text-slate-500 space-y-1">
+            <p className="text-sm text-slate-400">暂无历史记录。</p>
+            {!historyStatus?.exists ? (
+              <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-700">
+                <p className="font-medium mb-1">可能原因：</p>
+                <ol className="ml-4 list-decimal list-inside space-y-0.5">
+                  <li>当前 <code className="bg-amber-100 px-1 rounded">{historyStatus?.history_path ?? 'backend/runtime/test_console/history.jsonl'}</code> 尚未生成</li>
+                  <li>后端进程刚重启</li>
+                  <li>还没有执行 Risk Check / Invoke</li>
+                  <li>当前运行目录与预期不一致</li>
+                </ol>
+                <p className="mt-1 text-[10px]">文件不存在 · 路径：{historyStatus?.history_path ?? '(未获取到)'}</p>
+              </div>
+            ) : (
+              <p className="text-slate-400">
+                记录 {historyStatus?.record_count ?? 0} 条，文件存在但暂无内容。
+              </p>
+            )}
+          </div>
         ) : (
           <div className="space-y-1 max-h-80 overflow-y-auto">
             {history

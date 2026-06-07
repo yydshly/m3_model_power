@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getHealth, type HealthResp } from '../api'
+import { getHealth, getRunnerTemplates, type HealthResp } from '../api'
 import { useRegistry } from '../store'
+import { computeWorkbenchStats } from '../workbenchStatus'
 
 const PLAN_FEATURES = [
   '支持 MiniMax 全系模型（M3 / M2.7 / 图像 / 语音 / 音乐）',
@@ -17,9 +18,16 @@ export default function Overview() {
   const { registry, error: regErr } = useRegistry()
   const [h, setH] = useState<HealthResp | null>(null)
   const [healthErr, setHealthErr] = useState<string | null>(null)
+  const [runnerSupported, setRunnerSupported] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     getHealth().then(setH).catch((e) => setHealthErr(String(e)))
+  }, [])
+
+  useEffect(() => {
+    getRunnerTemplates()
+      .then((r) => setRunnerSupported(new Set(r.supported)))
+      .catch(() => {})
   }, [])
 
   const stats = registry && {
@@ -221,6 +229,71 @@ export default function Overview() {
         </section>
       )}
 
+      {stats && registry && runnerSupported.size > 0 && (
+        <>
+          {/* Workbench 产品化进度 */}
+          <section className="mt-6">
+            <h2 className="text-sm font-semibold text-slate-700 mb-2">Runner 产品化进度</h2>
+            <div className="grid grid-cols-4 gap-3">
+              {(() => {
+                const wb = computeWorkbenchStats(registry, runnerSupported)
+                return (
+                  <>
+                    <GapStat
+                      label="Token Plan 验收"
+                      value={`${wb.inScopeVerified}/${wb.inScopeTotal}`}
+                      sub="已验收 / 范围内"
+                      tone="emerald"
+                    />
+                    <GapStat
+                      label="Runner 产品化"
+                      value={`${wb.runnerSupportedInScope}/${wb.inScopeTotal}`}
+                      sub="Runner 支持 / 范围内"
+                      tone="indigo"
+                    />
+                    <GapStat
+                      label="高级测试"
+                      value={wb.advancedTestCapabilities.length}
+                      sub="Advanced Test 能力"
+                      tone="amber"
+                    />
+                    <GapStat
+                      label="特殊 UI"
+                      value={wb.specialUICapabilities.length}
+                      sub="tts-ws 等"
+                      tone="purple"
+                    />
+                  </>
+                )
+              })()}
+            </div>
+          </section>
+
+          {/* 风险能力 */}
+          {(() => {
+            const wb = computeWorkbenchStats(registry, runnerSupported)
+            return wb.riskCapabilities.length > 0 ? (
+              <section className="mt-4">
+                <h2 className="text-sm font-semibold text-slate-700 mb-2">风险/不默认执行能力</h2>
+                <div className="flex flex-wrap gap-2">
+                  {wb.riskCapabilities.map((id) => {
+                    const cap = registry?.capabilities.find((c) => c.id === id)
+                    return (
+                      <span
+                        key={id}
+                        className="px-2 py-1 rounded border border-red-200 bg-red-50 text-xs text-red-700"
+                      >
+                        {cap?.label ?? id}
+                      </span>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : null
+          })()}
+        </>
+      )}
+
       {stats && (
         <section className="mt-6 grid grid-cols-5 gap-3 text-center">
           <Stat label="能力总数" value={stats.total} />
@@ -293,7 +366,7 @@ function ModelStat({ label, value, sub, tone }: { label: string; value: number; 
   )
 }
 
-function GapStat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: string }) {
+function GapStat({ label, value, sub, tone }: { label: string; value: string | number; sub: string; tone: string }) {
   const toneCls: Record<string, string> = {
     emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
     indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',

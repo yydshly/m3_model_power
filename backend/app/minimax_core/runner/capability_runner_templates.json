@@ -445,7 +445,7 @@
     "image-i2i": {
       "capability_id": "image-i2i",
       "label": "图生图",
-      "description": "使用参考图片和修改提示词生成新图片。",
+      "description": "基于参考图片生成新图片。当前不是严格局部编辑，主体一致性取决于模型理解。",
       "suitable_for": ["图像变体", "风格迁移", "封面二次创作"],
       "risk_level": "guarded",
       "result_type": "image",
@@ -459,8 +459,18 @@
         "prompt": {
           "type": "textarea",
           "label": "修改描述",
-          "default": "保持主体不变，改为电影感光影",
+          "default": "尽量保持参考图主体特征，增强电影感光影",
           "placeholder": "描述你想如何改变图片"
+        },
+        "reference_mode": {
+          "type": "select",
+          "label": "参考模式",
+          "default": "subject",
+          "options": [
+            {"value": "subject", "label": "主体参考 / 尽量保持主体"},
+            {"value": "style", "label": "风格参考 / 只参考画风"},
+            {"value": "variation", "label": "参考图变体 / 允许较大变化"}
+          ]
         },
         "model": {
           "type": "select",
@@ -468,7 +478,8 @@
           "default": "image-01",
           "options": [
             {"value": "image-01", "label": "image-01 图生图主力"}
-          ]
+          ],
+          "note": "当前图生图仅开放已验收的 image-01。image-01-live 是否支持图生图需要单独验证。"
         },
         "confirm_asset_source": {
           "type": "checkbox",
