@@ -12,7 +12,7 @@ from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
-EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "tts-async", "image-t2i", "chat-openai", "music-gen", "image-i2i", "file-upload", "file-list", "file-retrieve", "file-content"}
+EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "tts-async", "image-t2i", "chat-openai", "chat-anthropic", "chat-responses-create", "music-gen", "image-i2i", "file-upload", "file-list", "file-retrieve", "file-content"}
 VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider", "checkbox", "file"}
 VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat", "file_upload", "file_list", "file_detail", "file_content", "async_task"}
 VALID_VALUE_TYPES = {"string", "number", "boolean"}

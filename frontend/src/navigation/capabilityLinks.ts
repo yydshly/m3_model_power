@@ -19,6 +19,9 @@ export const RUNNER_SUPPORTED_CAPABILITIES = new Set([
   'file-content',
   // tts-async (P1-2)
   'tts-async',
+  // chat protocols (P1-3)
+  'chat-anthropic',
+  'chat-responses-create',
 ])
 
 // Capabilities that require quota confirmation before execution.
@@ -53,8 +56,6 @@ export const HIGH_RISK_CAPABILITIES = new Set([
 
 // B-class capabilities: in_scope, verified, but Runner not productized — TestConsole available.
 export const ADVANCED_TEST_CAPABILITIES = new Set([
-  'chat-anthropic',
-  'chat-responses-create',
   'chat-responses-tokens',
   'models-openai-list',
   'models-openai-retrieve',

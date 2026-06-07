@@ -454,15 +454,27 @@ def check_runner_not_productized_capabilities_exist() -> bool:
 
 
 def check_chat_anthropic_is_advanced_test() -> bool:
-    """19. chat-anthropic label should be '高级测试可用'."""
+    """19. chat-anthropic and chat-responses-create should be RUNNER_SUPPORTED (A-class)."""
     cap_links = read(_CAP_LINKS)
 
-    items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    items = _parse_set_from_ts(cap_links, 'RUNNER_SUPPORTED_CAPABILITIES')
     if 'chat-anthropic' not in items:
-        print("FAIL: chat-anthropic not in ADVANCED_TEST_CAPABILITIES")
+        print("FAIL: chat-anthropic not in RUNNER_SUPPORTED_CAPABILITIES")
+        return False
+    if 'chat-responses-create' not in items:
+        print("FAIL: chat-responses-create not in RUNNER_SUPPORTED_CAPABILITIES")
         return False
 
-    print("PASS: chat-anthropic is in ADVANCED_TEST_CAPABILITIES")
+    # They should NOT be in ADVANCED_TEST
+    adv = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if 'chat-anthropic' in adv:
+        print("FAIL: chat-anthropic should not be in ADVANCED_TEST_CAPABILITIES")
+        return False
+    if 'chat-responses-create' in adv:
+        print("FAIL: chat-responses-create should not be in ADVANCED_TEST_CAPABILITIES")
+        return False
+
+    print("PASS: chat-anthropic and chat-responses-create are RUNNER_SUPPORTED (A-class, not ADVANCED_TEST)")
     return True
 
 
@@ -697,7 +709,7 @@ def main():
         ("getCapabilityTestabilityLabel no longer returns '暂无直接体验'", check_no_暂无直接体验_in_capability_links),
         ("ADVANCED_TEST_CAPABILITIES set exists", check_advanced_test_capabilities_exist),
         ("RUNNER_NOT_PRODUCTIZED_CAPABILITIES set exists", check_runner_not_productized_capabilities_exist),
-        ("chat-anthropic is ADVANCED_TEST (label: 高级测试可用)", check_chat_anthropic_is_advanced_test),
+        ("chat-anthropic/responses-create RUNNER_SUPPORTED A-class", check_chat_anthropic_is_advanced_test),
         ("file-list is A-class (RUNNER_SUPPORTED)", check_file_list_is_runner_supported),
         ("tts-async is RUNNER_NOT_PRODUCTIZED (label: Runner 未产品化)", check_tts_async_is_runner_not_productized),
         ("file-upload is A-class (RUNNER_SUPPORTED)", check_file_upload_is_runner_supported),

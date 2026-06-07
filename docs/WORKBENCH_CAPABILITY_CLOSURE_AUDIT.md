@@ -31,12 +31,17 @@
 
 | capability_id | Runner? | TestConsole? | scope | result_type | 当前 UX 状态 | 分类 |
 |--------------|---------|-------------|-------|-------------|-------------|------|
-| `chat-openai` | ✅ | ✅ | in_scope | text | ✅ 已闭环：Runner 表单 + ResultBanner 文本展示 + next_steps | **A** |
-| `chat-anthropic` | ❌ | ✅ | in_scope | text | ⚠️ TestConsole 可用，Runner 无表单（next_steps 不指向自己） | **B** |
-| `chat-responses-create` | ❌ | ✅ | in_scope | text | ⚠️ TestConsole 可用，Runner 无表单 | **B** |
+| `chat-openai` | ✅ | ✅ | in_scope | chat | ✅ 已闭环：ChatResultPreview 统一展示 + next_steps | **A** |
+| `chat-anthropic` | ✅ | ✅ | in_scope | chat | ✅ 已闭环：ChatResultPreview 统一展示（识别 content[].text） | **A** |
+| `chat-responses-create` | ✅ | ✅ | in_scope | chat | ✅ 已闭环：ChatResultPreview 统一展示（识别 output_text） | **A** |
 | `chat-responses-tokens` | ❌ | ✅ | in_scope | json | ⚠️ 纯计数接口，TestConsole 可用，Runner 无表单 | **B** |
 
-**A 类说明**：`chat-openai` 是对话类唯一进入 Runner 的能力，因其结果类型为纯文本，展示最简单。`chat-anthropic` 和 `chat-responses-create` 结果结构不同（Anthropic 的 `content[].type`，Responses 的 `output` 数组），需要专用结果渲染器，当前仅 TestConsole 可用。
+**A 类说明（2026-06-07 P1-3 完成）**：三套对话协议统一通过 `ChatResultPreview` 展示，自动识别：
+- OpenAI Chat：`choices[0].message.content`
+- Anthropic Messages：`content[0].text`
+- Responses API：`output_text`
+
+`chat-responses-tokens` 为纯 token 计数接口，价值有限，保留为 B 类。
 
 ### 2.2 语音（voice）
 
@@ -108,22 +113,22 @@
 
 ## 3. A/B/C/D 分类汇总
 
-### A 类：已闭环可体验（12 个）
+### A 类：已闭环可体验（14 个）
 
 ```
 ✅ lyrics-gen       music-gen       voice-list
 ✅ tts-sync         image-t2i      image-i2i
-✅ chat-openai
+✅ chat-openai      chat-anthropic   chat-responses-create
 ✅ file-upload     file-list      file-retrieve
 ✅ file-content    tts-async
 ```
 
 特征：Runner 支持 + 表单完整 + 结果可视化展示 + next_steps 链路完整
 
-### B 类：已验收未产品化（6 个）
+### B 类：已验收未产品化（5 个）
 
 ```
-chat-anthropic       chat-responses-create   chat-responses-tokens
+chat-responses-tokens
 models-openai-list  models-openai-retrieve
 models-anthropic-list  models-anthropic-retrieve
 ```
@@ -154,11 +159,13 @@ file-delete
 
 ## 4. 已闭环能力清单
 
-### 4.1 Runner 支持的 12 个能力
+### 4.1 Runner 支持的 14 个能力
 
 | capability_id | result_type | 关键状态 |
 |--------------|-------------|---------|
-| `chat-openai` | text | ✅ ResultBanner 文本展示 |
+| `chat-openai` | chat | ✅ ChatResultPreview 统一展示（choices[].message.content） |
+| `chat-anthropic` | chat | ✅ ChatResultPreview 统一展示（content[].text） |
+| `chat-responses-create` | chat | ✅ ChatResultPreview 统一展示（output_text） |
 | `voice-list` | json | ✅ VoiceListHint 音色卡片 + next_steps → tts-sync |
 | `tts-sync` | audio | ✅ AudioBanner 播放器 + next_steps → voice-list |
 | `tts-async` | async_task | ✅ AsyncTaskResultPreview + start/query 模式 + next_steps → self |
@@ -189,11 +196,11 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 | capability_id | 阻塞原因 | 建议 |
 |--------------|---------|------|
-| `chat-anthropic` | Runner 无表单，结果渲染需识别 Anthropic 响应结构 | P1：补 Anthropic 结果渲染器 |
-| `chat-responses-create` | Runner 无表单，Responses API 结果结构不同 | P1：补 Responses 结果渲染器 |
+| `chat-anthropic` | ✅ 已完成（2026-06-07 P1-3）：ChatResultPreview + Runner 模板 | ✅ 已完成 |
+| `chat-responses-create` | ✅ 已完成（2026-06-07 P1-3）：ChatResultPreview + Runner 模板 | ✅ 已完成 |
 | `chat-responses-tokens` | 纯计数，结果价值有限 | P2：考虑移除或标记为"仅调试" |
 | `tts-ws` | WebSocket 事件流 UI 复杂，Runner 无状态管理 | P2：保留 TestConsole |
-| `tts-async` | 已实现（2026-06-07）：start/query 双模式 + AsyncTaskResultPreview | ✅ 已完成（P1-2） |
+| `tts-async` | ✅ 已完成（2026-06-07 P1-2）：start/query 双模式 + AsyncTaskResultPreview | ✅ 已完成（P1-2） |
 | `models-*` 全 4 个 | 纯 JSON 无资产，需专用模型卡片 | P2：补 ModelListPreview 表格卡片 |
 | `voice-clone-*` 全 4 个 | warning_only，需要认证 + 素材授权 | P2：保留 TestConsole + 风险提示 |
 | `voice-delete` | destructive，warning_only | P2：保留 TestConsole + 风险提示 |
@@ -264,10 +271,10 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 相关集合：
 
-- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, tts-async, image-t2i, image-i2i, chat-openai, file-upload, file-list, file-retrieve, file-content）
+- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, tts-async, image-t2i, image-i2i, chat-openai, chat-anthropic, chat-responses-create, file-upload, file-list, file-retrieve, file-content）
 - `QUOTA_SENSITIVE_CAPABILITIES`：A 类需额度（music-gen）
 - `ASSET_GUARDED_CAPABILITIES`：A 类需图片来源（image-i2i）
-- `ADVANCED_TEST_CAPABILITIES`：B 类（chat-anthropic, chat-responses-create, chat-responses-tokens, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
+- `ADVANCED_TEST_CAPABILITIES`：B 类（chat-responses-tokens, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
 - `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws）
 - `HIGH_RISK_CAPABILITIES`：D 类，包含以下子类：
   - video（out_of_scope）：video-t2v, video-i2v, video-s2v, video-query, video-download
@@ -279,9 +286,9 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 | # | 能力 | 修复方案 |
 |---|------|---------|
-| P1-1 | `tts-async` | ✅ 已完成（2026-06-07）：start/query 双模式 + AsyncTaskResultPreview |
-| P1-2 | `chat-anthropic` 结果展示 | 补 Anthropic 专用结果渲染器（识别 `content[].type === "text"` 等结构），进入 TestConsole 或独立页面 |
-| P1-3 | `chat-responses-create` | 同上，补 Responses API 结果渲染器 |
+| P1-1 | `tts-async` | ✅ 已完成（2026-06-07 P1-2）：start/query 双模式 + AsyncTaskResultPreview |
+| P1-2 | `chat-anthropic` | ✅ 已完成（2026-06-07 P1-3）：ChatResultPreview 识别 content[].text + Runner 表单 |
+| P1-3 | `chat-responses-create` | ✅ 已完成（2026-06-07 P1-3）：ChatResultPreview 识别 output_text + Runner 表单 |
 | P1-4 | `models-openai-list / anthropic-list` | 补 ModelListPreview（模型卡片表格，含 model_id / context_window / capabilities），形成 `list → retrieve` 链路 |
 
 ### P2（优化体验）
@@ -300,7 +307,7 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 | 页面 | 潜在误导问题 | 当前状态 |
 |------|------------|---------|
-| 能力画像 | `chat-anthropic` 等 B 类链接到 Runner 但无 Runner 入口 | ⚠️ 需修复 |
+| 能力画像 | `chat-anthropic` 等 B 类链接到 Runner 但无 Runner 入口 | ✅ 已修复（P1-3）：chat-anthropic / chat-responses-create 升为 A 类 |
 | 场景推荐 | `image_reference_variation` → `image-i2i` 缺少参考图说明 | ⚠️ 需修复 |
 | 场景推荐 | `emotion_mv_music` → `lyrics-gen` 缺少 music-gen 衔接说明 | ⚠️ 需修复 |
 | 场景推荐 | `file_knowledge_entry` 显示 disabled CTA | ⚠️ 需修复 |
@@ -326,18 +333,19 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 8. `getCapabilityTestabilityLabel` 不返回 `暂无直接体验`（已废弃）
 9. `ADVANCED_TEST_CAPABILITIES` 集合存在
 10. `RUNNER_NOT_PRODUCTIZED_CAPABILITIES` 集合存在
-11. `chat-anthropic` 标签为"高级测试可用"
-12. `file-list` 标签为"可直接体验"（A 类，2026-06-07 完成）
-13. `tts-async` 标签为"可直接体验"（A 类，2026-06-07 完成）
-14. `file-upload` 标签为"可直接体验"（A 类，2026-06-07 完成）
-15. `file-delete` 不显示"高级测试可用"（D 类：风险能力）
-16. `voice-delete` 不显示"高级测试可用"（D 类：风险能力）
-17. `music-gen` 仍显示"需额度确认"
-18. `image-i2i` 仍显示"需图片来源确认"
-19. `voice-clone-upload-audio` 为"风险能力"（D 类）
-20. `voice-clone-upload-prompt` 为"风险能力"（D 类）
-21. `voice-clone-do` 为"风险能力"（D 类）
-22. `voice-design` 为"风险能力"（D 类）
-23. `music-cover-prep` 为"风险能力"（D 类）
-24. `video-t2v` 为"风险能力"（D 类）
-25. `video-download` 为"风险能力"（D 类）
+11. `chat-anthropic` 标签为"可直接体验"（A 类，2026-06-07 P1-3 完成）
+12. `chat-responses-create` 标签为"可直接体验"（A 类，2026-06-07 P1-3 完成）
+13. `file-list` 标签为"可直接体验"（A 类，2026-06-07 完成）
+14. `tts-async` 标签为"可直接体验"（A 类，2026-06-07 完成）
+15. `file-upload` 标签为"可直接体验"（A 类，2026-06-07 完成）
+16. `file-delete` 不显示"高级测试可用"（D 类：风险能力）
+17. `voice-delete` 不显示"高级测试可用"（D 类：风险能力）
+18. `music-gen` 仍显示"需额度确认"
+19. `image-i2i` 仍显示"需图片来源确认"
+20. `voice-clone-upload-audio` 为"风险能力"（D 类）
+21. `voice-clone-upload-prompt` 为"风险能力"（D 类）
+22. `voice-clone-do` 为"风险能力"（D 类）
+23. `voice-design` 为"风险能力"（D 类）
+24. `music-cover-prep` 为"风险能力"（D 类）
+25. `video-t2v` 为"风险能力"（D 类）
+26. `video-download` 为"风险能力"（D 类）
