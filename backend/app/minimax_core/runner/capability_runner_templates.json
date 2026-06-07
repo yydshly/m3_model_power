@@ -127,6 +127,95 @@
         }
       ]
     },
+    "tts-async": {
+      "capability_id": "tts-async",
+      "label": "异步语音合成",
+      "description": "提交较长文本语音合成任务，获得 task_id 后可查询结果。",
+      "suitable_for": ["长文本旁白", "有声书片段", "批量语音草稿"],
+      "risk_level": "guarded",
+      "result_type": "async_task",
+      "form_schema": {
+        "mode": {
+          "type": "select",
+          "label": "操作模式",
+          "default": "start",
+          "options": [
+            {"value": "start", "label": "提交任务"},
+            {"value": "query", "label": "查询任务结果"}
+          ]
+        },
+        "task_id": {
+          "type": "input",
+          "label": "task_id",
+          "default": "",
+          "placeholder": "查询模式需要填写；提交任务成功后可自动带入"
+        },
+        "text": {
+          "type": "textarea",
+          "label": "文本",
+          "default": "你好，这是 MiniMax 异步语音合成任务测试。",
+          "placeholder": "输入要合成的长文本，建议 5000 字以内",
+          "max_chars": 5000
+        },
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "speech-2.8-hd",
+          "options": [
+            {"value": "speech-2.8-hd", "label": "speech-2.8-hd 高质量"},
+            {"value": "speech-2.8-turbo", "label": "speech-2.8-turbo 低延迟"},
+            {"value": "speech-02-hd", "label": "speech-02-hd 已验收稳定"},
+            {"value": "speech-02-turbo", "label": "speech-02-turbo 已验收稳定"}
+          ]
+        },
+        "voice_id": {
+          "type": "input",
+          "label": "音色 ID",
+          "default": "",
+          "placeholder": "可先使用 voice-list 查询 voice_id"
+        },
+        "speed": {
+          "type": "number",
+          "label": "语速",
+          "default": "1.0",
+          "placeholder": "范围 0.5~2.0",
+          "value_type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "step": 0.1
+        },
+        "confirm_long_task": {
+          "type": "checkbox",
+          "label": "我确认提交异步任务，可能需要稍后查询结果",
+          "default": "false",
+          "value_type": "boolean"
+        }
+      },
+      "payload_template": {
+        "mode": "{mode}",
+        "task_id": "{task_id}",
+        "model": "{model}",
+        "text": "{text}",
+        "voice_setting": {
+          "voice_id": "{voice_id}",
+          "speed": "{speed}"
+        },
+        "confirm_long_task": "{confirm_long_task}"
+      },
+      "next_steps": [
+        {
+          "capability_id": "tts-async",
+          "label": "查询任务结果",
+          "note": "提交成功后带入 task_id 查询结果",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "mode": "query",
+            "task_id": "$result.task_id"
+          }
+        }
+      ]
+    },
     "image-t2i": {
       "capability_id": "image-t2i",
       "label": "文生图",

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { invoke, riskCheck, uploadCapability, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
 import FileResultPreview from '../components/FileResultPreview'
+import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -702,6 +703,10 @@ function ResultBanner({ resultType, data, template, values }: { resultType: stri
     // FileResultPreview handles all file result types
     return null
   }
+  if (resultType === 'async_task') {
+    // AsyncTaskResultPreview handles async_task in InvokeResultView
+    return null
+  }
   return null
 }
 
@@ -952,6 +957,16 @@ function InvokeResultView({
         </div>
       )}
 
+      {resultType === 'async_task' && (
+        <div className="mt-3">
+          <AsyncTaskResultPreview
+            data={result.data}
+            nextSteps={template.next_steps}
+            onChain={(capId, handoffVals) => onChain(capId, handoffVals)}
+          />
+        </div>
+      )}
+
       <div className="mt-3">
         <AssetResultPreview {...assetPreviewProps} />
       </div>
@@ -986,6 +1001,17 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
     const file = files['file']!
     if (file.size > 1024 * 1024) return '文件大小不得超过 1MB'
     if (values['confirm_asset_source'] !== 'true') return '请勾选「确认文件来源合法」后才能执行'
+  }
+  if (template.capability_id === 'tts-async') {
+    if (values['mode'] === 'start' || !values['mode']) {
+      // start mode validations
+      if (!values['voice_id']?.trim()) return '请填写 voice_id（可从音色列表获取）'
+      if (!values['text']?.trim()) return '请填写文本'
+      if (values['confirm_long_task'] !== 'true') return '请勾选「确认提交异步任务」后才能执行'
+    }
+    if (values['mode'] === 'query') {
+      if (!values['task_id']?.trim()) return '请填写 task_id'
+    }
   }
   return null
 }
@@ -1032,7 +1058,8 @@ function CapabilityCard({
   const activeHandoffKeys = (handoffKeys ?? []).filter(k => values[k]?.trim())
   const confirmKey = template.capability_id === 'music-gen'
     ? 'confirm_quota' : template.capability_id === 'image-i2i' || template.capability_id === 'file-upload'
-    ? 'confirm_asset_source' : null
+    ? 'confirm_asset_source' : template.capability_id === 'tts-async'
+    ? 'confirm_long_task' : null
   const confirmChecked = confirmKey ? values[confirmKey] === 'true' : null
 
   const handleRun = async () => {
@@ -1110,6 +1137,7 @@ function CapabilityCard({
     'lyrics-gen': '生成歌词',
     'tts-sync': '生成语音',
     'voice-list': '查询音色',
+    'tts-async': '提交/查询',
     'image-t2i': '生成图片',
     'chat-openai': '发送',
     'music-gen': '生成音乐',
@@ -1188,6 +1216,22 @@ function CapabilityCard({
             {confirmChecked
               ? '✓ 已确认，文件来源合法，可执行'
               : '⚠ 上传文件请确保来源合法且不包含敏感信息，勾选确认后方可执行'}
+          </div>
+        )}
+
+        {template.capability_id === 'tts-async' && runState !== 'done' && (
+          <div className={`mb-3 p-2 rounded border text-xs ${
+            values['mode'] === 'query'
+              ? 'bg-sky-50 border-sky-200 text-sky-700'
+              : values['confirm_long_task'] === 'true'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                : 'bg-orange-50 border-orange-100 text-orange-600'
+          }`}>
+            {values['mode'] === 'query'
+              ? '📋 查询模式：只需填写 task_id 即可查询'
+              : values['confirm_long_task'] === 'true'
+                ? '✓ 已确认，可提交异步任务'
+                : '⚠ 异步任务可能需要稍后手动查询结果，请勾选确认'}
           </div>
         )}
 
@@ -1283,6 +1327,7 @@ const CAPABILITY_EMOJI: Record<string, string> = {
   'lyrics-gen': '🎵',
   'tts-sync': '🎙️',
   'voice-list': '🎙️',
+  'tts-async': '🎙️',
   'image-t2i': '🖼️',
   'chat-openai': '💬',
   'music-gen': '🎶',
@@ -1297,6 +1342,7 @@ const CAPABILITY_FAMILY: Record<string, string> = {
   'lyrics-gen': 'music',
   'tts-sync': 'voice',
   'voice-list': 'voice',
+  'tts-async': 'voice',
   'image-t2i': 'vision',
   'chat-openai': 'chat',
   'music-gen': 'music',
@@ -1311,6 +1357,7 @@ const CAPABILITY_LABEL: Record<string, string> = {
   'lyrics-gen': '歌词生成',
   'tts-sync': '语音合成',
   'voice-list': '音色列表',
+  'tts-async': '异步语音合成',
   'image-t2i': '图片生成',
   'chat-openai': '文本对话',
   'music-gen': '音乐生成',

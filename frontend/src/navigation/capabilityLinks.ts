@@ -17,6 +17,8 @@ export const RUNNER_SUPPORTED_CAPABILITIES = new Set([
   'file-list',
   'file-retrieve',
   'file-content',
+  // tts-async (P1-2)
+  'tts-async',
 ])
 
 // Capabilities that require quota confirmation before execution.
@@ -63,7 +65,6 @@ export const ADVANCED_TEST_CAPABILITIES = new Set([
 // C-class capabilities: in_scope, Runner not productized, require special UI (WS / async).
 export const RUNNER_NOT_PRODUCTIZED_CAPABILITIES = new Set([
   'tts-ws',
-  'tts-async',
 ])
 
 // Map model family → default Runner capability.

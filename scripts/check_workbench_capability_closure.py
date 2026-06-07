@@ -480,28 +480,42 @@ def check_file_list_is_advanced_test() -> bool:
 
 
 def check_tts_async_is_runner_not_productized() -> bool:
-    """21. tts-async label should be 'Runner 未产品化'."""
+    """21. tts-async should be A-class (RUNNER_SUPPORTED), NOT RUNNER_NOT_PRODUCTIZED."""
     cap_links = read(_CAP_LINKS)
 
-    items = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
-    if 'tts-async' not in items:
-        print("FAIL: tts-async not in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    # tts-async should NOT be in RUNNER_NOT_PRODUCTIZED_CAPABILITIES (now A-class)
+    not_productized = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
+    if 'tts-async' in not_productized:
+        print("FAIL: tts-async should NOT be in RUNNER_NOT_PRODUCTIZED_CAPABILITIES (now A-class)")
         return False
 
-    print("PASS: tts-async is in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    # tts-async should be in RUNNER_SUPPORTED_CAPABILITIES
+    supported = _parse_set_from_ts(cap_links, 'RUNNER_SUPPORTED_CAPABILITIES')
+    if 'tts-async' not in supported:
+        print("FAIL: tts-async not in RUNNER_SUPPORTED_CAPABILITIES")
+        return False
+
+    print("PASS: tts-async is A-class (RUNNER_SUPPORTED), not in RUNNER_NOT_PRODUCTIZED")
     return True
 
 
 def check_file_upload_is_runner_not_productized() -> bool:
-    """22. file-upload label should be 'Runner 未产品化'."""
+    """22. file-upload should be A-class (RUNNER_SUPPORTED), NOT RUNNER_NOT_PRODUCTIZED."""
     cap_links = read(_CAP_LINKS)
 
-    items = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
-    if 'file-upload' not in items:
-        print("FAIL: file-upload not in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    # file-upload should NOT be in RUNNER_NOT_PRODUCTIZED_CAPABILITIES (now A-class)
+    not_productized = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
+    if 'file-upload' in not_productized:
+        print("FAIL: file-upload should NOT be in RUNNER_NOT_PRODUCTIZED_CAPABILITIES (now A-class)")
         return False
 
-    print("PASS: file-upload is in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    # file-upload should be in RUNNER_SUPPORTED_CAPABILITIES
+    supported = _parse_set_from_ts(cap_links, 'RUNNER_SUPPORTED_CAPABILITIES')
+    if 'file-upload' not in supported:
+        print("FAIL: file-upload not in RUNNER_SUPPORTED_CAPABILITIES")
+        return False
+
+    print("PASS: file-upload is A-class (RUNNER_SUPPORTED), not in RUNNER_NOT_PRODUCTIZED")
     return True
 
 

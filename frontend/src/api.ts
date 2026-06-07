@@ -483,7 +483,7 @@ export type RunnerTemplate = {
   description: string
   suitable_for: string[]
   risk_level: string
-  result_type: 'text' | 'audio' | 'image' | 'voice_list' | 'chat' | 'file_upload' | 'file_list' | 'file_detail' | 'file_content'
+  result_type: 'text' | 'audio' | 'image' | 'voice_list' | 'chat' | 'file_upload' | 'file_list' | 'file_detail' | 'file_content' | 'async_task'
   form_schema: Record<string, {
     type: 'input' | 'textarea' | 'select' | 'number' | 'slider' | 'checkbox' | 'file'
     label: string

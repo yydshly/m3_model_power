@@ -89,9 +89,65 @@ async def tts_ws(payload: dict) -> Any:
 
 @register_handler("tts-async")
 async def tts_async(payload: dict) -> Any:
-    return await post_json("/v1/t2a_async_v2", payload, with_group=True, timeout=60)
+    """异步 TTS —— 支持 start（提交任务）和 query（查询结果）两种模式。
+
+    模式通过 payload.mode 区分：
+      - mode="start" 或无 mode：提交新任务，调用 POST /v1/t2a_async_v2
+      - mode="query"：查询已有任务，调用 GET /v1/query/t2a_async_query_v2
+
+    控制字段（mode, confirm_long_task）不传给 MiniMax 上游。
+    """
+    mode = payload.get("mode", "start")
+
+    if mode == "query":
+        task_id = payload.get("task_id")
+        if not task_id:
+            return {"error": "missing_field", "message": "查询模式需要填写 task_id"}
+        # 使用 MiniMax 原生客户端的查询接口
+        from ..minimax_core.clients.native import MiniMaxNativeClient
+
+        client = MiniMaxNativeClient()
+        return await client.tts_async_query(task_id)
+
+    # start 模式
+    if mode == "start":
+        pass  # fall through to start logic below
+    else:
+        return {"error": "invalid_mode", "message": f"不支持的 tts-async mode: {mode}"}
+
+    if not payload.get("text"):
+        return {"error": "missing_field", "message": "缺少参数 text"}
+    voice_setting = payload.get("voice_setting") or {}
+    if not voice_setting.get("voice_id"):
+        return {"error": "missing_field", "message": "缺少参数 voice_setting.voice_id"}
+
+    # 构建发给 MiniMax 的 body，剔除控制字段
+    body = {
+        k: v
+        for k, v in payload.items()
+        if k
+        not in (
+            "mode",
+            "task_id",
+            "confirm_long_task",
+        )
+    }
+
+    # 使用 MiniMax 原生客户端的创建接口
+    from ..minimax_core.clients.native import MiniMaxNativeClient
+
+    client = MiniMaxNativeClient()
+    return await client.tts_async_create(body)
 
 
 # 防止 ruff 报"未使用导入"
-__all__ = ["voice_list", "voice_delete", "voice_design", "voice_clone_do", "tts_sync", "tts_ws", "tts_async"]
+__all__ = [
+    "voice_list",
+    "voice_delete",
+    "voice_design",
+    "voice_clone_do",
+    "tts_sync",
+    "tts_ws",
+    "tts_async",
+]
 _ = post_bytes  # 预留供后续可能直接拉字节的接口

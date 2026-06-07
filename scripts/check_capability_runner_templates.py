@@ -12,9 +12,9 @@ from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
-EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai", "music-gen", "image-i2i", "file-upload", "file-list", "file-retrieve", "file-content"}
+EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "tts-async", "image-t2i", "chat-openai", "music-gen", "image-i2i", "file-upload", "file-list", "file-retrieve", "file-content"}
 VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider", "checkbox", "file"}
-VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat", "file_upload", "file_list", "file_detail", "file_content"}
+VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat", "file_upload", "file_list", "file_detail", "file_content", "async_task"}
 VALID_VALUE_TYPES = {"string", "number", "boolean"}
 
 errors: list[str] = []
@@ -176,8 +176,9 @@ for cap_id, template in templates.items():
         if "confirm_quota" not in payload_tpl:
             errors.append(f"'{cap_id}': risk_level='quota_sensitive' but payload_template missing 'confirm_quota'")
     if risk_level == "guarded" and isinstance(payload_tpl, dict) and cap_id not in multipart_caps:
-        if "confirm_asset_source" not in payload_tpl:
-            errors.append(f"'{cap_id}': risk_level='guarded' but payload_template missing 'confirm_asset_source'")
+        # tts-async uses confirm_long_task; file-upload uses confirm_asset_source; others need confirm_asset_source
+        if "confirm_asset_source" not in payload_tpl and "confirm_long_task" not in payload_tpl:
+            errors.append(f"'{cap_id}': risk_level='guarded' but payload_template missing 'confirm_asset_source' or 'confirm_long_task'")
 
 print("Capability Runner Template checks")
 print(f"- capabilities: {len(templates)} / {len(EXPECTED_CAPABILITIES)} {'OK' if set(templates.keys()) == EXPECTED_CAPABILITIES else 'FAIL'}")

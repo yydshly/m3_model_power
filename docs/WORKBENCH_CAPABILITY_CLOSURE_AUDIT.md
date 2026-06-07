@@ -44,15 +44,15 @@
 |--------------|---------|-------------|-------|-------------|-------------|------|
 | `voice-list` | ✅ | ✅ | in_scope | json | ✅ 已闭环：Runner 表单 + 结果展示音色列表卡片 + next_steps → tts-sync | **A** |
 | `tts-sync` | ✅ | ✅ | in_scope | audio | ✅ 已闭环：AudioBanner + AssetResultPreview + next_steps → voice-list | **A** |
+| `tts-async` | ✅ | ✅ | in_scope | async_task | ✅ 已闭环：AsyncTaskResultPreview + start/query 模式 + next_steps → self | **A** |
 | `tts-ws` | ❌ | ✅ | in_scope | audio (stream) | ⚠️ WebSocket 流式，TestConsole 有事件摘要；Runner 无表单（WS 连接状态展示复杂） | **C** |
-| `tts-async` | ❌ | ✅ | in_scope | task | ⚠️ 异步长文本，TestConsole 可提交 + 轮询；Runner 无表单（异步状态机未实现） | **C** |
 | `voice-clone-upload-audio` | ❌ | ✅ | warning_only | json | ⚠️ 高级测试可用；音色克隆需素材授权，warning_only 不进 Runner | **D** |
 | `voice-clone-upload-prompt` | ❌ | ✅ | warning_only | json | 同上 | **D** |
 | `voice-clone-do` | ❌ | ✅ | warning_only | json | 同上 | **D** |
 | `voice-design` | ❌ | ✅ | warning_only | json | 同上 | **D** |
 | `voice-delete` | ❌ | ✅ | warning_only | json | ⚠️ destructive，warning_only，TestConsole 可用 | **D** |
 
-**A 类说明**：`voice-list → tts-sync` 形成完整链路，Runner 已验收。
+**A 类说明**：`voice-list → tts-sync` 形成完整链路，Runner 已验收。`tts-async` 通过 start/query 双模式实现异步任务提交与结果查询，无需自动轮询。
 
 ### 2.3 视觉（vision）
 
@@ -108,14 +108,14 @@
 
 ## 3. A/B/C/D 分类汇总
 
-### A 类：已闭环可体验（11 个）
+### A 类：已闭环可体验（12 个）
 
 ```
 ✅ lyrics-gen       music-gen       voice-list
 ✅ tts-sync         image-t2i      image-i2i
 ✅ chat-openai
 ✅ file-upload     file-list      file-retrieve
-✅ file-content
+✅ file-content    tts-async
 ```
 
 特征：Runner 支持 + 表单完整 + 结果可视化展示 + next_steps 链路完整
@@ -130,13 +130,13 @@ models-anthropic-list  models-anthropic-retrieve
 
 特征：`in_scope` + 仅 TestConsole 可用 + 结果只显示 JSON
 
-### C 类：仅高级测试（2 个）
+### C 类：仅高级测试（1 个）
 
 ```
-tts-ws              tts-async
+tts-ws
 ```
 
-特征：`in_scope` + 需要特殊 UI（WebSocket 事件流、异步任务状态机）
+特征：`in_scope` + 需要特殊 UI（WebSocket 事件流）
 
 ### D 类：风险 / 不默认执行（12 个）
 
@@ -154,13 +154,14 @@ file-delete
 
 ## 4. 已闭环能力清单
 
-### 4.1 Runner 支持的 11 个能力
+### 4.1 Runner 支持的 12 个能力
 
 | capability_id | result_type | 关键状态 |
 |--------------|-------------|---------|
 | `chat-openai` | text | ✅ ResultBanner 文本展示 |
 | `voice-list` | json | ✅ VoiceListHint 音色卡片 + next_steps → tts-sync |
 | `tts-sync` | audio | ✅ AudioBanner 播放器 + next_steps → voice-list |
+| `tts-async` | async_task | ✅ AsyncTaskResultPreview + start/query 模式 + next_steps → self |
 | `lyrics-gen` | text | ✅ ResultBanner 文本 + next_steps → music-gen |
 | `music-gen` | audio | ✅ AudioBanner 任务卡片（task）+ skipAudioTaskCard |
 | `image-t2i` | image | ✅ ResultBanner 单图 + next_steps → image-i2i |
@@ -176,6 +177,7 @@ file-delete
 voice-list   → tts-sync       (音色选择 → 语音合成)       ✅ 双向 next_steps
 lyrics-gen   → music-gen      (歌词 → 音乐生成)            ✅ 双向 next_steps
 image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 next_steps
+tts-async    → tts-async     (提交任务 → 查询结果)         ✅ self handoff（query 模式）
 file-upload  → file-retrieve  → file-content              ✅ 链式 next_steps
 file-upload  → file-content                            ✅ 链式 next_steps
 file-list    → file-retrieve  / file-content             ✅ 表格内按钮 next_steps
@@ -191,7 +193,7 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 | `chat-responses-create` | Runner 无表单，Responses API 结果结构不同 | P1：补 Responses 结果渲染器 |
 | `chat-responses-tokens` | 纯计数，结果价值有限 | P2：考虑移除或标记为"仅调试" |
 | `tts-ws` | WebSocket 事件流 UI 复杂，Runner 无状态管理 | P2：保留 TestConsole |
-| `tts-async` | 异步任务状态机未实现（无轮询 / 无 task_id 管理） | P1：实现 tts-async-start → query 链路 |
+| `tts-async` | 已实现（2026-06-07）：start/query 双模式 + AsyncTaskResultPreview | ✅ 已完成（P1-2） |
 | `models-*` 全 4 个 | 纯 JSON 无资产，需专用模型卡片 | P2：补 ModelListPreview 表格卡片 |
 | `voice-clone-*` 全 4 个 | warning_only，需要认证 + 素材授权 | P2：保留 TestConsole + 风险提示 |
 | `voice-delete` | destructive，warning_only | P2：保留 TestConsole + 风险提示 |
@@ -262,11 +264,11 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 相关集合：
 
-- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, image-t2i, image-i2i, chat-openai, file-upload, file-list, file-retrieve, file-content）
+- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, tts-async, image-t2i, image-i2i, chat-openai, file-upload, file-list, file-retrieve, file-content）
 - `QUOTA_SENSITIVE_CAPABILITIES`：A 类需额度（music-gen）
 - `ASSET_GUARDED_CAPABILITIES`：A 类需图片来源（image-i2i）
 - `ADVANCED_TEST_CAPABILITIES`：B 类（chat-anthropic, chat-responses-create, chat-responses-tokens, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
-- `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws, tts-async）
+- `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws）
 - `HIGH_RISK_CAPABILITIES`：D 类，包含以下子类：
   - video（out_of_scope）：video-t2v, video-i2v, video-s2v, video-query, video-download
   - voice clone/design（warning_only）：voice-clone-upload-audio, voice-clone-upload-prompt, voice-clone-do, voice-design, voice-delete
@@ -277,7 +279,7 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 
 | # | 能力 | 修复方案 |
 |---|------|---------|
-| P1-1 | `tts-async` | 实现 `tts-async-start` Runner（提交任务）+ `tts-async-query`（轮询状态），形成 `tts-sync → tts-async` 升级链路 |
+| P1-1 | `tts-async` | ✅ 已完成（2026-06-07）：start/query 双模式 + AsyncTaskResultPreview |
 | P1-2 | `chat-anthropic` 结果展示 | 补 Anthropic 专用结果渲染器（识别 `content[].type === "text"` 等结构），进入 TestConsole 或独立页面 |
 | P1-3 | `chat-responses-create` | 同上，补 Responses API 结果渲染器 |
 | P1-4 | `models-openai-list / anthropic-list` | 补 ModelListPreview（模型卡片表格，含 model_id / context_window / capabilities），形成 `list → retrieve` 链路 |
@@ -325,9 +327,9 @@ file-list    → file-retrieve  / file-content             ✅ 表格内按钮 n
 9. `ADVANCED_TEST_CAPABILITIES` 集合存在
 10. `RUNNER_NOT_PRODUCTIZED_CAPABILITIES` 集合存在
 11. `chat-anthropic` 标签为"高级测试可用"
-12. `file-list` 标签为"高级测试可用"
-13. `tts-async` 标签为"Runner 未产品化"
-14. `file-upload` 标签为"Runner 未产品化"
+12. `file-list` 标签为"可直接体验"（A 类，2026-06-07 完成）
+13. `tts-async` 标签为"可直接体验"（A 类，2026-06-07 完成）
+14. `file-upload` 标签为"可直接体验"（A 类，2026-06-07 完成）
 15. `file-delete` 不显示"高级测试可用"（D 类：风险能力）
 16. `voice-delete` 不显示"高级测试可用"（D 类：风险能力）
 17. `music-gen` 仍显示"需额度确认"
