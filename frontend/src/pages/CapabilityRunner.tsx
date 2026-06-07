@@ -1284,11 +1284,13 @@ function CapabilityCard({
               </div>
             )}
 
-            {/* image-i2i model selection note */}
+            {/* image-i2i model and reference mode note */}
             {template.capability_id === 'image-i2i' && (
               <div className="mb-3 p-2 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-500">
                 <strong>模型说明：</strong>当前图生图仅开放已验收的 <code className="bg-slate-100 px-1 rounded">image-01</code>。
                 <code className="bg-slate-100 px-1 rounded">image-01-live</code> 是否支持图生图需要单独验证。
+                <br />
+                <strong>参考模式说明：</strong>当前参考模式（主体 / 风格 / 变体）仅影响提示词建议和用户预期；底层 API 仍使用已验收的 <code className="bg-slate-100 px-1 rounded">character</code> reference。style / variation 的真实 API 映射需要后续单独验证。
               </div>
             )}
 

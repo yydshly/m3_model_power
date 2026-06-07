@@ -493,7 +493,7 @@
         "prompt": "{prompt}",
         "subject_reference": [
           {
-            "type": "{reference_mode}",
+            "type": "character",
             "image_file": "{img_url}"
           }
         ],

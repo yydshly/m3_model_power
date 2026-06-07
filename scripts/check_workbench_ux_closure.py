@@ -13,7 +13,9 @@ Checks:
  9. Overview 有风险能力数量展示
 10. 视觉模块说明 image-i2i 模型限制
 11. 六个模块页面都有模块说明（MODULE_DESCRIPTIONS 覆盖 chat/voice/image/music/file/models）
-12. frontend build 通过
+12. image-i2i subject_reference[0].type 不等于 "{reference_mode}"
+13. image-i2i subject_reference[0].type 保持 "character"
+14. UI 文案说明 reference_mode 当前不改变底层 API type
 """
 from __future__ import annotations
 
@@ -189,6 +191,66 @@ def check_11_module_descriptions_coverage() -> bool:
     return True
 
 
+def check_12_image_i2i_ref_mode_not_in_api_type() -> bool:
+    """subject_reference[0].type must NOT be the literal string '{reference_mode}'"""
+    templates = load_templates()
+    i2i = templates.get("image-i2i", {})
+    payload = i2i.get("payload_template", {})
+    subject_ref = payload.get("subject_reference", [])
+    if not subject_ref:
+        print("FAIL: image-i2i payload_template has no subject_reference array")
+        return False
+    ref_type = subject_ref[0].get("type", "")
+    if ref_type == "{reference_mode}":
+        print("FAIL: image-i2i subject_reference[0].type is still '{reference_mode}' — must use verified API value")
+        return False
+    print(f"PASS: image-i2i subject_reference[0].type is '{ref_type}', not '{{reference_mode}}'")
+    return True
+
+
+def check_13_image_i2i_ref_type_is_character() -> bool:
+    """subject_reference[0].type must be 'character' (the verified API value)"""
+    templates = load_templates()
+    i2i = templates.get("image-i2i", {})
+    payload = i2i.get("payload_template", {})
+    subject_ref = payload.get("subject_reference", [])
+    if not subject_ref:
+        print("FAIL: image-i2i payload_template has no subject_reference array")
+        return False
+    ref_type = subject_ref[0].get("type", "")
+    if ref_type != "character":
+        print(f"FAIL: image-i2i subject_reference[0].type is '{ref_type}', expected 'character'")
+        return False
+    print("PASS: image-i2i subject_reference[0].type is 'character'")
+    return True
+
+
+def check_14_ui_explains_ref_mode_ui_only() -> bool:
+    """UI text must explain that reference_mode does not change the underlying API type"""
+    content = read(_RUNNER)
+    # Must mention that reference_mode is UI-only and doesn't change API type
+    patterns = [
+        "参考模式",
+        "仅影响提示词",
+        "底层 API",
+        "character",
+        "不改变",
+    ]
+    found = sum(1 for p in patterns if p in content)
+    if found < 4:
+        print(f"FAIL: UI text insufficiently explains reference_mode is UI-only (found {found}/{len(patterns)} patterns)")
+        return False
+    # Specifically for image-i2i context — find the template capability_id check near the model note
+    # The explanation text was added after the "模型说明" section, search broadly in the file
+    key_phrases = ["参考模式说明", "仅影响提示词建议", "底层 API 仍使用", "已验收的 character reference"]
+    found_in_section = sum(1 for p in key_phrases if p in content)
+    if found_in_section < 3:
+        print(f"FAIL: image-i2i section does not sufficiently explain ref_mode UI-only (found {found_in_section}/{len(key_phrases)} patterns)")
+        return False
+    print("PASS: UI explains reference_mode is UI-only and does not change API type")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Workbench UX Closure checks")
@@ -206,6 +268,9 @@ def main():
         ("Overview has risk capabilities", check_9_overview_risk_capabilities),
         ("Category uses MODULE_DESCRIPTIONS", check_10_image_module_i2i_model_limit),
         ("MODULE_DESCRIPTIONS covers 6 modules", check_11_module_descriptions_coverage),
+        ("image-i2i ref_mode NOT directly in API type", check_12_image_i2i_ref_mode_not_in_api_type),
+        ("image-i2i API type is character", check_13_image_i2i_ref_type_is_character),
+        ("UI explains ref_mode is UI-only", check_14_ui_explains_ref_mode_ui_only),
     ]
 
     all_passed = True
