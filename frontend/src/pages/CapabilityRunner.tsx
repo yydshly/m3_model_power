@@ -1063,7 +1063,7 @@ function CapabilityCard({
         if (!risk.allowed) { setRunState('error'); return }
 
         setRunState('running')
-        const res = await uploadCapability(template.capability_id, file, values['purpose'])
+        const res = await uploadCapability(template.capability_id, file, values['purpose'], true)
         if (isOk(res)) {
           const bizErr = extractBusinessError(res.data)
           if (bizErr) { setErrorMessage(bizErr); setResult(res); setRunState('error'); return }

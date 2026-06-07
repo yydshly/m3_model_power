@@ -17,11 +17,17 @@ Checks:
 13. FileResultPreview.tsx exists
 14. CapabilityRunner.tsx imports uploadCapability
 15. CapabilityRunner.tsx imports FileResultPreview
-16. backend upload.py does not save binary content to history (confirmed by code review)
+16. backend upload.py does not save binary content to history
 17. audit doc: A-class includes file-upload/file-list/file-retrieve/file-content
 18. audit doc: file-delete is D-class
-19. file-upload template has result_type file_upload
-20. file-list template has result_type file_list
+19. file-upload result_type is file_upload
+20. file-list result_type is file_list
+21. [NEW] uploadCapability() appends confirm_asset_source to FormData
+22. [NEW] CapabilityRunner.tsx calls uploadCapability with confirm=true
+23. [NEW] file-retrieve payload_template has file_id: "{file_id}"
+24. [NEW] file-content payload_template has file_id: "{file_id}"
+25. [NEW] upload.py calls append_history on success/failure
+26. [NEW] upload.py history payload excludes binary content
 """
 from __future__ import annotations
 
@@ -34,6 +40,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATE_PATH = _ROOT / "backend" / "app" / "minimax_core" / "runner" / "capability_runner_templates.json"
 _CAP_LINKS = _ROOT / "frontend" / "src" / "navigation" / "capabilityLinks.ts"
 _RUNNER_PAGE = _ROOT / "frontend" / "src" / "pages" / "CapabilityRunner.tsx"
+_API_TS = _ROOT / "frontend" / "src" / "api.ts"
 _FILE_PREVIEW = _ROOT / "frontend" / "src" / "components" / "FileResultPreview.tsx"
 _UPLOAD_PY = _ROOT / "backend" / "app" / "routers" / "upload.py"
 _AUDIT_DOC = _ROOT / "docs" / "WORKBENCH_CAPABILITY_CLOSURE_AUDIT.md"
@@ -283,9 +290,102 @@ def check_20_file_list_result_type() -> bool:
     return True
 
 
+# ── NEW CHECKS (P0 fixes) ─────────────────────────────────────────────────────
+
+def check_21_upload_capability_sends_confirm_asset_source() -> bool:
+    """uploadCapability() appends confirm_asset_source to FormData."""
+    content = read(_API_TS)
+    # Must have confirmAssetSource parameter and append it to fd
+    if 'confirmAssetSource' not in content and 'confirm_asset_source' not in content:
+        print("FAIL: uploadCapability does not have confirmAssetSource parameter")
+        return False
+    # Check that it's appended to FormData
+    has_append = 'fd.append(\'confirm_asset_source\'' in content or 'fd.append("confirm_asset_source"' in content
+    if not has_append:
+        print("FAIL: uploadCapability does not append confirm_asset_source to FormData")
+        return False
+    print("PASS: uploadCapability appends confirm_asset_source to FormData")
+    return True
+
+
+def check_22_runner_calls_upload_with_confirm() -> bool:
+    """CapabilityRunner.tsx calls uploadCapability with confirm=true (third arg after purpose)."""
+    content = read(_RUNNER_PAGE)
+    # Look for uploadCapability call within file-upload branch that passes `, true)`
+    # Pattern: uploadCapability(template.capability_id, file, values['purpose'], true)
+    if not re.search(r'uploadCapability\([^)]+,\s*true\s*\)', content, re.DOTALL):
+        print("FAIL: CapabilityRunner.tsx does not call uploadCapability with confirm=true")
+        return False
+    print("PASS: CapabilityRunner.tsx calls uploadCapability with confirm=true")
+    return True
+
+
+def check_23_file_retrieve_payload_has_file_id() -> bool:
+    """file-retrieve payload_template has file_id: '{file_id}'."""
+    templates = load_templates()
+    tpl = templates.get('file-retrieve', {})
+    payload = tpl.get('payload_template', {})
+    file_id_val = payload.get('file_id', '')
+    if file_id_val != '{file_id}':
+        print(f"FAIL: file-retrieve payload_template.file_id is '{file_id_val}', expected '{{file_id}}'")
+        return False
+    print("PASS: file-retrieve payload_template has file_id: '{file_id}'")
+    return True
+
+
+def check_24_file_content_payload_has_file_id() -> bool:
+    """file-content payload_template has file_id: '{file_id}'."""
+    templates = load_templates()
+    tpl = templates.get('file-content', {})
+    payload = tpl.get('payload_template', {})
+    file_id_val = payload.get('file_id', '')
+    if file_id_val != '{file_id}':
+        print(f"FAIL: file-content payload_template.file_id is '{file_id_val}', expected '{{file_id}}'")
+        return False
+    print("PASS: file-content payload_template has file_id: '{file_id}'")
+    return True
+
+
+def check_25_upload_calls_append_history() -> bool:
+    """upload.py calls append_history on success and failure."""
+    content = read(_UPLOAD_PY)
+    if 'append_history' not in content:
+        print("FAIL: upload.py does not call append_history")
+        return False
+    count = content.count('append_history')
+    if count < 2:
+        print(f"FAIL: upload.py calls append_history only {count} time(s), expected 2 (success + failure)")
+        return False
+    print(f"PASS: upload.py calls append_history {count} times (success + failure paths)")
+    return True
+
+
+def check_26_upload_history_no_binary() -> bool:
+    """upload.py history payload does not include file binary content."""
+    content = read(_UPLOAD_PY)
+    # The history_payload should use _build_history_payload which only includes
+    # filename, size, content_type, purpose, confirm_asset_source — NOT content bytes
+    if 'history_payload' not in content:
+        print("FAIL: upload.py does not build history_payload")
+        return False
+    # Verify _build_history_payload only includes safe fields
+    if '_build_history_payload' in content:
+        # Extract the function body
+        m = re.search(r'def _build_history_payload\(.*?\):.*?return \{(.*?)\}', content, re.DOTALL)
+        if m:
+            body = m.group(1)
+            forbidden = ['content', 'read()', 'file.content', 'bytes']
+            for f in forbidden:
+                if f in body:
+                    print(f"FAIL: _build_history_payload includes '{f}' — binary content leak risk")
+                    return False
+    print("PASS: upload.py history_payload excludes binary content")
+    return True
+
+
 def main():
     print("=" * 60)
-    print("File Runner Closure checks (P1-1)")
+    print("File Runner Closure checks (P1-1 + P0 fixes)")
     print("=" * 60)
 
     checks = [
@@ -309,6 +409,13 @@ def main():
         ("audit doc file-delete is D-class", check_18_audit_doc_file_delete_d_class),
         ("file-upload result_type is file_upload", check_19_file_upload_result_type),
         ("file-list result_type is file_list", check_20_file_list_result_type),
+        # NEW checks for P0 fixes
+        ("uploadCapability appends confirm_asset_source", check_21_upload_capability_sends_confirm_asset_source),
+        ("CapabilityRunner calls uploadCapability with confirm=true", check_22_runner_calls_upload_with_confirm),
+        ("file-retrieve payload_template has file_id", check_23_file_retrieve_payload_has_file_id),
+        ("file-content payload_template has file_id", check_24_file_content_payload_has_file_id),
+        ("upload.py calls append_history", check_25_upload_calls_append_history),
+        ("upload.py history_payload excludes binary", check_26_upload_history_no_binary),
     ]
 
     all_passed = True

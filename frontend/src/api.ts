@@ -180,10 +180,16 @@ export async function invoke(
   return data
 }
 
-export async function uploadCapability(capId: string, file: File, purpose?: string): Promise<InvokeResult> {
+export async function uploadCapability(
+  capId: string,
+  file: File,
+  purpose?: string,
+  confirmAssetSource?: boolean,
+): Promise<InvokeResult> {
   const fd = new FormData()
   fd.append('file', file)
   if (purpose) fd.append('purpose', purpose)
+  fd.append('confirm_asset_source', String(confirmAssetSource === true))
   const r = await fetch(`/api/upload/${capId}`, { method: 'POST', body: fd })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status }

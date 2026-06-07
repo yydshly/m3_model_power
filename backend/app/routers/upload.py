@@ -1,4 +1,4 @@
-"""multipart 上传统一端点。
+"""multipart 上统一端点。
 
 设计：
 - 前端 POST multipart/form-data 到 /api/upload/<cap_id>
@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..minimax.client import MiniMaxError
+from ..minimax_core.verification.history_store import append_history
 from ..registry import get_registry
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -52,6 +53,23 @@ def _params(extra: dict | None = None) -> dict:
     return p
 
 
+def _build_history_payload(
+    filename: str | None,
+    size_bytes: int,
+    content_type: str,
+    purpose: str | None,
+    confirm_asset_source: bool | None,
+) -> dict[str, Any]:
+    """Build a history-safe payload summary (no binary content)."""
+    return {
+        "filename": filename or "unknown",
+        "size": size_bytes,
+        "content_type": content_type,
+        "purpose": purpose,
+        "confirm_asset_source": confirm_asset_source is True,
+    }
+
+
 @router.post("/{cap_id}")
 async def upload(
     cap_id: str,
@@ -69,17 +87,18 @@ async def upload(
         raise HTTPException(501, f"上传路由未配置：{cap_id}")
 
     content = await file.read()
+    content_size = len(content)
 
     # P1-5 safety: file-upload requires explicit confirm_asset_source and size check
     if cap_id == "file-upload":
         if confirm_asset_source is not True:
             raise HTTPException(400, "file-upload requires confirm_asset_source=true in form data")
-        if len(content) == 0:
+        if content_size == 0:
             raise HTTPException(400, "上传文件不能为空")
-        if len(content) > MAX_FILE_SIZE_BYTES:
+        if content_size > MAX_FILE_SIZE_BYTES:
             raise HTTPException(400, f"文件大小不得超过 {MAX_FILE_SIZE_BYTES // (1024*1024)} MB")
     else:
-        if len(content) == 0:
+        if content_size == 0:
             raise HTTPException(400, "上传文件不能为空")
 
     path, default_purpose = UPLOAD_MAP[cap_id]
@@ -92,17 +111,52 @@ async def upload(
 
     async with httpx.AsyncClient(base_url=settings.minimax_base_url, timeout=120) as c:
         r = await c.post(path, headers=_headers(), params=_params(), data=data, files=files)
+
+    # Build history-safe payload (no binary content)
+    history_payload = _build_history_payload(
+        filename=file.filename,
+        size_bytes=content_size,
+        content_type=file.content_type or "application/octet-stream",
+        purpose=real_purpose,
+        confirm_asset_source=confirm_asset_source,
+    )
+
     if r.status_code >= 400:
         try:
             err = r.json()
             msg = err.get("base_resp", {}).get("status_msg") or err.get("message") or r.text
         except ValueError:
             msg = r.text
+        # Write failed upload to history (summary only, no binary)
+        append_history(
+            action="upload",
+            capability_id=cap_id,
+            payload=history_payload,
+            confirmations={"confirm_asset_source": confirm_asset_source is True},
+            result={"ok": False, "error": "minimax_error", "status": r.status_code, "message": msg},
+        )
         return JSONResponse(
             status_code=502 if r.status_code >= 500 else r.status_code,
             content={"error": "minimax_error", "status": r.status_code, "message": msg},
         )
+
+    # Success: parse response, write history with result summary (no binary)
     try:
-        return {"ok": True, "data": r.json()}
+        response_data = r.json()
+    except ValueError:
+        response_data = {"raw": r.text}
+
+    # Write successful upload to history — result_summary is built by summarize_result(),
+    # which extracts file_id/filename/etc. from response_data automatically.
+    append_history(
+        action="upload",
+        capability_id=cap_id,
+        payload=history_payload,
+        confirmations={"confirm_asset_source": confirm_asset_source is True},
+        result={"ok": True, "data": response_data},
+    )
+
+    try:
+        return {"ok": True, "data": response_data}
     except ValueError:
         return {"ok": True, "data": {"raw": r.text}}
