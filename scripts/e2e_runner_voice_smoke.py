@@ -3,11 +3,13 @@
 Voice smoke test for Guided Capability Runner.
 
 Validates the core voice-list → tts-sync product loop:
-  1. Load runner templates
-  2. Verify voice-list and tts-sync templates exist
-  3. (With --execute-real) Call voice-list to get a voice_id
-  4. (With --execute-real) Call tts-sync with that voice_id
-  5. Verify audio_url / asset / audio field in response
+  1. Check health endpoint
+  2. Load runner templates
+  3. Verify voice-list and tts-sync templates exist
+  4. (With --execute-real) Call voice-list to get a voice_id
+  5. (With --execute-real) Call tts-sync risk-check
+  6. (With --execute-real) Call tts-sync invoke
+  7. Verify audio_url / asset / audio field in response
 
 Safe by default: run without --execute-real for dry-run validation.
 """
@@ -24,6 +26,17 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 TIMEOUT_SEC = 30
+
+# Mask key for safe logging
+_KEY_TAIL_LEN = 6
+
+
+def _mask_key(key: str | None) -> str:
+    if not key:
+        return "<not-set>"
+    if len(key) <= _KEY_TAIL_LEN:
+        return "****"
+    return f"...{key[-_KEY_TAIL_LEN:]}"
 
 
 def http_post(path: str, body: dict, token: str | None = None) -> dict:
@@ -59,35 +72,54 @@ def http_get(path: str, token: str | None = None) -> dict:
         raise RuntimeError(f"Connection error on {url}: {e}") from e
 
 
-def get_token() -> str | None:
-    """Load MINIMAX_TOKEN_PLAN_KEY from backend/.env if present."""
+def get_token() -> tuple[str | None, bool, bool]:
+    """
+    Load MINIMAX_TOKEN_PLAN_KEY from backend/.env if present.
+    Returns (token, api_key_configured, minimax_status_ok).
+    """
     env_path = _ROOT / "backend/.env"
     if not env_path.exists():
-        return None
+        return None, False, False
+    token = None
+    configured = False
+    minimax_ok = False
     for line in env_path.read_text(encoding="utf-8").splitlines():
         if line.startswith("MINIMAX_TOKEN_PLAN_KEY="):
-            return line.split("=", 1)[1].strip().strip('"')
-    return None
+            val = line.split("=", 1)[1].strip().strip('"')
+            if val:
+                token = val
+                configured = True
+        if line.startswith("MINIMAX_API_KEY=") or line.startswith("MINIMAX_TOKEN_PLAN_KEY="):
+            val = line.split("=", 1)[1].strip().strip('"')
+            if val:
+                configured = True
+    return token, configured, minimax_ok
 
 
-def extract_audio_url(data) -> str | None:
-    """Recursively find audio URL in response."""
+def extract_audio_url(data) -> tuple[str | None, bool]:
+    """
+    Recursively find audio URL or audio_base64 in response.
+    Returns (found_value, is_base64).
+    """
     if isinstance(data, dict):
         for key in ("audio_url", "audio_file", "url", "file_url"):
             if key in data and isinstance(data[key], str) and data[key]:
                 val = data[key].lower()
                 if any(ext in val for ext in (".mp3", ".wav", ".ogg", ".m4a", ".aac")):
-                    return data[key]
+                    return data[key], False
+        # Also check for audio_base64
+        if "audio_base64" in data and isinstance(data["audio_base64"], str) and data["audio_base64"]:
+            return data["audio_base64"], True
         for val in data.values():
-            result = extract_audio_url(val)
+            result, is_b64 = extract_audio_url(val)
             if result:
-                return result
+                return result, is_b64
     elif isinstance(data, list):
         for item in data:
-            result = extract_audio_url(item)
+            result, is_b64 = extract_audio_url(item)
             if result:
-                return result
-    return None
+                return result, is_b64
+    return None, False
 
 
 def extract_voice_ids(data) -> list[str]:
@@ -132,14 +164,34 @@ def resolve_template(val, values, form_schema):
     return val
 
 
+def _extract_error_details(resp: dict) -> dict:
+    """Extract structured error details from an API error response."""
+    details = {}
+    if "error" in resp:
+        details["error"] = resp.get("error")
+    if "message" in resp:
+        details["message"] = resp.get("message")
+    base_resp = resp.get("base_resp", {})
+    if base_resp:
+        details["base_resp.status_code"] = base_resp.get("status_code")
+        details["base_resp.status_msg"] = base_resp.get("status_msg")
+    return details
+
+
 def print_result(r: dict) -> None:
     print("\nRunner voice smoke result")
     print(f"- base_url: {r['base_url']}")
     print(f"- execute_real: {r['execute_real']}")
+    print(f"- health_ok: {r['health_ok']}")
+    print(f"- api_key_configured: {r['api_key_configured']}")
+    print(f"- minimax_status: {r['minimax_status']}")
     print(f"- templates_loaded: {r['templates_loaded']}")
     print(f"- voice_list_template: {r['voice_list_template']}")
     print(f"- tts_sync_template: {r['tts_sync_template']}")
     print(f"- voice_id: {r['voice_id']}")
+    print(f"- tts_risk_allowed: {r['tts_risk_allowed']}")
+    print(f"- tts_risk_blocked_reasons: {r['tts_risk_blocked_reasons']}")
+    print(f"- tts_risk_required_confirmations: {r['tts_risk_required_confirmations']}")
     print(f"- tts_sync_ok: {r['tts_sync_ok']}")
     print(f"- audio_detected: {r['audio_detected']}")
     print(f"- audio_url_or_asset: {r['audio_url_or_asset']}")
@@ -163,22 +215,52 @@ def main():
     result = {
         "base_url": BASE_URL,
         "execute_real": args.execute_real,
+        "health_ok": False,
+        "api_key_configured": False,
+        "minimax_status": None,
         "templates_loaded": False,
         "voice_list_template": False,
         "tts_sync_template": False,
         "voice_id": None,
+        "tts_risk_allowed": None,
+        "tts_risk_blocked_reasons": None,
+        "tts_risk_required_confirmations": None,
         "tts_sync_ok": None,
         "audio_detected": None,
         "audio_url_or_asset": None,
     }
-    token = get_token() if args.execute_real else None
 
-    # ── 1. Load templates ─────────────────────────────────────────────────────────
+    mode = "REAL" if args.execute_real else "DRY"
+    token = None
+    api_key_configured = False
+
+    # ── 0. Load token for real mode ──────────────────────────────────────────────
+    if args.execute_real:
+        token, api_key_configured, _ = get_token()
+        result["api_key_configured"] = api_key_configured
+        if token:
+            print(f"[{mode}] token loaded: {_mask_key(token)}")
+        else:
+            print(f"[{mode}] WARNING: no token found in backend/.env")
+
+    # ── 1. Health check ───────────────────────────────────────────────────────────
+    try:
+        health_resp = http_get("/api/health", token)
+        result["health_ok"] = True
+        result["minimax_status"] = health_resp.get("minimax", "unknown")
+        result["api_key_configured"] = health_resp.get("api_key_configured", api_key_configured)
+        print(f"[{mode}] health ok (minimax={result['minimax_status']}, key_configured={result['api_key_configured']})")
+    except Exception as e:
+        print(f"[{mode}] health check failed: {e}")
+        print_result(result)
+        sys.exit(1)
+
+    # ── 2. Load templates ─────────────────────────────────────────────────────────
     try:
         templates_data = http_get("/api/runner/templates", token)
         result["templates_loaded"] = True
     except Exception as e:
-        print(f"[DRY] Failed to load templates: {e}")
+        print(f"[{mode}] Failed to load templates: {e}")
         print_result(result)
         sys.exit(1)
 
@@ -186,7 +268,6 @@ def main():
     result["voice_list_template"] = "voice-list" in templates
     result["tts_sync_template"] = "tts-sync" in templates
 
-    mode = "REAL" if args.execute_real else "DRY"
     print(f"[{mode}] templates loaded: {len(templates)}")
     print(f"[{mode}] voice-list template: {result['voice_list_template']}")
     print(f"[{mode}] tts-sync template: {result['tts_sync_template']}")
@@ -200,7 +281,7 @@ def main():
         print_result(result)
         sys.exit(1)
 
-    # ── 2. Dry-run: validate payload construction ────────────────────────────────
+    # ── 3. Dry-run: validate payload construction ────────────────────────────────
     tts_template = templates.get("tts-sync", {})
     pld_tpl = tts_template.get("payload_template", {})
     form_schema = tts_template.get("form_schema", {})
@@ -223,7 +304,7 @@ def main():
         print_result(result)
         sys.exit(0)
 
-    # ── 3. Real: get voice_id from voice-list ────────────────────────────────────
+    # ── 4. Real: get voice_id from voice-list ────────────────────────────────────
     if args.voice_id:
         result["voice_id"] = args.voice_id
         print(f"[REAL] Using provided voice_id: {args.voice_id}")
@@ -237,7 +318,10 @@ def main():
             sys.exit(1)
 
         if vl_resp.get("error"):
-            print(f"[ERROR] voice-list returned error: {vl_resp.get('message')}")
+            err_details = _extract_error_details(vl_resp)
+            print(f"[ERROR] voice-list returned error:")
+            for k, v in err_details.items():
+                print(f"  {k}: {v}")
             print_result(result)
             sys.exit(1)
 
@@ -250,8 +334,44 @@ def main():
         result["voice_id"] = voice_ids[0]
         print(f"[REAL] Got voice_id: {result['voice_id']}")
 
-    # ── 4. Real: call tts-sync ──────────────────────────────────────────────────
-    print("[REAL] Calling tts-sync...")
+    # ── 5. Real: tts-sync risk-check ─────────────────────────────────────────────
+    risk_payload = {
+        "payload": {
+            "model": "speech-2.8-hd",
+            "text": args.text,
+            "voice_setting": {
+                "voice_id": result["voice_id"],
+                "speed": 1.0,
+            },
+        },
+        "confirmations": {},
+    }
+
+    print("[REAL] Calling tts-sync risk-check...")
+    try:
+        risk_resp = http_post("/api/capabilities/tts-sync/risk-check", risk_payload, token)
+    except Exception as e:
+        print(f"[ERROR] tts-sync risk-check failed: {e}")
+        print_result(result)
+        sys.exit(1)
+
+    risk_data = risk_resp.get("data", risk_resp)
+    allowed = risk_data.get("allowed", False)
+    result["tts_risk_allowed"] = allowed
+    result["tts_risk_blocked_reasons"] = risk_data.get("blocked_reasons", [])
+    result["tts_risk_required_confirmations"] = risk_data.get("required_confirmations", [])
+
+    if not allowed:
+        print(f"[ERROR] tts-sync risk-check blocked:")
+        print(f"  blocked_reasons: {result['tts_risk_blocked_reasons']}")
+        print(f"  required_confirmations: {result['tts_risk_required_confirmations']}")
+        print_result(result)
+        sys.exit(1)
+
+    print(f"[REAL] tts-sync risk-check allowed=True")
+
+    # ── 6. Real: call tts-sync ──────────────────────────────────────────────────
+    print("[REAL] Calling tts-sync invoke...")
     tts_payload = {
         "payload": {
             "model": "speech-2.8-hd",
@@ -273,7 +393,10 @@ def main():
         sys.exit(1)
 
     if tts_resp.get("error"):
-        print(f"[ERROR] tts-sync returned error: {tts_resp.get('message')}")
+        err_details = _extract_error_details(tts_resp)
+        print(f"[ERROR] tts-sync returned error:")
+        for k, v in err_details.items():
+            print(f"  {k}: {v}")
         result["tts_sync_ok"] = False
         print_result(result)
         sys.exit(1)
@@ -281,21 +404,31 @@ def main():
     result["tts_sync_ok"] = True
     print(f"[REAL] tts-sync ok: True")
 
-    # ── 5. Extract audio URL ────────────────────────────────────────────────────
-    audio_url = extract_audio_url(tts_resp.get("data", {}))
+    # ── 7. Extract audio URL / base64 ───────────────────────────────────────────
+    data = tts_resp.get("data", {})
+    audio_url, is_b64 = extract_audio_url(data)
     if audio_url:
         result["audio_detected"] = True
         result["audio_url_or_asset"] = audio_url
-        print(f"[REAL] audio_url detected: {audio_url[:60]}...")
+        if is_b64:
+            print(f"[REAL] audio_base64 detected ({len(audio_url)} chars)")
+        else:
+            print(f"[REAL] audio_url detected: {audio_url[:60]}...")
     else:
         result["audio_detected"] = False
-        data = tts_resp.get("data", {})
+        # Check top-level keys directly
         for key in ("audio_url", "audio_file", "file_url", "url"):
-            if key in data and isinstance(data[key], str):
+            if key in data and isinstance(data[key], str) and data[key]:
                 result["audio_url_or_asset"] = data[key]
                 result["audio_detected"] = True
                 break
-        print(f"[REAL] audio_url NOT detected — data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+        # Also check audio_base64 at top level
+        if not result["audio_detected"] and "audio_base64" in data and isinstance(data["audio_base64"], str) and data["audio_base64"]:
+            result["audio_detected"] = True
+            result["audio_url_or_asset"] = data["audio_base64"]
+            print(f"[REAL] audio_base64 detected at top level ({len(data['audio_base64'])} chars)")
+        if not result["audio_detected"]:
+            print(f"[REAL] audio NOT detected — data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
 
     print_result(result)
     sys.exit(0)
