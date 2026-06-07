@@ -731,10 +731,26 @@ function InvokeResultView({
 
       {/* Chain buttons per capability */}
       {resultType === 'voice_list' && (
-        <VoiceListHint
-          data={result.data}
-          onUseVoiceId={(vid) => onChain('tts-sync', { voice_id: vid })}
-        />
+        <>
+          <VoiceListHint
+            data={result.data}
+            onUseVoiceId={(vid) => onChain('tts-sync', { voice_id: vid })}
+          />
+          {/* Always show next step suggestion for voice_list */}
+          {template.next_steps.some(ns => ns.capability_id === 'tts-sync') && (
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <p className="text-xs text-slate-500 mb-2">建议下一步：</p>
+              <div className="flex items-center gap-2">
+                <ChainButton
+                  label="语音合成"
+                  onClick={() => onChain('tts-sync', {})}
+                  variant="secondary"
+                />
+                <span className="text-[10px] text-slate-400">选择上方音色可自动填入 voice_id</span>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {resultType === 'text' && template.next_steps.some(ns => ns.capability_id === 'music-gen') && (
@@ -1114,6 +1130,8 @@ export default function CapabilityRunnerPage() {
 function CapabilityRunnerLoaded({ templates }: { templates: Record<string, RunnerTemplate> }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const selected = searchParams.get('capability')
+  const fromWorkflow = searchParams.get('from_workflow')
+  const fromScenario = searchParams.get('from_scenario')
 
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
@@ -1128,7 +1146,9 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   // Parse URL query params for handoff pre-fill (e.g. ?capability=tts-sync&voice_id=xxx)
   const queryInitialValues: Record<string, string> = {}
   searchParams.forEach((val, key) => {
-    if (key !== 'capability') queryInitialValues[key] = val
+    if (key !== 'capability' && key !== 'from_workflow' && key !== 'from_scenario') {
+      queryInitialValues[key] = val
+    }
   })
 
   const selectedTemplate = selected ? templates[selected] : null
@@ -1156,6 +1176,29 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
           选择一个能力，使用默认输入体验 MiniMax Token Plan 的实际效果；部分能力结果可以继续带入下一步流程。
         </p>
       </div>
+
+      {/* Workflow/scenario context banner */}
+      {(fromWorkflow || fromScenario) && (
+        <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+          {fromWorkflow && (
+            <span>
+              <span className="text-slate-500">当前来自流程：</span>
+              <Link to={`/capability-workflows?workflow=${encodeURIComponent(fromWorkflow)}`} className="text-sky-600 hover:underline ml-1">
+                {fromWorkflow}
+              </Link>
+            </span>
+          )}
+          {fromWorkflow && fromScenario && <span className="mx-2 text-slate-300">|</span>}
+          {fromScenario && (
+            <span>
+              <span className="text-slate-500">当前来自场景：</span>
+              <Link to={`/capability-scenarios?scenario=${encodeURIComponent(fromScenario)}`} className="text-sky-600 hover:underline ml-1">
+                {fromScenario}
+              </Link>
+            </span>
+          )}
+        </div>
+      )}
 
       {!selected ? (
         <CapabilitySelector onSelect={handleSelect} capabilities={supportedCapabilities} />

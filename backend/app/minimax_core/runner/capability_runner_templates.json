@@ -120,7 +120,10 @@
           "label": "语音合成",
           "note": "获取 voice_id 后可进入语音合成",
           "blocked": false,
-          "guarded": false
+          "guarded": false,
+          "handoff": {
+            "voice_id": "$result.voice_id"
+          }
         }
       ]
     },
