@@ -209,9 +209,9 @@ def _spec_to_capability(spec) -> Capability:
         model_family=spec.model_family,
         protocols=spec.protocols,
         requires_model=spec.requires_model,
-        billing_policy=spec.billing_policy,
-        operation_policy=spec.operation_policy,
-        scope_policy=spec.scope_policy,
+        billing_policy=spec.billing_policy.model_dump(),
+        operation_policy=spec.operation_policy.model_dump(),
+        scope_policy=spec.scope_policy.model_dump(),
     )
 
 
