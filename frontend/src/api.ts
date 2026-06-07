@@ -450,3 +450,46 @@ export async function getScenario(scenarioId: string): Promise<{ id: string; sce
   if (!r.ok) throw new Error(`scenario ${r.status}`)
   return r.json()
 }
+
+// ── Runner Templates ────────────────────────────────────────────────
+
+export type RunnerTemplate = {
+  capability_id: string
+  label: string
+  description: string
+  suitable_for: string[]
+  risk_level: string
+  form_schema: Record<string, {
+    type: 'input' | 'textarea' | 'select'
+    label: string
+    default: string
+    placeholder?: string
+    max_chars?: number
+    options?: Array<{ value: string; label: string }>
+  }>
+  payload_template: Record<string, unknown>
+  next_steps: Array<{
+    capability_id: string
+    label: string
+    note: string
+    blocked: boolean
+  }>
+}
+
+export type RunnerTemplatesResponse = {
+  schema_version: number
+  supported: string[]
+  templates: Record<string, RunnerTemplate>
+}
+
+export async function getRunnerTemplates(): Promise<RunnerTemplatesResponse> {
+  const r = await fetch('/api/runner/templates')
+  if (!r.ok) throw new Error(`runner templates ${r.status}`)
+  return r.json()
+}
+
+export async function getRunnerTemplate(capabilityId: string): Promise<RunnerTemplate> {
+  const r = await fetch(`/api/runner/template/${capabilityId}`)
+  if (!r.ok) throw new Error(`runner template ${capabilityId} ${r.status}`)
+  return r.json()
+}

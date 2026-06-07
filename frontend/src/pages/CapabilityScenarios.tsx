@@ -120,10 +120,22 @@ export default function CapabilityScenariosPage() {
               </div>
 
               {/* CTA */}
-              <div className="pt-2">
+              <div className="pt-2 flex items-center gap-3 flex-wrap">
+                {(() => {
+                  const RUNNER_SUPPORTED = new Set(['lyrics-gen', 'tts-sync', 'voice-list', 'image-t2i', 'chat-openai'])
+                  const primary = s.capabilities.find(c => RUNNER_SUPPORTED.has(c))
+                  return primary ? (
+                    <Link
+                      to={`/capability-runner?capability=${primary}`}
+                      className="inline-flex items-center gap-1.5 text-sm bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
+                    >
+                      开始体验 →
+                    </Link>
+                  ) : null
+                })()}
                 <Link
                   to={`/capability-workflows?workflow=${s.workflow_id}`}
-                  className="inline-flex items-center gap-1.5 text-sm bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
+                  className="inline-flex items-center gap-1.5 text-sm bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition"
                 >
                   查看流程 →
                 </Link>

@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, type InvokeResult, type RiskCheckResult } from '../api'
-import AssetResultPreview from '../components/AssetResultPreview'
+import { invoke, riskCheck, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type FormField = {
   type: 'input' | 'textarea' | 'select'
@@ -15,24 +14,6 @@ type FormField = {
 }
 
 type FormSchema = Record<string, FormField>
-
-type NextStep = {
-  capability_id: string
-  label: string
-  note: string
-  blocked: boolean
-}
-
-type RunnerTemplate = {
-  capability_id: string
-  label: string
-  description: string
-  suitable_for: string[]
-  risk_level: string
-  form_schema: FormSchema
-  payload_template: Record<string, unknown>
-  next_steps: NextStep[]
-}
 
 // ── InvokeResult type guard ─────────────────────────────────────────────────────
 
@@ -58,7 +39,7 @@ function RiskBadge({ level }: { level: string }) {
 
 type RunState = 'idle' | 'checking' | 'running' | 'done' | 'error'
 
-function RunButton({ state, label, onClick }: { state: RunState; label: string; onClick?: () => void }) {
+function RunButton({ state, label, onClick, disabled }: { state: RunState; label: string; onClick?: () => void; disabled?: boolean }) {
   if (state === 'checking' || state === 'running') {
     return (
       <button disabled className="px-4 py-2 rounded-lg bg-slate-400 text-white cursor-not-allowed text-sm">
@@ -67,7 +48,15 @@ function RunButton({ state, label, onClick }: { state: RunState; label: string; 
     )
   }
   return (
-    <button onClick={onClick} className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition text-sm">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-4 py-2 rounded-lg text-white transition text-sm ${
+        disabled
+          ? 'bg-slate-300 cursor-not-allowed'
+          : 'bg-slate-900 hover:bg-slate-700'
+      }`}
+    >
       {label}
     </button>
   )
@@ -187,228 +176,91 @@ function InvokeResultView({ result }: { result: InvokeResult }) {
   )
 }
 
-// ── Lyrics-gen card ───────────────────────────────────────────────────────────
+// ── Asset Result Preview (inline, avoids import issue) ────────────────────────
 
-function LyricsGenCard() {
-  const template = LYRICS_TEMPLATE
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [runState, setRunState] = useState<RunState>('idle')
-  const [result, setResult] = useState<InvokeResult | null>(null)
-  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
-
-  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
-
-  const handleRun = async () => {
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
-    setRunState('checking')
-    setResult(null)
-    setRiskResult(null)
-    try {
-      const risk = await riskCheck(template.capability_id, payload, {})
-      setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
-      setRunState('running')
-      const res = await invoke(template.capability_id, payload, {})
-      setResult(res)
-      setRunState('done')
-    } catch {
-      setRunState('error')
-    }
+function AssetResultPreview({ data }: { data: unknown }) {
+  if (!data) return null
+  const d = data as Record<string, unknown>
+  if (d.audio_url) return (
+    <div className="mt-2">
+      <audio controls src={d.audio_url as string} className="w-full" />
+      {!!d.voice_id && <div className="text-xs text-slate-500 mt-1">voice_id: {String(d.voice_id as string)}</div>}
+    </div>
+  )
+  if (d.image_url) return (
+    <div className="mt-2">
+      <img src={d.image_url as string} alt="生成结果" className="max-w-sm rounded" />
+    </div>
+  )
+  if (d.lyrics) return (
+    <pre className="mt-2 p-3 bg-slate-50 rounded text-xs whitespace-pre-wrap">{String(d.lyrics)}</pre>
+  )
+  if (d.choices && Array.isArray(d.choices)) {
+    const first = d.choices[0] as Record<string, unknown>
+    const content = (first?.message as Record<string, unknown>)?.content
+    if (content) return <div className="mt-2 p-3 bg-slate-50 rounded text-xs whitespace-pre-wrap">{String(content)}</div>
   }
-
-  return (
-    <CapabilityCard template={template} runState={runState} onRun={handleRun}>
-      <RunnerForm schema={template.form_schema as FormSchema} values={values} onChange={handleChange} />
-      {riskResult && !riskResult.allowed && (
-        <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-          {riskResult.required_confirmations.length > 0 && (
-            <div className="mt-1">需要确认：{riskResult.required_confirmations.join('、')}</div>
-          )}
+  if (d.voices && Array.isArray(d.voices)) return (
+    <div className="mt-2 space-y-1">
+      {(d.voices as Array<Record<string, unknown>>).slice(0, 10).map((v, i) => (
+        <div key={i} className="text-xs bg-slate-50 rounded px-2 py-1">
+          <span className="font-mono text-sky-700">{String(v.voice_id)}</span>
+          <span className="text-slate-500 ml-2">{String(v.name ?? v.voice_id)}</span>
         </div>
-      )}
-      {result && <InvokeResultView result={result} />}
-    </CapabilityCard>
+      ))}
+    </div>
+  )
+  return <div className="mt-2 text-xs text-slate-500">{JSON.stringify(data, null, 2)}</div>
+}
+
+// ── Helper: get default values from schema ───────────────────────────────────
+
+function getDefaultValues(schema: FormSchema): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, field]) => [key, field.default ?? ''])
   )
 }
 
-// ── TTS card ─────────────────────────────────────────────────────────────────
-
-function TtsSyncCard() {
-  const template = TTS_SYNC_TEMPLATE
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [runState, setRunState] = useState<RunState>('idle')
-  const [result, setResult] = useState<InvokeResult | null>(null)
-  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
-
-  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
-
-  const handleRun = async () => {
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
-    setRunState('checking')
-    setResult(null)
-    setRiskResult(null)
-    try {
-      const risk = await riskCheck(template.capability_id, payload, {})
-      setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
-      setRunState('running')
-      const res = await invoke(template.capability_id, payload, {})
-      setResult(res)
-      setRunState('done')
-    } catch {
-      setRunState('error')
-    }
-  }
-
-  return (
-    <CapabilityCard template={template} runState={runState} onRun={handleRun}>
-      <RunnerForm schema={template.form_schema as FormSchema} values={values} onChange={handleChange} />
-      {riskResult && !riskResult.allowed && (
-        <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-        </div>
-      )}
-      {result && <InvokeResultView result={result} />}
-    </CapabilityCard>
-  )
-}
-
-// ── Voice-list card ───────────────────────────────────────────────────────────
-
-function VoiceListCard() {
-  const template = VOICE_LIST_TEMPLATE
-  const [runState, setRunState] = useState<RunState>('idle')
-  const [result, setResult] = useState<InvokeResult | null>(null)
-  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
-
-  const handleRun = async () => {
-    setRunState('checking')
-    setResult(null)
-    setRiskResult(null)
-    try {
-      const risk = await riskCheck(template.capability_id, {}, {})
-      setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
-      setRunState('running')
-      const res = await invoke(template.capability_id, {}, {})
-      setResult(res)
-      setRunState('done')
-    } catch {
-      setRunState('error')
-    }
-  }
-
-  return (
-    <CapabilityCard template={template} runState={runState} onRun={handleRun}>
-      <div className="text-xs text-slate-500 mb-2">此能力无需参数，直接查询可用音色列表。</div>
-      {riskResult && !riskResult.allowed && (
-        <div className="p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-        </div>
-      )}
-      {result && <InvokeResultView result={result} />}
-    </CapabilityCard>
-  )
-}
-
-// ── Image-t2i card ────────────────────────────────────────────────────────────
-
-function ImageT2iCard() {
-  const template = IMAGE_T2I_TEMPLATE
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [runState, setRunState] = useState<RunState>('idle')
-  const [result, setResult] = useState<InvokeResult | null>(null)
-  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
-
-  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
-
-  const handleRun = async () => {
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
-    setRunState('checking')
-    setResult(null)
-    setRiskResult(null)
-    try {
-      const risk = await riskCheck(template.capability_id, payload, {})
-      setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
-      setRunState('running')
-      const res = await invoke(template.capability_id, payload, {})
-      setResult(res)
-      setRunState('done')
-    } catch {
-      setRunState('error')
-    }
-  }
-
-  return (
-    <CapabilityCard template={template} runState={runState} onRun={handleRun}>
-      <RunnerForm schema={template.form_schema as FormSchema} values={values} onChange={handleChange} />
-      {riskResult && !riskResult.allowed && (
-        <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-        </div>
-      )}
-      {result && <InvokeResultView result={result} />}
-    </CapabilityCard>
-  )
-}
-
-// ── Chat-openai card ──────────────────────────────────────────────────────────
-
-function ChatOpenaiCard() {
-  const template = CHAT_OPENAI_TEMPLATE
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [runState, setRunState] = useState<RunState>('idle')
-  const [result, setResult] = useState<InvokeResult | null>(null)
-  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
-
-  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
-
-  const handleRun = async () => {
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
-    setRunState('checking')
-    setResult(null)
-    setRiskResult(null)
-    try {
-      const risk = await riskCheck(template.capability_id, payload, {})
-      setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
-      setRunState('running')
-      const res = await invoke(template.capability_id, payload, {})
-      setResult(res)
-      setRunState('done')
-    } catch {
-      setRunState('error')
-    }
-  }
-
-  return (
-    <CapabilityCard template={template} runState={runState} onRun={handleRun}>
-      <RunnerForm schema={template.form_schema as FormSchema} values={values} onChange={handleChange} />
-      {riskResult && !riskResult.allowed && (
-        <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-        </div>
-      )}
-      {result && <InvokeResultView result={result} />}
-    </CapabilityCard>
-  )
-}
-
-// ── Shared card wrapper ────────────────────────────────────────────────────────
+// ── Capability card (dynamic, driven by template) ─────────────────────────────
 
 function CapabilityCard({
   template,
-  runState,
-  onRun,
-  children,
 }: {
   template: RunnerTemplate
-  runState: RunState
-  onRun: () => void
-  children: React.ReactNode
 }) {
+  const schema = template.form_schema as FormSchema
+  const [values, setValues] = useState<Record<string, string>>(() => getDefaultValues(schema))
+  const [runState, setRunState] = useState<RunState>('idle')
+  const [result, setResult] = useState<InvokeResult | null>(null)
+  const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const isTtsSync = template.capability_id === 'tts-sync'
+  const voiceIdEmpty = isTtsSync && !values['voice_id']?.trim()
+
+  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
+
+  const handleRun = async () => {
+    if (isTtsSync && voiceIdEmpty) return
+    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
+    setRunState('checking')
+    setResult(null)
+    setRiskResult(null)
+    setErrorMessage(null)
+    try {
+      const risk = await riskCheck(template.capability_id, payload, {})
+      setRiskResult(risk)
+      if (!risk.allowed) { setRunState('error'); return }
+      setRunState('running')
+      const res = await invoke(template.capability_id, payload, {})
+      setResult(res)
+      setRunState('done')
+    } catch (e: any) {
+      setErrorMessage(e?.message ?? String(e))
+      setRunState('error')
+    }
+  }
+
   const RUN_LABELS: Record<string, string> = {
     'lyrics-gen': '生成歌词',
     'tts-sync': '生成语音',
@@ -436,17 +288,57 @@ function CapabilityCard({
         )}
       </div>
       <div className="px-5 py-4">
-        <div className="mb-4">{children}</div>
+        {isTtsSync && voiceIdEmpty && (
+          <div className="mb-3 p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
+            <strong>请先查询音色：</strong>voice_id 为空无法合成语音。
+            <br />
+            <Link
+              to="/capability-runner?capability=voice-list"
+              className="text-sky-600 hover:underline mt-1 inline-block"
+            >
+              → 去查询音色
+            </Link>
+          </div>
+        )}
+
+        {Object.keys(schema).length > 0 && (
+          <div className="mb-4">
+            <RunnerForm schema={schema} values={values} onChange={handleChange} />
+          </div>
+        )}
+
+        {template.capability_id === 'voice-list' && (
+          <div className="text-xs text-slate-500 mb-4">此能力无需参数，直接查询可用音色列表。</div>
+        )}
+
         <div className="flex items-center gap-3">
-          <RunButton state={runState} label={RUN_LABELS[template.capability_id] ?? '执行'} onClick={onRun} />
+          <RunButton
+            state={runState}
+            label={RUN_LABELS[template.capability_id] ?? '执行'}
+            onClick={handleRun}
+            disabled={isTtsSync && voiceIdEmpty}
+          />
           <span className="text-xs text-slate-400">执行前会先进行安全检查</span>
         </div>
+
         {runState === 'done' && (
           <div className="mt-3 text-xs text-emerald-600">✓ 执行完成</div>
         )}
         {runState === 'error' && (
-          <div className="mt-3 text-xs text-red-600">✗ 执行失败（被安全检查阻断或发生错误）</div>
+          <div className="mt-3 text-xs text-red-600">
+            ✗ {errorMessage ? `执行失败：${errorMessage}` : '执行失败（被安全检查阻断或发生错误）'}
+          </div>
         )}
+        {riskResult && !riskResult.allowed && (
+          <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+            <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
+            {riskResult.required_confirmations.length > 0 && (
+              <div className="mt-1">需要确认：{riskResult.required_confirmations.join('、')}</div>
+            )}
+          </div>
+        )}
+        {result && <InvokeResultView result={result} />}
+
         {template.next_steps.length > 0 && runState === 'done' && (
           <div className="mt-4 pt-3 border-t border-slate-100">
             <p className="text-xs text-slate-500 mb-2">下一步：</p>
@@ -485,137 +377,46 @@ function CapabilityCard({
   )
 }
 
-// ── Inline templates ─────────────────────────────────────────────────────────
-
-const LYRICS_TEMPLATE: RunnerTemplate = {
-  capability_id: 'lyrics-gen',
-  label: '歌词生成',
-  description: '根据主题、风格、情绪生成结构化歌词，可继续用于 music-gen。',
-  suitable_for: ['情绪 MV', 'AI 歌曲草稿', '短视频 BGM', '音乐灵感'],
-  risk_level: 'safe',
-  form_schema: {
-    theme: { type: 'input', label: '主题', default: '夏天傍晚的乡村小路', placeholder: '描述想要的歌曲主题' },
-    style: { type: 'input', label: '风格', default: '温柔、怀旧，民谣', placeholder: '如：流行、摇滚、温柔、怀旧' },
-    language: { type: 'select', label: '语言', default: '中文', options: ['中文', '英文', '日文', '韩文', '其他'].map(v => ({ value: v, label: v })) },
-  },
-  payload_template: { mode: 'write_full_song', prompt: '{theme}，风格：{style}', title: '' },
-  next_steps: [
-    { capability_id: 'music-gen', label: '生成音乐', note: 'music-gen 属于额度敏感能力，需要确认后执行', blocked: true },
-  ],
-}
-
-const TTS_SYNC_TEMPLATE: RunnerTemplate = {
-  capability_id: 'tts-sync',
-  label: '短文本语音合成',
-  description: '输入文本，选择模型和音色，生成可播放音频。',
-  suitable_for: ['短视频旁白', '语音助手', '情绪对话', '有声书片段'],
-  risk_level: 'safe',
-  form_schema: {
-    text: { type: 'textarea', label: '文本', default: '你好，这是 MiniMax Token Plan 语音合成能力测试。', placeholder: '输入要合成的文本，建议 300 字以内', max_chars: 10000 },
-    model: {
-      type: 'select', label: '模型', default: 'speech-2.8-hd',
-      options: [
-        { value: 'speech-2.8-hd', label: 'speech-2.8-hd 官方当前·高质量' },
-        { value: 'speech-2.8-turbo', label: 'speech-2.8-turbo 官方当前·低延迟' },
-        { value: 'speech-02-hd', label: 'speech-02-hd 已验收稳定' },
-        { value: 'speech-02-turbo', label: 'speech-02-turbo 已验收稳定' },
-      ],
-    },
-    voice_id: { type: 'input', label: '音色 ID', default: '', placeholder: '先在「音色列表」查询可用 voice_id' },
-    speed: { type: 'input', label: '语速', default: '1.0', placeholder: '范围 0.5~2.0' },
-  },
-  payload_template: { model: '{model}', text: '{text}', voice_setting: { voice_id: '{voice_id}', speed: '{speed}' } },
-  next_steps: [],
-}
-
-const VOICE_LIST_TEMPLATE: RunnerTemplate = {
-  capability_id: 'voice-list',
-  label: '查询音色列表',
-  description: '查询当前可用 voice_id，用于 TTS 语音合成。',
-  suitable_for: ['查询可用音色', '选择 TTS 音色'],
-  risk_level: 'safe',
-  form_schema: {},
-  payload_template: {},
-  next_steps: [
-    { capability_id: 'tts-sync', label: '语音合成', note: '获取 voice_id 后可进入语音合成', blocked: false },
-  ],
-}
-
-const IMAGE_T2I_TEMPLATE: RunnerTemplate = {
-  capability_id: 'image-t2i',
-  label: '文生图',
-  description: '输入 prompt，选择图片模型，生成图片。',
-  suitable_for: ['封面', '海报', '情绪 MV 分镜', '产品配图', '设计灵感'],
-  risk_level: 'safe',
-  form_schema: {
-    prompt: { type: 'textarea', label: '图片描述', default: '一只橘猫坐在窗边，清晨阳光，真实摄影风格', placeholder: '描述想要的图片内容', max_chars: 1500 },
-    model: {
-      type: 'select', label: '模型', default: 'image-01',
-      options: [
-        { value: 'image-01', label: 'image-01 官方主力·支持尺寸控制' },
-        { value: 'image-01-live', label: 'image-01-live 官方当前·画风控制' },
-      ],
-    },
-    aspect_ratio: {
-      type: 'select', label: '尺寸/比例', default: '1:1',
-      options: [
-        { value: '1:1', label: '1:1 方形' },
-        { value: '16:9', label: '16:9 宽屏' },
-        { value: '9:16', label: '9:16 竖屏' },
-      ],
-    },
-  },
-  payload_template: { model: '{model}', prompt: '{prompt}', aspect_ratio: '{aspect_ratio}' },
-  next_steps: [
-    { capability_id: 'image-i2i', label: '图生图', note: 'image-i2i 需要参考图和 confirm_asset_source，后续版本支持', blocked: true },
-  ],
-}
-
-const CHAT_OPENAI_TEMPLATE: RunnerTemplate = {
-  capability_id: 'chat-openai',
-  label: '文本对话',
-  description: '使用 OpenAI 兼容协议测试 MiniMax 对话模型。',
-  suitable_for: ['问答', '对话测试', 'SDK 接入验证'],
-  risk_level: 'safe',
-  form_schema: {
-    model: {
-      type: 'select', label: '模型', default: 'MiniMax-M2.7-highspeed',
-      options: [
-        { value: 'MiniMax-M3', label: 'MiniMax-M3 官方主推·多模态旗舰' },
-        { value: 'MiniMax-M2.7-highspeed', label: 'MiniMax-M2.7-highspeed Token Plan 高频' },
-        { value: 'MiniMax-M2.7', label: 'MiniMax-M2.7 标准档' },
-      ],
-    },
-    prompt: { type: 'textarea', label: '问题', default: '请用一句话介绍 MiniMax Token Plan 的能力。', placeholder: '输入你想问的问题' },
-  },
-  payload_template: { model: '{model}', messages: [{ role: 'user', content: '{prompt}' }], max_tokens: 1024, temperature: 0.7 },
-  next_steps: [],
-}
-
 // ── Capability selector ────────────────────────────────────────────────────────
 
-const CAPABILITY_LIST = [
-  { id: 'lyrics-gen', label: '歌词生成', emoji: '🎵', family: 'music' },
-  { id: 'tts-sync', label: '语音合成', emoji: '🎙️', family: 'voice' },
-  { id: 'voice-list', label: '音色列表', emoji: '🎙️', family: 'voice' },
-  { id: 'image-t2i', label: '图片生成', emoji: '🖼️', family: 'vision' },
-  { id: 'chat-openai', label: '文本对话', emoji: '💬', family: 'chat' },
-]
+const CAPABILITY_EMOJI: Record<string, string> = {
+  'lyrics-gen': '🎵',
+  'tts-sync': '🎙️',
+  'voice-list': '🎙️',
+  'image-t2i': '🖼️',
+  'chat-openai': '💬',
+}
 
-function CapabilitySelector({ onSelect }: { onSelect: (id: string) => void }) {
+const CAPABILITY_FAMILY: Record<string, string> = {
+  'lyrics-gen': 'music',
+  'tts-sync': 'voice',
+  'voice-list': 'voice',
+  'image-t2i': 'vision',
+  'chat-openai': 'chat',
+}
+
+const CAPABILITY_LABEL: Record<string, string> = {
+  'lyrics-gen': '歌词生成',
+  'tts-sync': '语音合成',
+  'voice-list': '音色列表',
+  'image-t2i': '图片生成',
+  'chat-openai': '文本对话',
+}
+
+function CapabilitySelector({ onSelect, capabilities }: { onSelect: (id: string) => void; capabilities: string[] }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {CAPABILITY_LIST.map((cap) => (
+      {capabilities.map((cap) => (
         <button
-          key={cap.id}
-          onClick={() => onSelect(cap.id)}
+          key={cap}
+          onClick={() => onSelect(cap)}
           className="rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm p-4 text-left transition"
         >
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-xl">{cap.emoji}</span>
-            <span className="font-semibold text-slate-900 text-sm">{cap.label}</span>
+            <span className="text-xl">{CAPABILITY_EMOJI[cap] ?? '📦'}</span>
+            <span className="font-semibold text-slate-900 text-sm">{CAPABILITY_LABEL[cap] ?? cap}</span>
           </div>
-          <div className="text-xs text-slate-500">{cap.family}</div>
+          <div className="text-xs text-slate-500">{CAPABILITY_FAMILY[cap] ?? 'unknown'}</div>
         </button>
       ))}
     </div>
@@ -628,9 +429,26 @@ export default function CapabilityRunnerPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const selected = searchParams.get('capability')
 
+  const [templates, setTemplates] = useState<Record<string, RunnerTemplate> | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getRunnerTemplates()
+      .then((data) => { setTemplates(data.templates); setLoading(false) })
+      .catch((e: any) => { setLoadError(e?.message ?? String(e)); setLoading(false) })
+  }, [])
+
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
   }
+
+  if (loading) return <div className="p-8 text-sm text-slate-500">加载中…</div>
+  if (loadError) return <div className="p-8 text-sm text-red-600">加载失败：{loadError}</div>
+  if (!templates) return <div className="p-8 text-sm text-slate-500">无数据</div>
+
+  const supportedCapabilities = Object.keys(templates)
+  const selectedTemplate = selected ? templates[selected] : null
 
   return (
     <div className="p-8 max-w-5xl">
@@ -642,7 +460,7 @@ export default function CapabilityRunnerPage() {
       </div>
 
       {!selected ? (
-        <CapabilitySelector onSelect={handleSelect} />
+        <CapabilitySelector onSelect={handleSelect} capabilities={supportedCapabilities} />
       ) : (
         <div className="space-y-6">
           <div className="flex items-center gap-3">
@@ -654,19 +472,15 @@ export default function CapabilityRunnerPage() {
             </button>
             <span className="text-sm text-slate-400">|</span>
             <span className="text-sm text-slate-600">
-              当前：{CAPABILITY_LIST.find((c) => c.id === selected)?.label ?? selected}
+              {selectedTemplate?.label ?? selected}
             </span>
           </div>
 
-          {selected === 'lyrics-gen' && <LyricsGenCard />}
-          {selected === 'tts-sync' && <TtsSyncCard />}
-          {selected === 'voice-list' && <VoiceListCard />}
-          {selected === 'image-t2i' && <ImageT2iCard />}
-          {selected === 'chat-openai' && <ChatOpenaiCard />}
-
-          {!CAPABILITY_LIST.find((c) => c.id === selected) && (
+          {selectedTemplate ? (
+            <CapabilityCard template={selectedTemplate} />
+          ) : (
             <div className="text-sm text-slate-500">
-              不支持的能力：{selected}（Runner v1 支持 lyrics-gen / tts-sync / voice-list / image-t2i / chat-openai）
+              不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
             </div>
           )}
         </div>
