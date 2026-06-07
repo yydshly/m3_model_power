@@ -317,7 +317,8 @@ export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestCo
 export type HistoryStatusResp = {
   history_path: string
   exists: boolean
-  record_count: number
+  line_count: number
+  valid_record_count: number
   size_bytes: number
   last_modified: string | null
 }
@@ -509,6 +510,7 @@ export type RunnerTemplate = {
     max?: number
     step?: number
     options?: Array<{ value: string; label: string }>
+    note?: string
   }>
   payload_template: Record<string, unknown>
   next_steps: Array<{

@@ -574,7 +574,11 @@ export default function TestConsole() {
             调用历史
             {historyStatus?.exists && (
               <span className="ml-2 text-[10px] text-slate-400 font-normal">
-                {historyStatus.record_count} 条 · {historyStatus.last_modified ? new Date(historyStatus.last_modified).toLocaleString() : '无修改时间'}
+                {historyStatus.line_count} 行 / {historyStatus.valid_record_count} 条有效
+                {historyStatus.line_count > historyStatus.valid_record_count && (
+                  <span className="text-amber-500"> · 有损坏记录</span>
+                )}
+                {' '}· {historyStatus.last_modified ? new Date(historyStatus.last_modified).toLocaleString() : '无修改时间'}
               </span>
             )}
           </h3>
@@ -626,7 +630,7 @@ export default function TestConsole() {
               </div>
             ) : (
               <p className="text-slate-400">
-                记录 {historyStatus?.record_count ?? 0} 条，文件存在但暂无内容。
+                记录 {historyStatus?.line_count ?? 0} 行 / {historyStatus?.valid_record_count ?? 0} 条有效，文件存在但暂无内容。
               </p>
             )}
           </div>

@@ -7,7 +7,7 @@ import type { Registry } from './api'
 
 export type WorkbenchStats = {
   inScopeTotal: number
-  inScopeVerified: number
+  inScopeTokenPlanCovered: number
   runnerSupported: number
   runnerSupportedInScope: number
   advancedTestCapabilities: string[]
@@ -46,7 +46,7 @@ export function computeWorkbenchStats(
     (c) => c.scope_policy?.current_scope === 'in_scope',
   ).length
 
-  const inScopeVerified = caps.filter(
+  const inScopeTokenPlanCovered = caps.filter(
     (c) =>
       c.scope_policy?.current_scope === 'in_scope' &&
       (c.billing_policy?.billing_category === 'normal_token_plan_test' ||
@@ -73,7 +73,7 @@ export function computeWorkbenchStats(
 
   return {
     inScopeTotal,
-    inScopeVerified,
+    inScopeTokenPlanCovered,
     runnerSupported: runnerSupportedCaps.size,
     runnerSupportedInScope,
     advancedTestCapabilities,

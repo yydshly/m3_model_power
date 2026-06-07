@@ -117,10 +117,20 @@ def check_6_history_status_api() -> bool:
     if "@router.get(\"/status\")" not in content and 'router.get("/status")' not in content:
         print("FAIL: history.py missing /history/status endpoint")
         return False
-    if "history_path" not in content or "record_count" not in content:
-        print("FAIL: history status endpoint does not return history_path/record_count")
+    # The router now delegates to get_history_status() from history_store
+    if "get_history_status" not in content:
+        print("FAIL: history status endpoint does not call get_history_status()")
         return False
-    print("PASS: history status API exists with history_path and record_count fields")
+    # Also check history_store defines it
+    store_path = _ROOT / "backend" / "app" / "minimax_core" / "verification" / "history_store.py"
+    store_content = store_path.read_text(encoding="utf-8")
+    if "def get_history_status" not in store_content:
+        print("FAIL: get_history_status not defined in history_store.py")
+        return False
+    if "history_path" not in store_content:
+        print("FAIL: get_history_status does not return history_path")
+        return False
+    print("PASS: history status API exists via get_history_status() with history_path")
     return True
 
 
@@ -231,10 +241,10 @@ def check_14_ui_explains_ref_mode_ui_only() -> bool:
     # Must mention that reference_mode is UI-only and doesn't change API type
     patterns = [
         "参考模式",
-        "仅影响提示词",
+        "自动增强",
         "底层 API",
         "character",
-        "不改变",
+        "真实 API 映射",
     ]
     found = sum(1 for p in patterns if p in content)
     if found < 4:
@@ -242,7 +252,7 @@ def check_14_ui_explains_ref_mode_ui_only() -> bool:
         return False
     # Specifically for image-i2i context — find the template capability_id check near the model note
     # The explanation text was added after the "模型说明" section, search broadly in the file
-    key_phrases = ["参考模式说明", "仅影响提示词建议", "底层 API 仍使用", "已验收的 character reference"]
+    key_phrases = ["参考模式说明", "自动增强发送给 MiniMax", "底层 API 仍使用", "已验收的 character reference"]
     found_in_section = sum(1 for p in key_phrases if p in content)
     if found_in_section < 3:
         print(f"FAIL: image-i2i section does not sufficiently explain ref_mode UI-only (found {found_in_section}/{len(key_phrases)} patterns)")

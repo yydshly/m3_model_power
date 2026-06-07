@@ -20,6 +20,7 @@ type FormField = {
   max?: number
   step?: number
   options?: Array<{ value: string; label: string }>
+  note?: string
 }
 
 type FormSchema = Record<string, FormField>
@@ -364,6 +365,29 @@ function buildPayload(
   return resolveTemplateValue(template, values, schema) as Record<string, unknown>
 }
 
+function applyI2IPromptMode(
+  payload: Record<string, unknown>,
+  values: Record<string, string>,
+  capabilityId: string,
+): Record<string, unknown> {
+  if (capabilityId !== 'image-i2i') return payload
+
+  const mode = values['reference_mode'] ?? 'subject'
+  const prompt = typeof payload.prompt === 'string' ? payload.prompt : ''
+
+  const prefixMap: Record<string, string> = {
+    subject: '尽量保持参考图主体特征。',
+    style: '主要参考参考图的画风、色彩和氛围，不要求保持原图主体。',
+    variation: '基于参考图生成变体，允许主体、构图和细节发生较大变化。',
+  }
+
+  const prefix = prefixMap[mode] ?? prefixMap.subject
+  return {
+    ...payload,
+    prompt: `${prefix}${prompt}`,
+  }
+}
+
 // ── Form renderer ─────────────────────────────────────────────────────────────
 
 function RunnerForm({
@@ -473,6 +497,11 @@ function RunnerForm({
           {field.max_chars && field.type !== 'checkbox' && field.type !== 'file' && (
             <div className="text-[10px] text-slate-400 mt-0.5">
               {(values[key] ?? field.default).length} / {field.max_chars}
+            </div>
+          )}
+          {field.note && (
+            <div className="text-[10px] text-slate-400 mt-1">
+              {field.note}
             </div>
           )}
         </div>
@@ -1132,7 +1161,8 @@ function CapabilityCard({
       }
 
       // Standard JSON invoke for all other capabilities
-      const payload = buildPayload(template.payload_template as Record<string, unknown>, values, schema)
+      const basePayload = buildPayload(template.payload_template as Record<string, unknown>, values, schema)
+      const payload = applyI2IPromptMode(basePayload, values, template.capability_id)
       const risk = await riskCheck(template.capability_id, payload, {})
       setRiskResult(risk)
       if (!risk.allowed) { setRunState('error'); return }
@@ -1290,7 +1320,7 @@ function CapabilityCard({
                 <strong>模型说明：</strong>当前图生图仅开放已验收的 <code className="bg-slate-100 px-1 rounded">image-01</code>。
                 <code className="bg-slate-100 px-1 rounded">image-01-live</code> 是否支持图生图需要单独验证。
                 <br />
-                <strong>参考模式说明：</strong>当前参考模式（主体 / 风格 / 变体）仅影响提示词建议和用户预期；底层 API 仍使用已验收的 <code className="bg-slate-100 px-1 rounded">character</code> reference。style / variation 的真实 API 映射需要后续单独验证。
+                <strong>参考模式说明：</strong>参考模式会自动增强发送给 MiniMax 的 prompt，但底层 API 仍使用已验收的 <code className="bg-slate-100 px-1 rounded">character</code> reference。style / variation 的真实 API 映射需要后续单独验证。
               </div>
             )}
 
@@ -1314,7 +1344,7 @@ function CapabilityCard({
               🔍 查看将发送给 MiniMax 的 payload
             </summary>
             <pre className="mt-2 p-2 bg-white rounded border text-[10px] text-slate-600 overflow-auto max-h-40 whitespace-pre-wrap break-all">
-              {JSON.stringify(buildPayload(template.payload_template as Record<string, unknown>, values, schema), null, 2)}
+              {JSON.stringify(applyI2IPromptMode(buildPayload(template.payload_template as Record<string, unknown>, values, schema), values, template.capability_id), null, 2)}
             </pre>
           </details>
         )}

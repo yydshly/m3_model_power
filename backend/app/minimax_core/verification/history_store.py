@@ -492,3 +492,51 @@ def _ensure_dir() -> Path:
     d = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "test_console"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def get_history_status() -> dict:
+    """Return history file status without exposing absolute server paths.
+
+    Returns:
+        dict with history_path (relative), exists, line_count, valid_record_count,
+        size_bytes, last_modified (ISO string or null).
+    """
+    # Use a logical relative path, not absolute filesystem path
+    history_rel_path = "runtime/test_console/history.jsonl"
+    path = _ensure_dir().joinpath("history.jsonl")
+
+    result: dict = {
+        "history_path": history_rel_path,
+        "exists": False,
+        "line_count": 0,
+        "valid_record_count": 0,
+        "size_bytes": 0,
+        "last_modified": None,
+    }
+
+    if path.exists():
+        try:
+            stat = path.stat()
+            result["size_bytes"] = stat.st_size
+            result["last_modified"] = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
+            result["exists"] = True
+
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+
+            non_empty_lines = [l for l in lines if l.strip()]
+            result["line_count"] = len(non_empty_lines)
+
+            # Count lines that are valid JSON (valid_record_count)
+            valid_count = 0
+            for line in non_empty_lines:
+                try:
+                    json.loads(line)
+                    valid_count += 1
+                except Exception:
+                    pass
+            result["valid_record_count"] = valid_count
+        except Exception:
+            pass
+
+    return result

@@ -19,6 +19,7 @@ export default function Overview() {
   const [h, setH] = useState<HealthResp | null>(null)
   const [healthErr, setHealthErr] = useState<string | null>(null)
   const [runnerSupported, setRunnerSupported] = useState<Set<string>>(new Set())
+  const [runnerTemplatesErr, setRunnerTemplatesErr] = useState<string | null>(null)
 
   useEffect(() => {
     getHealth().then(setH).catch((e) => setHealthErr(String(e)))
@@ -27,7 +28,7 @@ export default function Overview() {
   useEffect(() => {
     getRunnerTemplates()
       .then((r) => setRunnerSupported(new Set(r.supported)))
-      .catch(() => {})
+      .catch((e) => setRunnerTemplatesErr(String(e)))
   }, [])
 
   const stats = registry && {
@@ -86,7 +87,7 @@ export default function Overview() {
     confirmQuota: registry.capabilities.filter((c) => c.id === 'tts-async').length,
     // scope stats
     inScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope').length,
-    inScopeVerified: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope' && (c.billing_policy?.billing_category === 'normal_token_plan_test' || c.billing_policy?.billing_category === 'quota_sensitive')).length,
+    inScopeTokenPlanCovered: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope' && (c.billing_policy?.billing_category === 'normal_token_plan_test' || c.billing_policy?.billing_category === 'quota_sensitive')).length,
     warningOnlyTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'warning_only').length,
     outOfScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'out_of_scope').length,
   }
@@ -217,16 +218,22 @@ export default function Overview() {
           <h2 className="text-sm font-semibold text-slate-700 mb-2">Token Plan 范围统计</h2>
           <div className="grid grid-cols-5 gap-3">
             <GapStat label="范围内" value={stats.inScopeTotal} sub="in_scope" tone="emerald" />
-            <GapStat label="范围内已验收" value={stats.inScopeVerified} sub="safe/medium" tone="indigo" />
-            <GapStat label="范围内未验收" value={stats.inScopeTotal - stats.inScopeVerified} sub="待补充验收" tone="amber" />
+            <GapStat label="范围内已覆盖" value={stats.inScopeTokenPlanCovered} sub="TokenPlan 范围" tone="indigo" />
+            <GapStat label="范围内未覆盖" value={stats.inScopeTotal - stats.inScopeTokenPlanCovered} sub="待补充验收" tone="amber" />
             <GapStat label="只提示" value={stats.warningOnlyTotal} sub="warning_only" tone="orange" />
             <GapStat label="范围外" value={stats.outOfScopeTotal} sub="out_of_scope" tone="slate" />
           </div>
           <div className="mt-3 text-xs text-slate-600">
-            完成率：<span className="font-semibold text-emerald-600">{stats.inScopeTotal > 0 ? Math.round(stats.inScopeVerified / stats.inScopeTotal * 100) : 0}%</span>
-            {' '}({stats.inScopeVerified}/{stats.inScopeTotal}，仅基于 in_scope 计算)
+            完成率：<span className="font-semibold text-emerald-600">{stats.inScopeTotal > 0 ? Math.round(stats.inScopeTokenPlanCovered / stats.inScopeTotal * 100) : 0}%</span>
+            {' '}({stats.inScopeTokenPlanCovered}/{stats.inScopeTotal}，基于 registry scope/billing，非累计验收记录)
           </div>
         </section>
+      )}
+
+      {runnerTemplatesErr && (
+        <div className="mt-6 text-sm text-red-600">
+          Runner 产品化状态加载失败，请检查 /api/runner/templates：{runnerTemplatesErr}
+        </div>
       )}
 
       {stats && registry && runnerSupported.size > 0 && (
@@ -240,9 +247,9 @@ export default function Overview() {
                 return (
                   <>
                     <GapStat
-                      label="Token Plan 验收"
-                      value={`${wb.inScopeVerified}/${wb.inScopeTotal}`}
-                      sub="已验收 / 范围内"
+                      label="Token Plan 覆盖"
+                      value={`${wb.inScopeTokenPlanCovered}/${wb.inScopeTotal}`}
+                      sub="TokenPlan 范围 / 范围内"
                       tone="emerald"
                     />
                     <GapStat
