@@ -108,6 +108,20 @@ function extractTextResult(data: unknown): string {
   return findStringField(data, ['lyrics', 'text', 'content', 'output', 'answer', 'message'])
 }
 
+// Fields whose value is semantically an image URL — don't require extension check
+const STRONG_IMAGE_URL_FIELDS = new Set([
+  'image_url', 'img_url', 'imageUrl', 'imageURL',
+  'file_url', 'download_url', 'image_file',
+])
+
+const IMAGE_EXT_PATTERN = /\.(jpg|jpeg|png|webp|gif)(\?|\#|$)/i
+
+function looksLikeImageUrl(url: string, fieldName: string): boolean {
+  if (STRONG_IMAGE_URL_FIELDS.has(fieldName)) return true
+  // For generic 'url'/'image' fields, require image extension
+  return IMAGE_EXT_PATTERN.test(url)
+}
+
 function extractImageUrl(data: unknown): string {
   // Try top-level fields first
   const d = data as Record<string, unknown>
@@ -119,15 +133,15 @@ function extractImageUrl(data: unknown): string {
   if (typeof d.download_url === 'string' && d.download_url) return d.download_url
   if (typeof d.url === 'string' && d.url) {
     const u = d.url as string
-    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
+    if (looksLikeImageUrl(u, 'url')) return u
   }
   if (typeof d.image === 'string' && d.image) {
     const u = d.image as string
-    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
+    if (looksLikeImageUrl(u, 'image')) return u
   }
-  // Recursive search in nested structures
-  const found = findStringField(data, ['image_url', 'img_url', 'url', 'image', 'image_file', 'file_url', 'download_url', 'imageUrl', 'imageURL'], 0)
-  if (found && /\.(jpg|jpeg|png|webp|gif)$/i.test(found)) return found
+  // Recursive search in nested structures (only strong image URL fields — no extension check needed)
+  const found = findStringField(data, ['image_url', 'img_url', 'image_file', 'file_url', 'download_url', 'imageUrl', 'imageURL'], 0)
+  if (found) return found
   // Check arrays
   const images = findStringArrayField(data, 'images', 0)
   if (images.length) return images[0]
@@ -144,11 +158,11 @@ function extractImageUrl(data: unknown): string {
         for (const urlKey of ['url', 'image_url', 'img_url', 'file_url', 'download_url']) {
           if (typeof itemObj[urlKey] === 'string' && itemObj[urlKey]) {
             const u = itemObj[urlKey] as string
-            if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
+            if (looksLikeImageUrl(u, urlKey)) return u
           }
         }
       }
-      if (typeof item === 'string' && /\.(jpg|jpeg|png|webp|gif)$/i.test(item)) {
+      if (typeof item === 'string' && IMAGE_EXT_PATTERN.test(item)) {
         return item
       }
     }

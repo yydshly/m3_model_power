@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import AssetRef, UnifiedError, UnifiedErrorException, UnifiedResponse
+from .contracts.provider_payload import strip_control_fields
 from .guards.risk_gate import evaluate_capability_risk
 
 
@@ -768,7 +769,9 @@ class CapabilityInvoker:
     # ── Image ────────────────────────────────────────────────────────────────
 
     def _image_t2i(self, payload: dict) -> UnifiedResponse:
-        raw = self._native.image_generation(payload)
+        # Strip internal control fields before sending to MiniMax upstream.
+        provider_payload = strip_control_fields(payload)
+        raw = self._native.image_generation(provider_payload)
 
         # 检查 MiniMax 业务状态码
         ok, error_type, status_msg, http_status = parse_minimax_base_resp(raw)
