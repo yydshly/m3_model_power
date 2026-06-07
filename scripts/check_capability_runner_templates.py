@@ -12,8 +12,8 @@ from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
-EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai"}
-VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider"}
+EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai", "music-gen", "image-i2i"}
+VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider", "checkbox"}
 VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat"}
 VALID_VALUE_TYPES = {"string", "number", "boolean"}
 
@@ -143,9 +143,21 @@ for cap_id, template in templates.items():
             # Must exist in registry — ERROR if missing
             if ns_cap_id and ns_cap_id not in all_reg_cap_ids:
                 errors.append(f"'{cap_id}'.next_steps[{i}]: capability_id '{ns_cap_id}' not found in registry")
-            # Warn if exists in registry but not in runner-supported set
+            # Warn if exists in registry but not in any known capability set
             if ns_cap_id and ns_cap_id not in EXPECTED_CAPABILITIES:
-                warnings.append(f"'{cap_id}'.next_steps[{i}]: capability_id '{ns_cap_id}' not in runner-supported set")
+                warnings.append(f"'{cap_id}'.next_steps[{i}]: capability_id '{ns_cap_id}' not in runner template set (but may be future capability)")
+            # blocked must be boolean
+            blocked = ns.get("blocked")
+            if blocked is not None and not isinstance(blocked, bool):
+                errors.append(f"'{cap_id}'.next_steps[{i}]: 'blocked' must be a boolean")
+            # guarded must be boolean if present
+            guarded = ns.get("guarded")
+            if guarded is not None and not isinstance(guarded, bool):
+                errors.append(f"'{cap_id}'.next_steps[{i}]: 'guarded' must be a boolean")
+            # handoff must be object if present
+            handoff = ns.get("handoff")
+            if handoff is not None and not isinstance(handoff, dict):
+                errors.append(f"'{cap_id}'.next_steps[{i}]: 'handoff' must be an object")
             for ns_field in ["capability_id", "label", "note", "blocked"]:
                 if ns_field not in ns:
                     errors.append(f"'{cap_id}'.next_steps[{i}]: missing field '{ns_field}'")

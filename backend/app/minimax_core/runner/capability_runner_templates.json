@@ -42,9 +42,13 @@
       "next_steps": [
         {
           "capability_id": "music-gen",
-          "label": "生成音乐",
-          "note": "music-gen 属于额度敏感能力，需要确认后执行",
-          "blocked": true
+          "label": "用这段歌词生成音乐",
+          "note": "额度敏感能力，需确认后执行",
+          "blocked": false,
+          "guarded": true,
+          "handoff": {
+            "lyrics": "$result.lyrics_or_text"
+          }
         }
       ]
     },
@@ -115,7 +119,8 @@
           "capability_id": "tts-sync",
           "label": "语音合成",
           "note": "获取 voice_id 后可进入语音合成",
-          "blocked": false
+          "blocked": false,
+          "guarded": false
         }
       ]
     },
@@ -162,9 +167,13 @@
       "next_steps": [
         {
           "capability_id": "image-i2i",
-          "label": "图生图",
-          "note": "image-i2i 需要参考图和 confirm_asset_source，后续版本支持",
-          "blocked": true
+          "label": "用此图片做图生图",
+          "note": "需确认参考图片来源合法",
+          "blocked": false,
+          "guarded": true,
+          "handoff": {
+            "img_url": "$result.image_url"
+          }
         }
       ]
     },
@@ -200,6 +209,102 @@
         ],
         "max_tokens": 1024,
         "temperature": 0.7
+      },
+      "next_steps": []
+    },
+    "music-gen": {
+      "capability_id": "music-gen",
+      "label": "音乐生成",
+      "description": "使用歌词、风格和标题生成音乐音频。",
+      "suitable_for": ["情绪 MV", "AI 歌曲草稿", "短视频 BGM"],
+      "risk_level": "quota_sensitive",
+      "result_type": "audio",
+      "form_schema": {
+        "lyrics": {
+          "type": "textarea",
+          "label": "歌词",
+          "default": "",
+          "placeholder": "可由 lyrics-gen 自动带入，或手动粘贴歌词"
+        },
+        "style": {
+          "type": "input",
+          "label": "音乐风格",
+          "default": "温柔、怀旧、民谣",
+          "placeholder": "如：流行、民谣、电子、摇滚"
+        },
+        "title": {
+          "type": "input",
+          "label": "歌曲标题",
+          "default": "夏日晚风",
+          "placeholder": "输入歌曲标题"
+        },
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "music-2.6",
+          "options": [
+            {"value": "music-2.6", "label": "music-2.6 官方推荐·音乐生成"}
+          ]
+        },
+        "confirm_quota": {
+          "type": "checkbox",
+          "label": "我确认该能力会消耗 Token Plan 额度",
+          "default": "false",
+          "value_type": "boolean"
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "lyrics": "{lyrics}",
+        "prompt": "{style}",
+        "title": "{title}"
+      },
+      "next_steps": []
+    },
+    "image-i2i": {
+      "capability_id": "image-i2i",
+      "label": "图生图",
+      "description": "使用参考图片和修改提示词生成新图片。",
+      "suitable_for": ["图像变体", "风格迁移", "封面二次创作"],
+      "risk_level": "guarded",
+      "result_type": "image",
+      "form_schema": {
+        "img_url": {
+          "type": "input",
+          "label": "参考图片 URL",
+          "default": "",
+          "placeholder": "可由 image-t2i 自动带入，或手动输入图片 URL"
+        },
+        "prompt": {
+          "type": "textarea",
+          "label": "修改描述",
+          "default": "保持主体不变，改为电影感光影",
+          "placeholder": "描述你想如何改变图片"
+        },
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "image-01",
+          "options": [
+            {"value": "image-01", "label": "image-01 图生图主力"}
+          ]
+        },
+        "confirm_asset_source": {
+          "type": "checkbox",
+          "label": "我确认参考图片来源合法（原创或已获授权）",
+          "default": "false",
+          "value_type": "boolean"
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "prompt": "{prompt}",
+        "subject_reference": [
+          {
+            "type": "character",
+            "image_file": "{img_url}"
+          }
+        ]
       },
       "next_steps": []
     }

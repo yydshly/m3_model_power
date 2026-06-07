@@ -461,7 +461,7 @@ export type RunnerTemplate = {
   risk_level: string
   result_type: 'text' | 'audio' | 'image' | 'voice_list' | 'chat'
   form_schema: Record<string, {
-    type: 'input' | 'textarea' | 'select' | 'number' | 'slider'
+    type: 'input' | 'textarea' | 'select' | 'number' | 'slider' | 'checkbox'
     label: string
     default: string
     placeholder?: string

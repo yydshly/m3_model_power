@@ -8,7 +8,7 @@ from typing import Any
 _runner_dir = Path(__file__).resolve().parent
 _TEMPLATES_FILE = _runner_dir / "capability_runner_templates.json"
 
-_SUPPORTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai"}
+_SUPPORTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai", "music-gen", "image-i2i"}
 
 
 def load_runner_templates() -> dict[str, Any]:
