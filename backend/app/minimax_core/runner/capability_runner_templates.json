@@ -257,7 +257,8 @@
         "model": "{model}",
         "lyrics": "{lyrics}",
         "prompt": "{style}",
-        "title": "{title}"
+        "title": "{title}",
+        "confirm_quota": "{confirm_quota}"
       },
       "next_steps": []
     },
@@ -304,7 +305,8 @@
             "type": "character",
             "image_file": "{img_url}"
           }
-        ]
+        ],
+        "confirm_asset_source": "{confirm_asset_source}"
       },
       "next_steps": []
     }

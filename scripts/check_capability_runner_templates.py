@@ -166,6 +166,16 @@ for cap_id, template in templates.items():
     if "payload_template" not in template:
         errors.append(f"'{cap_id}': missing 'payload_template'")
 
+    # 4h. Confirm fields for guarded/quota_sensitive risk levels
+    risk_level = template.get("risk_level", "")
+    payload_tpl = template.get("payload_template", {})
+    if risk_level == "quota_sensitive" and isinstance(payload_tpl, dict):
+        if "confirm_quota" not in payload_tpl:
+            errors.append(f"'{cap_id}': risk_level='quota_sensitive' but payload_template missing 'confirm_quota'")
+    if risk_level == "guarded" and isinstance(payload_tpl, dict):
+        if "confirm_asset_source" not in payload_tpl:
+            errors.append(f"'{cap_id}': risk_level='guarded' but payload_template missing 'confirm_asset_source'")
+
 print("Capability Runner Template checks")
 print(f"- capabilities: {len(templates)} / {len(EXPECTED_CAPABILITIES)} {'OK' if set(templates.keys()) == EXPECTED_CAPABILITIES else 'FAIL'}")
 

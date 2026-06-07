@@ -37,18 +37,75 @@ function extractBusinessError(data: unknown): string | null {
   return null
 }
 
-// ── Result extractors ─────────────────────────────────────────────────────────
+// ── Recursive field extractors ─────────────────────────────────────────────────
 
-function extractTextResult(data: unknown): string {
+const MAX_DEPTH = 5
+
+function findStringField(data: unknown, fieldNames: string[], depth = 0): string {
+  if (depth > MAX_DEPTH || data == null) return ''
+  if (typeof data === 'string') return ''
+  if (typeof data !== 'object') return ''
+
   const d = data as Record<string, unknown>
-  if (typeof d.lyrics === 'string' && d.lyrics) return d.lyrics
-  if (typeof d.text === 'string' && d.text) return d.text
-  if (typeof d.content === 'string' && d.content) return d.content
-  if (typeof d.output === 'string' && d.output) return d.output
+
+  // Check direct fields first
+  for (const fn of fieldNames) {
+    if (d[fn] && typeof d[fn] === 'string' && d[fn]) return d[fn] as string
+  }
+
+  // Recurse into common containers
+  for (const key of ['data', 'result', 'output', 'response', 'body', 'content']) {
+    if (d[key] != null && typeof d[key] === 'object') {
+      const found = findStringField(d[key], fieldNames, depth + 1)
+      if (found) return found
+    }
+  }
+
+  // Recurse into arrays: check first element
+  if (Array.isArray(d.items)) {
+    const found = findStringField(d.items[0], fieldNames, depth + 1)
+    if (found) return found
+  }
+  if (Array.isArray(d.results)) {
+    const found = findStringField(d.results[0], fieldNames, depth + 1)
+    if (found) return found
+  }
+  if (Array.isArray(d.data)) {
+    const found = findStringField(d.data[0], fieldNames, depth + 1)
+    if (found) return found
+  }
+
   return ''
 }
 
+function findStringArrayField(data: unknown, fieldName: string, depth = 0): string[] {
+  if (depth > MAX_DEPTH || data == null) return []
+  if (typeof data !== 'object') return []
+
+  const d = data as Record<string, unknown>
+
+  if (Array.isArray(d[fieldName])) {
+    const arr = d[fieldName] as unknown[]
+    return arr.filter(item => typeof item === 'string' && item) as string[]
+  }
+
+  // Recurse into common containers
+  for (const key of ['data', 'result', 'output', 'response', 'body']) {
+    if (d[key] != null && typeof d[key] === 'object') {
+      const found = findStringArrayField(d[key], fieldName, depth + 1)
+      if (found.length) return found
+    }
+  }
+
+  return []
+}
+
+function extractTextResult(data: unknown): string {
+  return findStringField(data, ['lyrics', 'text', 'content', 'output', 'answer', 'message'])
+}
+
 function extractImageUrl(data: unknown): string {
+  // Try top-level fields first
   const d = data as Record<string, unknown>
   if (typeof d.image_url === 'string' && d.image_url) return d.image_url
   if (typeof d.img_url === 'string' && d.img_url) return d.img_url
@@ -56,28 +113,45 @@ function extractImageUrl(data: unknown): string {
     const u = d.url as string
     if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
   }
-  if (d.data && typeof d.data === 'object') {
-    const nested = (d.data as Record<string, unknown>).image_url
-    if (typeof nested === 'string' && nested) return nested
-  }
-  if (Array.isArray(d.images)) {
-    const first = d.images[0] as Record<string, unknown>
-    if (first && typeof first.url === 'string') return first.url as string
-  }
-  return ''
+  // Recursive search in nested structures
+  const found = findStringField(data, ['image_url', 'img_url', 'url', 'image', 'image_file'], 0)
+  if (found && /\.(jpg|jpeg|png|webp|gif)$/i.test(found)) return found
+  // Check images array
+  const images = findStringArrayField(data, 'images', 0)
+  if (images.length) return images[0]
+  const urls = findStringArrayField(data, 'urls', 0)
+  if (urls.length) return urls[0]
+  return found || ''
 }
 
 function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string }> {
   const d = data as Record<string, unknown>
   const voices = d.voices as Array<Record<string, unknown>> | undefined
-  if (!Array.isArray(voices)) return []
-  return voices
-    .slice(0, 20)
-    .map(v => ({
-      voice_id: String(v.voice_id ?? ''),
-      name: v.name ? String(v.name) : undefined,
-    }))
-    .filter(v => v.voice_id)
+  if (Array.isArray(voices)) {
+    return voices
+      .slice(0, 20)
+      .map(v => ({
+        voice_id: String(v.voice_id ?? ''),
+        name: v.name ? String(v.name) : undefined,
+      }))
+      .filter(v => v.voice_id)
+  }
+  // Recursive search for voice arrays
+  const voiceItems = findStringArrayField(data, 'voices', 0)
+  if (voiceItems.length) {
+    // voiceItems contains raw objects or strings; parse what we can
+    return voiceItems
+      .slice(0, 20)
+      .map(item => {
+        if (typeof item === 'object' && item !== null) {
+          const v = item as Record<string, unknown>
+          return { voice_id: String(v.voice_id ?? ''), name: v.name ? String(v.name) : undefined }
+        }
+        return { voice_id: String(item), name: undefined }
+      })
+      .filter(v => v.voice_id)
+  }
+  return []
 }
 
 function extractAudioUrl(data: unknown): string {
@@ -87,6 +161,8 @@ function extractAudioUrl(data: unknown): string {
     const u = d.url as string
     if (/\.(mp3|wav|ogg|m4a|aac)$/i.test(u)) return u
   }
+  const found = findStringField(data, ['audio_url', 'audio_file', 'url', 'file_url', 'audio'], 0)
+  if (found && /\.(mp3|wav|ogg|m4a|aac)$/i.test(found)) return found
   return ''
 }
 
