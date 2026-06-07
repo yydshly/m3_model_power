@@ -4,6 +4,7 @@ import { CostBadge } from '../components/CostBadge'
 import { StatusBadge } from '../components/StatusBadge'
 import { useRegistry } from '../store'
 import type { ScopeLevel } from '../api'
+import { MODULE_DESCRIPTIONS } from '../workbenchStatus'
 
 type FilterScope = 'all' | ScopeLevel
 
@@ -20,6 +21,7 @@ export default function Category() {
   const inScopeCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'in_scope').length
   const warningCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'warning_only').length
   const outCount = allCaps.filter((c) => c.scope_policy?.current_scope === 'out_of_scope').length
+  const moduleInfo = MODULE_DESCRIPTIONS[id ?? '']
 
   return (
     <div className="p-8 max-w-5xl">
@@ -57,6 +59,54 @@ export default function Category() {
           范围外 ({outCount})
         </button>
       </div>
+
+      {/* Module-specific guidance */}
+      {moduleInfo && (
+        <div className="mt-4 p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+          {moduleInfo.description && (
+            <p className="text-xs text-slate-600">{moduleInfo.description}</p>
+          )}
+          {moduleInfo.recommendations.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-slate-500 mb-1">推荐入口</p>
+              <ul className="space-y-0.5">
+                {moduleInfo.recommendations.map((r) => (
+                  <li key={r} className="text-xs text-slate-600 flex gap-1">
+                    <span className="text-emerald-500">•</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {moduleInfo.riskNotes.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-red-500 mb-1">风险提示</p>
+              <ul className="space-y-0.5">
+                {moduleInfo.riskNotes.map((r) => (
+                  <li key={r} className="text-[10px] text-amber-600 flex gap-1">
+                    <span>⚠️</span>
+                    <span>{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {moduleInfo.nextSteps.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-slate-500 mb-1">下一步</p>
+              <ul className="space-y-0.5">
+                {moduleInfo.nextSteps.map((s) => (
+                  <li key={s} className="text-[10px] text-slate-500 flex gap-1">
+                    <span className="text-sky-500">→</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <ul className="mt-4 space-y-2">
         {caps.map((c) => (

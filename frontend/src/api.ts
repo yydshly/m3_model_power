@@ -314,6 +314,20 @@ export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestCo
   return r.json()
 }
 
+export type HistoryStatusResp = {
+  history_path: string
+  exists: boolean
+  record_count: number
+  size_bytes: number
+  last_modified: string | null
+}
+
+export async function getHistoryStatus(): Promise<HistoryStatusResp> {
+  const r = await fetch('/api/history/status')
+  if (!r.ok) throw new Error(`history status ${r.status}`)
+  return r.json()
+}
+
 // ── Capability Descriptions ────────────────────────────────────────────
 
 export type CapabilityDescription = {

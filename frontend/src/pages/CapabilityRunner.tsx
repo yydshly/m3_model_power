@@ -649,7 +649,20 @@ function ResultBanner({ resultType, data, template, values }: { resultType: stri
     const refUrl = isI2I && values?.img_url ? values.img_url : null
 
     if (isI2I && generatedUrl && refUrl) {
-      return <ImageComparePreview referenceUrl={refUrl} generatedUrl={generatedUrl} />
+      return (
+        <>
+          <ImageComparePreview referenceUrl={refUrl} generatedUrl={generatedUrl} />
+          <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-200 text-[10px] text-amber-700">
+            <strong>⚠️ 图生图结果不保证完全保持主体。</strong>如果生成图主体变化较大，请尝试：
+            <ol className="mt-1 ml-3 list-decimal list-inside space-y-0.5">
+              <li>改写提示词，明确「保持原图主体」</li>
+              <li>使用更具体的主体描述</li>
+              <li>更换参考模式（主体参考 / 风格参考 / 变体）</li>
+              <li>重新生成</li>
+            </ol>
+          </div>
+        </>
+      )
     }
 
     return (
@@ -1270,6 +1283,15 @@ function CapabilityCard({
                 </button>
               </div>
             )}
+
+            {/* image-i2i model selection note */}
+            {template.capability_id === 'image-i2i' && (
+              <div className="mb-3 p-2 rounded bg-slate-50 border border-slate-200 text-[10px] text-slate-500">
+                <strong>模型说明：</strong>当前图生图仅开放已验收的 <code className="bg-slate-100 px-1 rounded">image-01</code>。
+                <code className="bg-slate-100 px-1 rounded">image-01-live</code> 是否支持图生图需要单独验证。
+              </div>
+            )}
+
             <RunnerForm
               schema={schema}
               values={values}
@@ -1282,6 +1304,17 @@ function CapabilityCard({
 
         {template.capability_id === 'voice-list' && (
           <div className="text-xs text-slate-500 mb-4">此能力无需参数，直接查询可用音色列表。</div>
+        )}
+
+        {template.capability_id === 'image-i2i' && (
+          <details className="mb-3 text-xs border border-slate-200 rounded p-2 bg-slate-50">
+            <summary className="cursor-pointer text-slate-500 hover:text-slate-700 font-medium">
+              🔍 查看将发送给 MiniMax 的 payload
+            </summary>
+            <pre className="mt-2 p-2 bg-white rounded border text-[10px] text-slate-600 overflow-auto max-h-40 whitespace-pre-wrap break-all">
+              {JSON.stringify(buildPayload(template.payload_template as Record<string, unknown>, values, schema), null, 2)}
+            </pre>
+          </details>
         )}
 
         <div className="flex items-center gap-3">
@@ -1299,7 +1332,7 @@ function CapabilityCard({
         )}
 
         {runState === 'done' && (
-          <div className="mt-3 text-xs text-emerald-600">✓ 执行完成</div>
+          <div className="mt-3 text-xs text-emerald-600">✓ 执行完成，可在「高级测试」历史模块刷新查看。</div>
         )}
         {runState === 'error' && (
           <div className="mt-3 text-xs text-red-600">
