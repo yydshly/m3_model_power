@@ -194,7 +194,13 @@ def evaluate_capability_risk(
         required_confirmations.append(CONFIRM_DESTRUCTIVE)
 
     # ── 7. 素材来源确认（requires_uploaded_asset）─────────────────────────────
-    if op.requires_uploaded_asset and not confirmations.get(CONFIRM_ASSET_SOURCE, False):
+    # 支持两种来源：confirmations.confirm_asset_source 或 payload.confirm_asset_source
+    # 前端 RiskGate 层面传入 confirmations={}，实际确认状态在 payload.confirm_asset_source 里
+    asset_source_confirmed = (
+        confirmations.get(CONFIRM_ASSET_SOURCE, False)
+        or payload.get(CONFIRM_ASSET_SOURCE, False)
+    )
+    if op.requires_uploaded_asset and not asset_source_confirmed:
         blocked_reasons.append(
             f"{capability.id}: operation_policy.requires_uploaded_asset=true but confirm_asset_source=false"
         )

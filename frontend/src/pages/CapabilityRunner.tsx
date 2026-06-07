@@ -113,18 +113,46 @@ function extractImageUrl(data: unknown): string {
   const d = data as Record<string, unknown>
   if (typeof d.image_url === 'string' && d.image_url) return d.image_url
   if (typeof d.img_url === 'string' && d.img_url) return d.img_url
+  if (typeof d.imageUrl === 'string' && d.imageUrl) return d.imageUrl
+  if (typeof d.imageURL === 'string' && d.imageURL) return d.imageURL
+  if (typeof d.file_url === 'string' && d.file_url) return d.file_url
+  if (typeof d.download_url === 'string' && d.download_url) return d.download_url
   if (typeof d.url === 'string' && d.url) {
     const u = d.url as string
     if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
   }
+  if (typeof d.image === 'string' && d.image) {
+    const u = d.image as string
+    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
+  }
   // Recursive search in nested structures
-  const found = findStringField(data, ['image_url', 'img_url', 'url', 'image', 'image_file'], 0)
+  const found = findStringField(data, ['image_url', 'img_url', 'url', 'image', 'image_file', 'file_url', 'download_url', 'imageUrl', 'imageURL'], 0)
   if (found && /\.(jpg|jpeg|png|webp|gif)$/i.test(found)) return found
-  // Check images array
+  // Check arrays
   const images = findStringArrayField(data, 'images', 0)
   if (images.length) return images[0]
   const urls = findStringArrayField(data, 'urls', 0)
   if (urls.length) return urls[0]
+  const imageUrls = findStringArrayField(data, 'image_urls', 0)
+  if (imageUrls.length) return imageUrls[0]
+  // Check nested array of objects for url fields
+  for (const arrKey of ['images', 'image_urls', 'outputs', 'results', 'data', 'items']) {
+    const arr = findArrayField(data, arrKey, 0)
+    for (const item of arr) {
+      if (typeof item === 'object' && item !== null) {
+        const itemObj = item as Record<string, unknown>
+        for (const urlKey of ['url', 'image_url', 'img_url', 'file_url', 'download_url']) {
+          if (typeof itemObj[urlKey] === 'string' && itemObj[urlKey]) {
+            const u = itemObj[urlKey] as string
+            if (/\.(jpg|jpeg|png|webp|gif)$/i.test(u)) return u
+          }
+        }
+      }
+      if (typeof item === 'string' && /\.(jpg|jpeg|png|webp|gif)$/i.test(item)) {
+        return item
+      }
+    }
+  }
   return found || ''
 }
 
@@ -508,10 +536,27 @@ function ResultBanner({ resultType, data }: { resultType: string; data: unknown 
     return (
       <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200 text-xs text-violet-700">
         <strong>🖼 图片结果</strong>
-        {imgUrl && (
-          <div className="mt-1">
-            <CopyButton text={imgUrl}>复制图片 URL</CopyButton>
+        {imgUrl ? (
+          <div className="mt-2 space-y-2">
+            <img
+              src={imgUrl}
+              alt="生成图片"
+              className="max-h-80 rounded border border-violet-100 bg-white object-contain"
+            />
+            <div className="flex items-center gap-2">
+              <CopyButton text={imgUrl}>复制图片 URL</CopyButton>
+              <a
+                href={imgUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-600 hover:underline"
+              >
+                打开图片
+              </a>
+            </div>
           </div>
+        ) : (
+          <div className="mt-1 text-slate-600">未识别到图片 URL，可查看下方完整 JSON。</div>
         )}
       </div>
     )
