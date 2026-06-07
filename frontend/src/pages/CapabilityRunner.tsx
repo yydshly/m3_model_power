@@ -1,7 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { invoke, riskCheck, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
+import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -203,60 +204,6 @@ function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string
   }
 
   return []
-}
-
-type AudioSource = {
-  src: string
-  kind: 'url' | 'base64'
-}
-
-function extractAudioSource(data: unknown, depth = 0): AudioSource | null {
-  if (depth > MAX_DEPTH || data == null || typeof data !== 'object') return null
-
-  const d = data as Record<string, unknown>
-
-  // 1. URL type
-  for (const key of ['audio_url', 'audio_file', 'url', 'file_url']) {
-    const val = d[key]
-    if (typeof val === 'string' && val) {
-      const lower = val.toLowerCase()
-      if (/\.(mp3|wav|ogg|m4a|aac)$/i.test(lower) || lower.startsWith('http')) {
-        return { src: val, kind: 'url' }
-      }
-    }
-  }
-
-  // 2. base64 type
-  for (const key of ['audio_base64', 'audio']) {
-    const val = d[key]
-    if (typeof val === 'string' && val.length > 100) {
-      if (val.startsWith('data:audio/')) {
-        return { src: val, kind: 'base64' }
-      }
-      return { src: `data:audio/mpeg;base64,${val}`, kind: 'base64' }
-    }
-  }
-
-  // 3. Recurse into common containers
-  for (const key of ['data', 'result', 'output', 'response', 'body', 'content']) {
-    const child = d[key]
-    if (child && typeof child === 'object') {
-      const found = extractAudioSource(child, depth + 1)
-      if (found) return found
-    }
-  }
-
-  // 4. Recurse into arrays
-  for (const val of Object.values(d)) {
-    if (Array.isArray(val)) {
-      for (const item of val) {
-        const found = extractAudioSource(item, depth + 1)
-        if (found) return found
-      }
-    }
-  }
-
-  return null
 }
 
 // ── Session storage handoff ─────────────────────────────────────────────────────
@@ -508,72 +455,199 @@ function RunnerForm({
   )
 }
 
+// ── Image i2i compare ──────────────────────────────────────────────────────────
+
+function ImageComparePreview({ referenceUrl, generatedUrl }: { referenceUrl: string; generatedUrl: string }) {
+  return (
+    <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-medium text-violet-700">🖼 图片结果对比</span>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {/* Reference image */}
+        <div className="space-y-1">
+          <p className="text-[10px] text-slate-500 font-medium">参考图</p>
+          <img
+            src={referenceUrl}
+            alt="参考图"
+            className="w-full max-h-56 rounded border border-slate-200 bg-white object-contain"
+            onError={e => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+          <div className="flex gap-2">
+            <CopyButton text={referenceUrl}>
+              <span className="text-[10px] text-sky-600 hover:underline">复制 URL</span>
+            </CopyButton>
+            <a
+              href={referenceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-sky-600 hover:underline"
+            >
+              打开
+            </a>
+          </div>
+        </div>
+        {/* Generated image */}
+        <div className="space-y-1">
+          <p className="text-[10px] text-slate-500 font-medium">生成图</p>
+          <img
+            src={generatedUrl}
+            alt="生成图"
+            className="w-full max-h-56 rounded border border-violet-200 bg-white object-contain"
+            onError={e => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }}
+          />
+          <div className="flex gap-2">
+            <CopyButton text={generatedUrl}>
+              <span className="text-[10px] text-sky-600 hover:underline">复制 URL</span>
+            </CopyButton>
+            <a
+              href={generatedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] text-sky-600 hover:underline"
+            >
+              打开
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Result banner ──────────────────────────────────────────────────────────────
 
-function ResultBanner({ resultType, data }: { resultType: string; data: unknown }) {
-  if (resultType === 'audio') {
-    const audio = extractAudioSource(data)
+function AudioBanner({ data }: { data: unknown }) {
+  const audio = extractAudioSource(data)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [loadError, setLoadError] = useState(false)
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+
+  // For hex sources, create a blob URL on mount
+  useEffect(() => {
+    if (audio?.kind === 'hex') {
+      const url = audioSourceToSrc(audio)
+      setBlobUrl(url)
+      return () => URL.revokeObjectURL(url)
+    }
+    if (audio?.kind === 'base64') {
+      const url = audioSourceToSrc(audio)
+      setBlobUrl(url)
+      return () => URL.revokeObjectURL(url)
+    }
+    return undefined
+  }, [audio])
+
+  if (!audio) {
     return (
       <div className="mb-3 p-3 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
         <strong>🎧 音频结果</strong>
-        {audio ? (
-          <div className="mt-2 space-y-2">
-            <audio controls src={audio.src} className="w-full mt-1" />
-            <div className="flex items-center gap-2">
-              <CopyButton text={audio.src}>
-                <span className="text-sky-600 hover:underline">
-                  {audio.kind === 'base64' ? '复制音频 Data URL' : '复制音频 URL'}
-                </span>
-              </CopyButton>
-              {audio.kind === 'url' && (
-                <a
-                  href={audio.src}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sky-600 hover:underline"
-                >
-                  打开链接
-                </a>
-              )}
-              {audio.kind === 'base64' && (
-                <span className="text-[10px] text-slate-400">
-                  base64 音频已转为浏览器可播放 Data URL
-                </span>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-1 text-slate-600">未识别到可播放音频，可查看下方完整 JSON。</div>
-        )}
+        <div className="mt-1 text-slate-600">未识别到可播放音频，可查看下方完整 JSON。</div>
       </div>
     )
   }
+
+  if (audio.kind === 'task') {
+    const fmtBytes = (b: number) => b < 1024 * 1024 ? `${(b / 1024).toFixed(1)} KB` : `${(b / (1024 * 1024)).toFixed(2)} MB`
+    return (
+      <div className="mb-3 p-3 rounded bg-orange-50 border border-orange-200 text-xs text-orange-700">
+        <strong>🎵 音乐生成任务状态</strong>
+        <div className="mt-1 font-medium">{audio.message}</div>
+        <div className="mt-2 space-y-1 text-xs text-slate-600">
+          {audio.duration_sec !== undefined && <div>时长：{audio.duration_sec.toFixed(1)} 秒</div>}
+          {audio.sample_rate !== undefined && <div>采样率：{audio.sample_rate} Hz</div>}
+          {audio.channel !== undefined && <div>声道：{audio.channel === 2 ? '立体声' : audio.channel === 1 ? '单声道' : audio.channel}</div>}
+          {audio.file_size_bytes !== undefined && <div>文件大小：{fmtBytes(audio.file_size_bytes)}</div>}
+        </div>
+        <p className="text-[10px] text-slate-400 mt-2">
+          当前响应未包含可直接播放的音频数据。状态 {audio.status} 表示任务已提交，请通过结果查询接口获取音频。
+        </p>
+      </div>
+    )
+  }
+
+  const src = blobUrl ?? (audio.kind === 'url' || audio.kind === 'data_url' ? audio.src : '')
+
+  return (
+    <div className="mb-3 p-3 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
+      <strong>🎧 音频结果</strong>
+      <div className="mt-2 space-y-2">
+        <audio
+          ref={audioRef}
+          controls
+          src={src}
+          className="w-full mt-1"
+          onLoadedMetadata={() => {
+            const el = audioRef.current
+            if (el && (isNaN(el.duration) || el.duration === 0)) setLoadError(true)
+          }}
+          onError={() => setLoadError(true)}
+        />
+        {loadError && (
+          <p className="text-[10px] text-red-500">
+            浏览器未能解析该音频。可能是编码格式不支持，或接口返回的不是最终音频文件。请查看完整 JSON。
+          </p>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <CopyButton text={src}>
+            <span className="text-sky-600 hover:underline">
+              {audio.kind === 'base64' || audio.kind === 'hex' ? '复制 Data URL' : '复制音频 URL'}
+            </span>
+          </CopyButton>
+          {(audio.kind === 'url') && (
+            <a href={src} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">
+              打开链接
+            </a>
+          )}
+          {(audio.kind === 'base64' || audio.kind === 'hex') && (
+            <span className="text-[10px] text-slate-400">已转为浏览器可播放 Data URL</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResultBanner({ resultType, data, template, values }: { resultType: string; data: unknown; template?: RunnerTemplate; values?: Record<string, string> }) {
+  if (resultType === 'audio') {
+    return <AudioBanner data={data} />
+  }
   if (resultType === 'image') {
-    const imgUrl = extractImageUrl(data)
+    // image-i2i: show reference vs generated comparison when we have the reference URL
+    const generatedUrl = extractImageUrl(data)
+    const isI2I = template?.capability_id === 'image-i2i'
+    const refUrl = isI2I && values?.img_url ? values.img_url : null
+
+    if (isI2I && generatedUrl && refUrl) {
+      return <ImageComparePreview referenceUrl={refUrl} generatedUrl={generatedUrl} />
+    }
+
     return (
       <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200 text-xs text-violet-700">
         <strong>🖼 图片结果</strong>
-        {imgUrl ? (
+        {generatedUrl ? (
           <div className="mt-2 space-y-2">
             <img
-              src={imgUrl}
+              src={generatedUrl}
               alt="生成图片"
               className="max-h-80 rounded border border-violet-100 bg-white object-contain"
             />
             <div className="flex items-center gap-2">
-              <CopyButton text={imgUrl}>复制图片 URL</CopyButton>
-              <a
-                href={imgUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-600 hover:underline"
-              >
+              <CopyButton text={generatedUrl}>复制图片 URL</CopyButton>
+              <a href={generatedUrl} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">
                 打开图片
               </a>
             </div>
           </div>
         ) : (
-          <div className="mt-1 text-slate-600">未识别到图片 URL，可查看下方完整 JSON。</div>
+          <div className="mt-1 text-slate-600">未识别到生成图 URL，请查看完整 JSON。</div>
+        )}
+        {isI2I && !refUrl && generatedUrl && (
+          <div className="mt-2 text-[10px] text-amber-600">未识别到参考图 URL，请检查 img_url 或完整 JSON。</div>
         )}
       </div>
     )
@@ -688,11 +762,13 @@ function InvokeResultView({
   resultType,
   template,
   onChain,
+  values,
 }: {
   result: InvokeResult
   resultType: string
   template: RunnerTemplate
   onChain: (capId: string, values: Record<string, string>) => void
+  values?: Record<string, string>
 }) {
   if (!isOk(result)) {
     return (
@@ -727,7 +803,7 @@ function InvokeResultView({
 
   return (
     <div className="mt-4">
-      <ResultBanner resultType={resultType} data={result.data} />
+      <ResultBanner resultType={resultType} data={result.data} template={template} values={values} />
 
       {/* Chain buttons per capability */}
       {resultType === 'voice_list' && (
@@ -1033,6 +1109,7 @@ function CapabilityCard({
             resultType={resultType}
             template={template}
             onChain={handleChain}
+            values={values}
           />
         )}
 
