@@ -46,7 +46,7 @@ function Shell() {
             <div className="text-red-600">注册中心不可达</div>
           ) : (
             <div>
-              {registry ? `${registry.capabilities.length} 能力 · ${registry.models.filter(m => m.enabled).length} 模型` : '加载中…'}
+              {registry ? `${registry.capabilities.length} 能力配置 · ${registry.models.filter(m => m.enabled).length} 启用模型` : '加载中…'}
             </div>
           )}
           <button onClick={reload} className="mt-2 text-sky-600 hover:underline">重新加载</button>

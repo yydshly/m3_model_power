@@ -10,6 +10,7 @@ import { StreamPanel } from '../components/StreamPanel'
 import { TtsWsPanel } from '../components/TtsWsPanel'
 import { UploadPanel } from '../components/UploadPanel'
 import { useRegistry } from '../store'
+import { getRequiredConfirmations, CONFIRM_LABELS } from '../domain/confirmations'
 
 type Mode = 'invoke' | 'stream' | 'upload'
 
@@ -386,7 +387,7 @@ export default function CapabilityPage() {
                         onChange={(e) => setConfirmations((p) => ({ ...p, confirm_quota: e.target.checked }))}
                         className="accent-rose-500"
                       />
-                      我确认文本长度超过默认阈值，允许消耗更多额度
+                      {CONFIRM_LABELS.confirm_quota}
                     </label>
                   </li>
                 )}
@@ -494,7 +495,7 @@ export default function CapabilityPage() {
       ) : models.length > 0 ? (
         <section className="mt-6">
           <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
-          <div className="text-[10px] text-slate-400 mb-2">这里只显示当前 capability 可用模型，不代表 Token Plan 全量模型。</div>
+          <div className="text-[10px] text-slate-400 mb-2">按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。默认选择优先成本友好模型，不代表官方推荐模型。</div>
           <div className="flex flex-wrap gap-2">
             {models.map((m) => (
               <span key={m.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-xs">
@@ -629,20 +630,4 @@ function operationRiskColor(risk: string): string {
     quota_guarded: 'text-orange-600',
   }
   return map[risk] ?? 'text-slate-600'
-}
-
-function getRequiredConfirmations(cap: import('../api').Capability): string[] {
-  const required: string[] = []
-  const bp = cap.billing_policy
-  const op = cap.operation_policy
-
-  if (bp.may_charge_extra) required.push('confirm_paid')
-  if (bp.billing_category === 'high_cost_confirm_required') required.push('confirm_high_cost')
-  if (op.is_destructive) required.push('confirm_destructive')
-  if (op.requires_uploaded_asset) required.push('confirm_asset_source')
-  if (op.is_long_running) required.push('confirm_long_running')
-  if (op.requires_existing_task) required.push('confirm_existing_task')
-  if (cap.id === 'tts-async') required.push('confirm_quota')
-
-  return required
 }

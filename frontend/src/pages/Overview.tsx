@@ -5,13 +5,11 @@ import { useRegistry } from '../store'
 import { computeWorkbenchStats } from '../workbenchStatus'
 
 const PLAN_FEATURES = [
-  '支持 MiniMax 全系模型（M3 / M2.7 / 图像 / 语音 / 音乐）',
-  '可同时支持 3-4 个 Agent 并发运行',
-  '支持主流的编程工具，并持续扩展中',
-  '1M 长上下文，适合处理长文档 / 大型代码库',
-  'M3 原生多模态理解：图像 / 视频输入',
-  '文本 / 图像 / 语音 / 音乐 共享同一额度',
-  '月度约 12 亿+ token M3 用量（极速档）',
+  '能力与模型配置由 backend/config/*.yaml 驱动',
+  'Chat 模型 live 状态来自 /v1/models 探测',
+  '非 Chat 能力以 capability_probe / Verification Index 为准',
+  '高成本、破坏性、素材型能力默认受 RiskGate 阻断',
+  'Token Plan 完成率以累计 Verification Index 为准',
 ]
 
 export default function Overview() {
@@ -101,8 +99,9 @@ export default function Overview() {
 
       <section className="mt-6 grid grid-cols-3 gap-4">
         <div className="rounded-lg border border-slate-200 bg-white p-5 col-span-2">
-          <div className="text-sm text-slate-500">订阅档位</div>
-          <div className="text-lg font-semibold mt-1">Plus · 极速版</div>
+          <div className="text-sm text-slate-500">当前工作台记录</div>
+          <div className="text-lg font-semibold mt-1">MiniMax 能力聚合工作台</div>
+          <p className="text-xs text-slate-500 mt-1">基于 backend/config/*.yaml、官方文档对齐记录、live 探测结果和累计验收索引展示。不等同于 MiniMax 官方套餐完整说明。</p>
           <ul className="mt-3 grid grid-cols-2 gap-y-1.5 text-sm text-slate-700">
             {PLAN_FEATURES.map((f) => (
               <li key={f} className="flex gap-2">
@@ -139,10 +138,10 @@ export default function Overview() {
         <section className="mt-6">
           <h2 className="text-sm font-semibold text-slate-700 mb-2">模型状态</h2>
           <div className="grid grid-cols-4 gap-3">
-            <ModelStat label="官方当前" value={stats.officialCurrent} sub="official_current" tone="emerald" />
-            <ModelStat label="实际可用" value={stats.liveAvailable} sub="live=true 已验收" tone="indigo" />
-            <ModelStat label="本地配置" value={stats.models} sub="含历史兼容" tone="slate" />
-            <ModelStat label="历史/隐藏" value={stats.legacyHidden} sub="deprecated/legacy" tone="amber" />
+            <ModelStat label="官方当前" value={stats.officialCurrent} sub="official_current=true" tone="emerald" />
+            <ModelStat label="Chat live 可用" value={stats.liveAvailable} sub="live=true 已验收" tone="indigo" />
+            <ModelStat label="前端启用模型" value={stats.models} sub="enabled=true" tone="slate" />
+            <ModelStat label="历史/废弃" value={stats.legacyHidden} sub="legacy/deprecated" tone="amber" />
           </div>
         </section>
       )}
@@ -150,13 +149,13 @@ export default function Overview() {
       {/* 全量覆盖缺口统计 */}
       {stats && (
         <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">全量覆盖缺口</h2>
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">配置与探测</h2>
           <div className="grid grid-cols-6 gap-3">
             <GapStat label="官方当前" value={stats.officialCurrent} sub="official_current=true" tone="emerald" />
-            <GapStat label="本地配置" value={stats.localConfigured} sub="含 legacy/deprecated" tone="slate" />
-            <GapStat label="live chat" value={stats.liveChatModels} sub="/v1/models 返回" tone="indigo" />
-            <GapStat label="待验收" value={stats.capabilityProbePending} sub="capability_probe=unknown" tone="amber" />
-            <GapStat label="未 live 验收" value={stats.officialCurrentNonLive} sub="official_current 且 live≠true" tone="orange" />
+            <GapStat label="全量配置" value={stats.localConfigured} sub="含 legacy/deprecated" tone="slate" />
+            <GapStat label="Chat live 可用" value={stats.liveChatModels} sub="/v1/models 返回" tone="indigo" />
+            <GapStat label="capability_probe 待探测" value={stats.capabilityProbePending} sub="capability_probe=unknown" tone="amber" />
+            <GapStat label="官方当前未 live" value={stats.officialCurrentNonLive} sub="official_current 且 live≠true" tone="orange" />
             <GapStat label="highspeed 档" value={stats.highspeedCount} sub="独立统计" tone="purple" />
           </div>
         </section>

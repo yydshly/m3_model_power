@@ -46,31 +46,53 @@
           "notes": "标准档 M2.7；thinking 不可关闭；200K 上下文上限"
         },
         {
-          "model": "MiniMax-M2.5 / M2.5-highspeed",
-          "label": "标准/极速档（历史）",
-          "source": "historical_compat",
+          "model": "MiniMax-M2.5",
+          "label": "标准档",
+          "source": "official_docs",
           "recommendation_level": "compatible",
           "token_plan_status": "available_direct",
           "verified_status": "not_verified_in_this_project",
           "best_for": ["历史项目兼容", "标准文本任务"],
           "not_best_for": ["最新功能（M3）", "高频 Token Plan 体验（M2.7-highspeed）"],
-          "notes": "历史模型；M2.5-highspeed 走共享配额；thinking 不可关闭"
+          "notes": "标准档 M2.5；thinking 不可关闭"
         },
         {
-          "model": "MiniMax-M2.1 / M2.1-highspeed",
-          "label": "标准/极速档（历史）",
-          "source": "historical_compat",
+          "model": "MiniMax-M2.5-highspeed",
+          "label": "极速档",
+          "source": "official_docs",
+          "recommendation_level": "quota_friendly",
+          "token_plan_status": "available_direct",
+          "verified_status": "not_verified_in_this_project",
+          "best_for": ["历史项目兼容", "Token Plan 高频体验"],
+          "not_best_for": ["最新功能（M3）", "多模态场景"],
+          "notes": "极速档 M2.5；走 TokenPlanPlus 共享配额；thinking 不可关闭"
+        },
+        {
+          "model": "MiniMax-M2.1",
+          "label": "标准档",
+          "source": "official_docs",
           "recommendation_level": "compatible",
           "token_plan_status": "available_direct",
           "verified_status": "not_verified_in_this_project",
           "best_for": ["历史项目兼容"],
           "not_best_for": ["最新功能（M3）", "高频 Token Plan 体验（M2.7-highspeed）"],
-          "notes": "历史模型；thinking 不可关闭"
+          "notes": "标准档 M2.1；thinking 不可关闭"
+        },
+        {
+          "model": "MiniMax-M2.1-highspeed",
+          "label": "极速档",
+          "source": "official_docs",
+          "recommendation_level": "quota_friendly",
+          "token_plan_status": "available_direct",
+          "verified_status": "not_verified_in_this_project",
+          "best_for": ["历史项目兼容", "Token Plan 高频体验"],
+          "not_best_for": ["最新功能（M3）", "多模态场景"],
+          "notes": "极速档 M2.1；走 TokenPlanPlus 共享配额；thinking 不可关闭"
         },
         {
           "model": "MiniMax-M2",
-          "label": "标准档（历史）",
-          "source": "historical_compat",
+          "label": "标准档",
+          "source": "official_docs",
           "recommendation_level": "compatible",
           "token_plan_status": "available_direct",
           "verified_status": "not_verified_in_this_project",

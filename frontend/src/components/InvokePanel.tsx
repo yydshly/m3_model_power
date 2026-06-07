@@ -1,24 +1,7 @@
 import { useState } from 'react'
 import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
+import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
-
-function getRequiredConfirmations(cap: Capability): string[] {
-  const required: string[] = []
-  const bp = cap.billing_policy
-  const op = cap.operation_policy
-  if (bp.may_charge_extra) required.push('confirm_paid')
-  if (bp.billing_category === 'high_cost_confirm_required') required.push('confirm_high_cost')
-  if (op.is_destructive) required.push('confirm_destructive')
-  if (op.requires_uploaded_asset) required.push('confirm_asset_source')
-  if (op.is_long_running) required.push('confirm_long_running')
-  if (op.requires_existing_task) required.push('confirm_existing_task')
-  if (cap.id === 'tts-async') required.push('confirm_quota')
-  return required
-}
-
-function allConfirmationsSatisfied(required: string[], confirmations: Record<string, boolean>): boolean {
-  return required.every((r) => confirmations[r])
-}
 
 export function InvokePanel({
   cap,
@@ -174,7 +157,7 @@ export function InvokePanel({
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.quota_eligible ? '✓配额 ' : '$另计费 '}
+                {m.quota_eligible ? '极速额度 ' : '标准计量 '}
                 {m.label} · {m.tier}
                 {m.context ? ` · ${(m.context / 1000).toFixed(0)}k` : ''}
               </option>

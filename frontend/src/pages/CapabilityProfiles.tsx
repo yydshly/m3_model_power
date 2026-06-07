@@ -43,7 +43,7 @@ const RECOMMENDATION_BADGE: Record<string, { text: string; className: string }> 
   low_latency: { text: '低延迟', className: 'bg-cyan-600 text-white' },
   high_quality: { text: '高质量', className: 'bg-blue-600 text-white' },
   quota_friendly: { text: 'Token Plan 高频', className: 'bg-teal-600 text-white' },
-  compatible: { text: '兼容', className: 'bg-slate-500 text-white' },
+  compatible: { text: '兼容旧项目', className: 'bg-slate-500 text-white' },
   guarded: { text: '需确认', className: 'bg-amber-500 text-white' },
   free_tier: { text: '免费档', className: 'bg-gray-400 text-white' },
   not_default: { text: '不默认执行', className: 'bg-orange-500 text-white' },
@@ -88,6 +88,12 @@ export default function CapabilityProfilesPage() {
         <p className="text-sm text-slate-600 mt-1">
           从用户视角理解每个能力族能做什么、支持哪些模型、有什么风险、如何使用。
         </p>
+        {/* 图例 */}
+        <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+          <span><strong className="text-slate-700">兼容旧项目：</strong>可用于旧项目迁移或备用选择，不代表当前主推。</span>
+          <span><strong className="text-slate-700">历史兼容：</strong>仅表示旧版/废弃/隐藏模型。</span>
+          <span><strong className="text-slate-700">未验收：</strong>表示本项目未完成单独验证，不等同于官方不可用。</span>
+        </div>
       </div>
 
       {/* Family filter chips */}

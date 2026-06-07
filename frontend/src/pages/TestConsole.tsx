@@ -19,58 +19,32 @@ import {
 import { useRegistry } from '../store'
 import AssetResultPreview from '../components/AssetResultPreview'
 import HistoryAssetPreview from '../components/HistoryAssetPreview'
-
-// ── Confirmation logic (mirrors InvokePanel.tsx) ───────────────────────
-
-function getRequiredConfirmations(cap: Capability): string[] {
-  const required: string[] = []
-  const bp = cap.billing_policy
-  const op = cap.operation_policy
-  if (bp?.may_charge_extra) required.push('confirm_paid')
-  if (bp?.billing_category === 'high_cost_confirm_required') required.push('confirm_high_cost')
-  if (op?.is_destructive) required.push('confirm_destructive')
-  if (op?.requires_uploaded_asset) required.push('confirm_asset_source')
-  if (op?.is_long_running) required.push('confirm_long_running')
-  if (op?.requires_existing_task) required.push('confirm_existing_task')
-  if (cap.id === 'tts-async') required.push('confirm_quota')
-  return required
-}
-
-function allConfirmationsSatisfied(
-  required: string[],
-  confirmations: Record<string, boolean>,
-): boolean {
-  return required.every((r) => confirmations[r])
-}
+import { getRequiredConfirmations, allConfirmationsSatisfied, CONFIRM_LABELS } from '../domain/confirmations'
+import { billingLabel, operationRiskLabel } from '../domain/workbenchLabels'
 
 // ── Scope badge colors ─────────────────────────────────────────────────
 
 function ScopeBadge({ scope }: { scope: string }) {
-  if (scope === 'in_scope')
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">in_scope</span>
-  if (scope === 'warning_only')
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">warning_only</span>
-  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">out_of_scope</span>
+  const map: Record<string, { label: string; cls: string }> = {
+    in_scope: { label: '范围内', cls: 'bg-green-100 text-green-800' },
+    warning_only: { label: '只提示', cls: 'bg-yellow-100 text-yellow-800' },
+    out_of_scope: { label: '范围外', cls: 'bg-slate-100 text-slate-600' },
+  }
+  const s = map[scope] ?? { label: scope, cls: 'bg-slate-100 text-slate-600' }
+  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.cls}`}>{s.label}</span>
 }
 
 // ── Billing badge ─────────────────────────────────────────────────────
 
 function BillingBadge({ cat }: { cat: string }) {
-  const map: Record<string, string> = {
-    normal_token_plan_test: 'token-plan',
-    quota_sensitive: 'quota',
-    paid_confirm_required: 'paid',
-    high_cost_confirm_required: 'high-cost',
-    asset_required_confirm_required: 'asset',
-  }
   const cls: Record<string, string> = {
     normal_token_plan_test: 'bg-blue-50 text-blue-700',
-    quota_sensitive: 'bg-slate-100 text-slate-700',
+    quota_sensitive: 'bg-amber-50 text-amber-700',
     paid_confirm_required: 'bg-orange-50 text-orange-700',
     high_cost_confirm_required: 'bg-red-50 text-red-700',
     asset_required_confirm_required: 'bg-purple-50 text-purple-700',
   }
-  const label = map[cat] ?? cat
+  const label = billingLabel(cat)
   const color = cls[cat] ?? 'bg-slate-100 text-slate-700'
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${color}`}>{label}</span>
 }
@@ -82,28 +56,18 @@ function RiskBadge({ risk }: { risk: string }) {
     normal: 'bg-green-50 text-green-700',
     destructive: 'bg-red-50 text-red-700',
     asset_required: 'bg-purple-50 text-purple-700',
-    existing_task_only: 'bg-orange-50 text-orange-700',
+    existing_task_only: 'bg-blue-50 text-blue-700',
     long_running: 'bg-yellow-50 text-yellow-700',
-    quota_guarded: 'bg-slate-100 text-slate-700',
+    quota_guarded: 'bg-orange-50 text-orange-700',
   }
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${map[risk] ?? 'bg-slate-100 text-slate-700'}`}>
-      {risk}
+      {operationRiskLabel(risk)}
     </span>
   )
 }
 
 // ── Confirmation checkboxes ────────────────────────────────────────────
-
-const CONFIRM_LABELS: Record<string, string> = {
-  confirm_paid: 'confirm_paid (may charge)',
-  confirm_high_cost: 'confirm_high_cost (high cost)',
-  confirm_destructive: 'confirm_destructive (destructive)',
-  confirm_asset_source: 'confirm_asset_source (external asset)',
-  confirm_long_running: 'confirm_long_running (long running)',
-  confirm_existing_task: 'confirm_existing_task (existing task)',
-  confirm_quota: 'confirm_quota (quota guard)',
-}
 
 function ConfirmationsEditor({
   required,
@@ -212,7 +176,7 @@ function RiskCheckPanel({
   return (
     <div className="border border-sky-200 bg-sky-50 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-sky-900">RiskGate 检查 — {cap.id}</h3>
+        <h3 className="font-semibold text-sky-900">安全检查 — {cap.id}</h3>
         <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800">✕ 关闭</button>
       </div>
 
@@ -228,13 +192,14 @@ function RiskCheckPanel({
 
       {required.length > 0 && (
         <div className="mb-3">
-          <p className="text-xs text-slate-500 mb-1">Required confirmations:</p>
+          <p className="text-xs text-slate-500 mb-1">需要确认项：</p>
           <ConfirmationsEditor required={required} confirmations={confirmations} onChange={onConfirmationsChange} />
         </div>
       )}
 
       <div className="mb-3">
-        <p className="text-xs text-slate-500 mb-1">Payload (JSON):</p>
+        <p className="text-xs text-slate-500 mb-1">Payload (JSON)：</p>
+        <p className="text-[10px] text-amber-600 mb-1">这是开发者 raw JSON payload，必须匹配该能力 handler 的入参。不确定怎么填时，请去「能力体验」页面。</p>
         <textarea
           value={payload}
           onChange={(e) => onPayloadChange(e.target.value)}
@@ -249,7 +214,7 @@ function RiskCheckPanel({
         disabled={loading || !!payloadErr}
         className="px-4 py-1.5 bg-sky-600 text-white text-sm rounded hover:bg-sky-700 disabled:opacity-50"
       >
-        {loading ? '检查中…' : 'Run Risk Check'}
+        {loading ? '检查中…' : '安全检查'}
       </button>
 
       {err && <p className="mt-2 text-sm text-red-600">错误: {err}</p>}
@@ -331,13 +296,13 @@ function InvokePanel({
   return (
     <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-indigo-900">Invoke — {cap.id}</h3>
+        <h3 className="font-semibold text-indigo-900">真实调用 — {cap.id}</h3>
         <button onClick={onClose} className="text-sm text-slate-500 hover:text-slate-800">✕ 关闭</button>
       </div>
 
       {!allConfirmed && required.length > 0 && (
         <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-          需要全部确认才能执行: {required.join(', ')}
+          需要全部确认才能执行
         </div>
       )}
 
@@ -353,13 +318,14 @@ function InvokePanel({
 
       {required.length > 0 && (
         <div className="mb-3">
-          <p className="text-xs text-slate-500 mb-1">Confirmations:</p>
+          <p className="text-xs text-slate-500 mb-1">需要确认项：</p>
           <ConfirmationsEditor required={required} confirmations={confirmations} onChange={onConfirmationsChange} />
         </div>
       )}
 
       <div className="mb-3">
-        <p className="text-xs text-slate-500 mb-1">Payload (JSON):</p>
+        <p className="text-xs text-slate-500 mb-1">Payload (JSON)：</p>
+        <p className="text-[10px] text-amber-600 mb-1">这是开发者 raw JSON payload，必须匹配该能力 handler 的入参。不确定怎么填时，请去「能力体验」页面。</p>
         <textarea
           value={payload}
           onChange={(e) => onPayloadChange(e.target.value)}
@@ -367,17 +333,29 @@ function InvokePanel({
           className={`w-full font-mono text-xs border rounded p-2 ${payloadErr ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
         />
         {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
-        <p className="text-[10px] text-amber-600 mt-1">
-          ⚠️ 这里的 payload 必须是 MiniMax handler 接收的真实 JSON，不是 Runner 表单字段。
-        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => onPayloadChange(JSON.stringify(cap.example ?? {}, null, 2))}
+          className="px-3 py-1.5 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+        >
+          重置为示例 payload
+        </button>
+        <button
+          onClick={() => navigator.clipboard.writeText(payload)}
+          className="px-3 py-1.5 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+        >
+          复制 payload
+        </button>
       </div>
 
       <button
         onClick={runInvoke}
         disabled={loading || !allConfirmed || !!payloadErr}
-        className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40"
+        className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40 mt-3"
       >
-        {loading ? '执行中…' : 'Execute'}
+        {loading ? '执行中…' : '真实调用'}
       </button>
 
       {err && <p className="mt-2 text-sm text-red-600">错误: {err}</p>}
@@ -501,23 +479,23 @@ export default function TestConsole() {
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 flex items-start gap-3">
         <span className="text-base">🧪</span>
         <div className="flex-1 min-w-0 space-y-1">
-          <p className="text-sm font-medium text-slate-700">高级测试 = 开发者 raw JSON 调试台。</p>
+          <p className="text-sm font-medium text-slate-700">开发者测试控制台</p>
           <p className="text-xs text-slate-500">
-            它直接调用 <code className="bg-slate-100 px-1 rounded">/api/invoke/{'{capability_id}'}</code>，不会自动套用能力体验页的表单模板。
+            开发者测试控制台 · 直接调用 /api/invoke/&#123;&#123;capability_id&#125;&#125;，不会自动套用能力体验页的表单模板。
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            推荐流程：1. 搜索或筛选能力 → 2. 点击「安全检查」验证 RiskGate → 3. 确认 payload 和确认项 → 4. 再点击「真实调用」→ 5. 在最近调用记录中查看结果和资产
           </p>
           <div className="flex flex-wrap gap-4 text-[10px] text-slate-400 mt-1">
             <span>💡 <strong>能力体验：</strong>推荐普通测试，表单化、带提示、带结果预览</span>
-            <span>⚠️ <strong>高级测试：</strong>开发者使用，手写 JSON payload</span>
+            <span>⚠️ <strong>开发者测试：</strong>手动填写 raw JSON payload</span>
             <span>📖 <strong>能力详情：</strong>查看 API、风险、计费、scope、说明</span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            如果你只是想直接体验能力，请使用
-            <Link to="/capability-runner" className="text-sky-600 hover:underline ml-1">「能力体验」</Link>
-            。
-            {urlCapId && (
-              <span className="ml-2">当前已选中：<span className="font-mono text-slate-700">{urlCapId}</span>，在下方表格中点击 Risk Check 或 Invoke。</span>
-            )}
-          </p>
+          <div className="flex flex-wrap gap-3 text-xs mt-2">
+            <Link to="/capability-runner" className="text-sky-600 hover:underline">去能力体验 →</Link>
+            <Link to="/capability-profiles" className="text-sky-600 hover:underline">去能力画像 →</Link>
+            <Link to="/" className="text-sky-600 hover:underline">去总览 →</Link>
+          </div>
         </div>
       </div>
 
@@ -567,194 +545,6 @@ export default function TestConsole() {
         </div>
       </div>
 
-      {/* ── History Panel ── */}
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h3 className="font-semibold text-slate-800">
-            调用历史
-            {historyStatus?.exists && (
-              <span className="ml-2 text-[10px] text-slate-400 font-normal">
-                {historyStatus.line_count} 行 / {historyStatus.valid_record_count} 条有效
-                {historyStatus.line_count > historyStatus.valid_record_count && (
-                  <span className="text-amber-500"> · 有损坏记录</span>
-                )}
-                {' '}· {historyStatus.last_modified ? new Date(historyStatus.last_modified).toLocaleString() : '无修改时间'}
-              </span>
-            )}
-          </h3>
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              value={filterHistoryAction}
-              onChange={e => setFilterHistoryAction(e.target.value as typeof filterHistoryAction)}
-              className="border border-slate-300 rounded px-2 py-1 text-xs"
-            >
-              <option value="all">全部动作</option>
-              <option value="risk_check">Risk Check</option>
-              <option value="invoke">Invoke</option>
-            </select>
-            <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filterHistoryHasAssets}
-                onChange={e => setFilterHistoryHasAssets(e.target.checked)}
-                className="rounded"
-              />
-              有资产
-            </label>
-            <button
-              onClick={refreshHistory}
-              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-            >
-              刷新
-            </button>
-          </div>
-        </div>
-
-        {historyErr && (
-          <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
-        )}
-
-        {history.length === 0 && !historyErr ? (
-          <div className="text-xs text-slate-500 space-y-1">
-            <p className="text-sm text-slate-400">暂无历史记录。</p>
-            {!historyStatus?.exists ? (
-              <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-700">
-                <p className="font-medium mb-1">可能原因：</p>
-                <ol className="ml-4 list-decimal list-inside space-y-0.5">
-                  <li>当前 <code className="bg-amber-100 px-1 rounded">{historyStatus?.history_path ?? 'backend/runtime/test_console/history.jsonl'}</code> 尚未生成</li>
-                  <li>后端进程刚重启</li>
-                  <li>还没有执行 Risk Check / Invoke</li>
-                  <li>当前运行目录与预期不一致</li>
-                </ol>
-                <p className="mt-1 text-[10px]">文件不存在 · 路径：{historyStatus?.history_path ?? '(未获取到)'}</p>
-              </div>
-            ) : (
-              <p className="text-slate-400">
-                记录 {historyStatus?.line_count ?? 0} 行 / {historyStatus?.valid_record_count ?? 0} 条有效，文件存在但暂无内容。
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-1 max-h-80 overflow-y-auto">
-            {history
-              .filter(item => {
-                if (filterHistoryAction !== 'all' && item.action !== filterHistoryAction) return false
-                if (filterHistoryHasAssets && !item.result_summary?.asset_count) return false
-                return true
-              })
-              .map((item) => {
-                const ok = item.result?.ok ?? item.result?.allowed ?? false
-                const time = item.created_at
-                  ? new Date(item.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                  : ''
-                const dateStr = item.created_at
-                  ? new Date(item.created_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-                  : ''
-                const isExpanded = expandedHistoryId === item.id
-                return (
-                  <div key={item.id} className="border border-slate-100 rounded-lg bg-white overflow-hidden">
-                    {/* Header row — always visible */}
-                    <button
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left"
-                      onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
-                    >
-                      <span className="text-slate-400 shrink-0 w-16">{dateStr}</span>
-                      <span className="text-slate-400 shrink-0 w-16">{time}</span>
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${item.action === 'risk_check' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                        {item.action === 'risk_check' ? 'RC' : 'INV'}
-                      </span>
-                      <span className="font-mono text-slate-700">{item.capability_id}</span>
-                      {item.result_summary?.output_type && item.result_summary.output_type !== 'unknown' && (
-                        <span className="shrink-0 px-1 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]">
-                          {item.result_summary.output_type}
-                        </span>
-                      )}
-                      {item.result_summary?.asset_count ? (
-                        <span className="shrink-0 text-[10px] text-slate-400">
-                          {item.result_summary.asset_count} asset{item.result_summary.asset_count !== 1 ? 's' : ''}
-                        </span>
-                      ) : null}
-                      <span className={`ml-auto shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
-                        {ok ? '✓' : '✗'}
-                      </span>
-                      <span className="shrink-0 text-slate-300">{isExpanded ? '▲' : '▼'}</span>
-                    </button>
-
-                    {/* Expanded details */}
-                    {isExpanded && (
-                      <div className="px-4 pb-3 pt-1 border-t border-slate-100 space-y-3 text-xs">
-                        {/* Error message */}
-                        {!ok && item.result?.error && (
-                          <div className="bg-red-50 border border-red-200 rounded p-2 text-red-700">
-                            <strong>错误：</strong>{item.result.error}
-                            {item.result.blocked_reasons?.length ? (
-                              <div className="mt-1">阻断原因：{item.result.blocked_reasons.join('；')}</div>
-                            ) : null}
-                            {item.result.required_confirmations?.length ? (
-                              <div className="mt-1">需要确认：{item.result.required_confirmations.join('、')}</div>
-                            ) : null}
-                          </div>
-                        )}
-
-                        {/* Payload summary */}
-                        <div>
-                          <p className="font-medium text-slate-700 mb-1">Payload</p>
-                          <div className="bg-slate-100 rounded p-2 space-y-1">
-                            <div>keys: {item.payload_summary.payload_keys.join(', ') || '(无)'}</div>
-                            {item.payload_summary.payload_preview && (
-                              <div className="text-slate-600 font-mono whitespace-pre-wrap break-all">
-                                {item.payload_summary.payload_preview}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Confirmations */}
-                        {item.confirmations && Object.keys(item.confirmations).length > 0 && (
-                          <div>
-                            <p className="font-medium text-slate-700 mb-1">Confirmations</p>
-                            <div className="flex flex-wrap gap-1">
-                              {Object.entries(item.confirmations).map(([k, v]) => (
-                                <span key={k} className={`px-1.5 py-0.5 rounded text-[10px] ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                  {k}: {String(v)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Result summary / assets */}
-                        {item.result_summary && (
-                          <div>
-                            <p className="font-medium text-slate-700 mb-1">结果摘要</p>
-                            <div className="bg-slate-100 rounded p-2">
-                              {item.result_summary.output_type && (
-                                <div className="mb-1">output_type: <span className="text-slate-700">{item.result_summary.output_type}</span></div>
-                              )}
-                              {item.result_summary.text_preview && (
-                                <div className="mb-1 text-slate-600 italic truncate">
-                                  文本：{item.result_summary.text_preview}
-                                </div>
-                              )}
-                              <HistoryAssetPreview result_summary={item.result_summary} rawResult={item.result} />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* result_warning */}
-                        {item.result?.warnings && item.result.warnings.length > 0 && (
-                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-yellow-700">
-                            warnings: {item.result.warnings.join('；')}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-          </div>
-        )}
-      </div>
 
       {/* ── Capability Description Panel ── */}
       {selectedCap && (
@@ -826,6 +616,16 @@ export default function TestConsole() {
           })() : (
             <p className="text-sm text-slate-400">暂无能力说明</p>
           )}
+          {/* 下一步引导 */}
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <p className="text-xs font-medium text-blue-800 mb-1">下一步：</p>
+            <ol className="text-xs text-blue-700 space-y-0.5 list-decimal list-inside">
+              <li>点击「安全检查」</li>
+              <li>勾选必要确认项</li>
+              <li>检查 allowed=true</li>
+              <li>再执行「真实调用」</li>
+            </ol>
+          </div>
         </div>
       )}
 
@@ -843,16 +643,22 @@ export default function TestConsole() {
           onChange={(e) => setFilterScope(e.target.value)}
           className="border border-slate-300 rounded px-3 py-1.5 text-sm"
         >
-          {scopeOptions.map((s) => (
-            <option key={s} value={s}>{s === 'all' ? '全部 Scope' : s}</option>
-          ))}
+          {scopeOptions.map((s) => {
+            const labelMap: Record<string, string> = {
+              all: '全部范围',
+              in_scope: '范围内',
+              warning_only: '只提示',
+              out_of_scope: '范围外',
+            }
+            return <option key={s} value={s}>{labelMap[s] ?? s}</option>
+          })}
         </select>
         <select
           value={filterCat}
           onChange={(e) => setFilterCat(e.target.value)}
           className="border border-slate-300 rounded px-3 py-1.5 text-sm"
         >
-          <option value="all">全部 Category</option>
+          <option value="all">全部分类</option>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
           ))}
@@ -865,15 +671,15 @@ export default function TestConsole() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">ID</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Name</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Category</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Scope</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Billing</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Risk</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Verified</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Desc</th>
-              <th className="text-left px-4 py-2.5 font-medium text-slate-700">Actions</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">能力 ID</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">能力名称</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">分类</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">范围</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">计费/额度</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">操作风险</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">已验收</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">有说明</th>
+              <th className="text-left px-4 py-2.5 font-medium text-slate-700">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -888,7 +694,7 @@ export default function TestConsole() {
                 <tr key={cap.id} className={`hover:bg-slate-50 ${selectedCapId === cap.id ? 'bg-sky-50' : ''}`}>
                   <td className="px-4 py-2.5 font-mono text-xs text-slate-800">{cap.id}</td>
                   <td className="px-4 py-2.5 text-slate-800">{cap.label}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{cap.category}</td>
+                  <td className="px-4 py-2.5 text-slate-600">{registry?.categories.find(c => c.id === cap.category)?.label ?? cap.category}</td>
                   <td className="px-4 py-2.5"><ScopeBadge scope={scope} /></td>
                   <td className="px-4 py-2.5"><BillingBadge cat={billing} /></td>
                   <td className="px-4 py-2.5"><RiskBadge risk={risk} /></td>
@@ -905,7 +711,7 @@ export default function TestConsole() {
                   <td className="px-4 py-2.5">
                     {scope === 'out_of_scope' ? (
                       <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <span>🔒</span> out_of_scope
+                        <span>🔒</span> 范围外
                       </span>
                     ) : isImplemented ? (
                       <div className="flex gap-2">
@@ -913,15 +719,15 @@ export default function TestConsole() {
                           onClick={() => openRiskCheck(cap)}
                           className="px-2 py-1 text-xs rounded border border-slate-300 bg-white hover:bg-slate-100"
                         >
-                          Risk Check
+                          安全检查
                         </button>
                         <button
                           onClick={() => openInvoke(cap)}
                           disabled={scope === 'warning_only'}
-                          title={scope === 'warning_only' ? 'warning_only capability' : ''}
+                          title={scope === 'warning_only' ? '该能力只做风险提示，默认不执行' : ''}
                           className="px-2 py-1 text-xs rounded border border-indigo-300 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          Invoke
+                          真实调用
                         </button>
                       </div>
                     ) : (
@@ -962,6 +768,187 @@ export default function TestConsole() {
           )}
         </div>
       )}
+
+      {/* ── History Panel ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <h3 className="font-semibold text-slate-800">
+            最近调用记录
+            {historyStatus?.exists && (
+              <span className="ml-2 text-[10px] text-slate-400 font-normal">
+                {historyStatus.line_count} 行 / {historyStatus.valid_record_count} 条有效
+                {historyStatus.line_count > historyStatus.valid_record_count && (
+                  <span className="text-amber-500"> · 有损坏记录</span>
+                )}
+                {' '}· {historyStatus.last_modified ? new Date(historyStatus.last_modified).toLocaleString() : '无修改时间'}
+              </span>
+            )}
+          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={filterHistoryAction}
+              onChange={e => setFilterHistoryAction(e.target.value as typeof filterHistoryAction)}
+              className="border border-slate-300 rounded px-2 py-1 text-xs"
+            >
+              <option value="all">全部动作</option>
+              <option value="risk_check">安全检查</option>
+              <option value="invoke">真实调用</option>
+            </select>
+            <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filterHistoryHasAssets}
+                onChange={e => setFilterHistoryHasAssets(e.target.checked)}
+                className="rounded"
+              />
+              有资产
+            </label>
+            <button
+              onClick={refreshHistory}
+              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        {historyErr && (
+          <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        {history.length === 0 && !historyErr ? (
+          <div className="text-xs text-slate-500 space-y-1">
+            <p className="text-sm text-slate-400">还没有调用记录。</p>
+            <p className="text-slate-400">执行一次「安全检查」或「真实调用」后会在这里显示。</p>
+            {!historyStatus?.exists ? (
+              <details className="group mt-2">
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">调试信息 ▼</summary>
+                <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-200 text-amber-700">
+                  <ol className="ml-4 list-decimal list-inside space-y-0.5">
+                    <li>当前 <code className="bg-amber-100 px-1 rounded">{historyStatus?.history_path ?? 'backend/runtime/test_console/history.jsonl'}</code> 尚未生成</li>
+                    <li>后端进程刚重启</li>
+                    <li>还没有执行安全检查 / 真实调用</li>
+                    <li>当前运行目录与预期不一致</li>
+                  </ol>
+                  <p className="mt-1 text-[10px]">文件不存在 · 路径：{historyStatus?.history_path ?? '(未获取到)'}</p>
+                </div>
+              </details>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {history
+              .filter(item => {
+                if (filterHistoryAction !== 'all' && item.action !== filterHistoryAction) return false
+                if (filterHistoryHasAssets && !item.result_summary?.asset_count) return false
+                return true
+              })
+              .map((item) => {
+                const ok = item.result?.ok ?? item.result?.allowed ?? false
+                const time = item.created_at
+                  ? new Date(item.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : ''
+                const dateStr = item.created_at
+                  ? new Date(item.created_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+                  : ''
+                const isExpanded = expandedHistoryId === item.id
+                return (
+                  <div key={item.id} className="border border-slate-100 rounded-lg bg-white overflow-hidden">
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left"
+                      onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                    >
+                      <span className="text-slate-400 shrink-0 w-16">{dateStr}</span>
+                      <span className="text-slate-400 shrink-0 w-16">{time}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${item.action === 'risk_check' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                        {item.action === 'risk_check' ? '安检' : '调用'}
+                      </span>
+                      <span className="font-mono text-slate-700">{item.capability_id}</span>
+                      {item.result_summary?.output_type && item.result_summary.output_type !== 'unknown' && (
+                        <span className="shrink-0 px-1 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]">
+                          {item.result_summary.output_type}
+                        </span>
+                      )}
+                      {item.result_summary?.asset_count ? (
+                        <span className="shrink-0 text-[10px] text-slate-400">
+                          {item.result_summary.asset_count} asset{item.result_summary.asset_count !== 1 ? 's' : ''}
+                        </span>
+                      ) : null}
+                      <span className={`ml-auto shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
+                        {ok ? '✓' : '✗'}
+                      </span>
+                      <span className="shrink-0 text-slate-300">{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pt-1 border-t border-slate-100 space-y-3 text-xs">
+                        {!ok && item.result?.error && (
+                          <div className="bg-red-50 border border-red-200 rounded p-2 text-red-700">
+                            <strong>错误：</strong>{item.result.error}
+                            {item.result.blocked_reasons?.length ? (
+                              <div className="mt-1">阻断原因：{item.result.blocked_reasons.join('；')}</div>
+                            ) : null}
+                            {item.result.required_confirmations?.length ? (
+                              <div className="mt-1">需要确认：{item.result.required_confirmations.join('、')}</div>
+                            ) : null}
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="font-medium text-slate-700 mb-1">Payload</p>
+                          <div className="bg-slate-100 rounded p-2 space-y-1">
+                            <div>keys: {item.payload_summary.payload_keys.join(', ') || '(无)'}</div>
+                            {item.payload_summary.payload_preview && (
+                              <div className="text-slate-600 font-mono whitespace-pre-wrap break-all">
+                                {item.payload_summary.payload_preview}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {item.confirmations && Object.keys(item.confirmations).length > 0 && (
+                          <div>
+                            <p className="font-medium text-slate-700 mb-1">确认项</p>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(item.confirmations).map(([k, v]) => (
+                                <span key={k} className={`px-1.5 py-0.5 rounded text-[10px] ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                  {k}: {String(v)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {item.result_summary && (
+                          <div>
+                            <p className="font-medium text-slate-700 mb-1">结果摘要</p>
+                            <div className="bg-slate-100 rounded p-2">
+                              {item.result_summary.output_type && (
+                                <div className="mb-1">output_type: <span className="text-slate-700">{item.result_summary.output_type}</span></div>
+                              )}
+                              {item.result_summary.text_preview && (
+                                <div className="mb-1 text-slate-600 italic truncate">
+                                  文本：{item.result_summary.text_preview}
+                                </div>
+                              )}
+                              <HistoryAssetPreview result_summary={item.result_summary} rawResult={item.result} />
+                            </div>
+                          </div>
+                        )}
+
+                        {item.result?.warnings && item.result.warnings.length > 0 && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-yellow-700">
+                            warnings: {item.result.warnings.join('；')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
