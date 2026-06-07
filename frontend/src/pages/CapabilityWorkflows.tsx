@@ -111,10 +111,10 @@ function WorkflowCard({ workflow }: { workflow: CapabilityWorkflow }) {
                 {step.type === 'capability' && (
                   <div className="mt-2">
                     <Link
-                      to={`/test-console?capability=${step.capability_id}`}
+                      to={`/capability-runner?capability=${step.capability_id}`}
                       className="inline-flex items-center gap-1 text-xs bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-700 transition"
                     >
-                      去高级测试 →
+                      去体验 →
                     </Link>
                   </div>
                 )}
@@ -244,10 +244,10 @@ export default function CapabilityWorkflowsPage() {
                   <span className="font-mono text-slate-700">{step.capability_id}</span>
                   <span className="text-slate-400">({step.label})</span>
                   <Link
-                    to={`/test-console?capability=${step.capability_id}`}
+                    to={`/capability-runner?capability=${step.capability_id}`}
                     className="text-sky-600 hover:underline ml-1"
                   >
-                    测试
+                    体验
                   </Link>
                 </div>
               ))}

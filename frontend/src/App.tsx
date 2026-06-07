@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
 import CapabilityPage from './pages/Capability'
 import CapabilityProfilesPage from './pages/CapabilityProfiles'
+import CapabilityRunnerPage from './pages/CapabilityRunner'
 import CapabilityScenariosPage from './pages/CapabilityScenarios'
 import CapabilityWorkflowsPage from './pages/CapabilityWorkflows'
 import CategoryPage from './pages/Category'
@@ -37,6 +38,7 @@ function Shell() {
           <NavItem to="/capability-profiles" emoji="🧭" label="能力画像" />
           <NavItem to="/capability-scenarios" emoji="🎯" label="场景推荐" />
           <NavItem to="/capability-workflows" emoji="🔁" label="流程体验" />
+          <NavItem to="/capability-runner" emoji="⚡" label="能力体验" />
           <NavItem to="/test-console" emoji="🧪" label="高级测试" />
         </nav>
         <div className="p-3 border-t border-slate-200 text-xs text-slate-500">
@@ -60,6 +62,7 @@ function Shell() {
           <Route path="/capability-profiles" element={<CapabilityProfilesPage />} />
           <Route path="/capability-scenarios" element={<CapabilityScenariosPage />} />
           <Route path="/capability-workflows" element={<CapabilityWorkflowsPage />} />
+          <Route path="/capability-runner" element={<CapabilityRunnerPage />} />
         </Routes>
       </main>
     </div>

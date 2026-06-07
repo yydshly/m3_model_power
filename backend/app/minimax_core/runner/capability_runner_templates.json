@@ -1,0 +1,192 @@
+{
+  "schema_version": 1,
+  "templates": {
+    "lyrics-gen": {
+      "capability_id": "lyrics-gen",
+      "label": "歌词生成",
+      "description": "根据主题、风格、情绪生成结构化歌词，可继续用于 music-gen。",
+      "suitable_for": ["情绪 MV", "AI 歌曲草稿", "短视频 BGM", "音乐灵感"],
+      "risk_level": "safe",
+      "form_schema": {
+        "theme": {
+          "type": "input",
+          "label": "主题",
+          "default": "夏天傍晚的乡村小路",
+          "placeholder": "描述想要的歌曲主题"
+        },
+        "style": {
+          "type": "input",
+          "label": "风格",
+          "default": "温柔、怀旧、民谣",
+          "placeholder": "如：流行、摇滚、温柔、怀旧"
+        },
+        "language": {
+          "type": "select",
+          "label": "语言",
+          "default": "中文",
+          "options": ["中文", "英文", "日文", "韩文", "其他"]
+        }
+      },
+      "payload_template": {
+        "mode": "write_full_song",
+        "prompt": "{theme}",
+        "title": ""
+      },
+      "next_steps": [
+        {
+          "capability_id": "music-gen",
+          "label": "生成音乐",
+          "note": "music-gen 属于额度敏感能力，需要确认后执行",
+          "blocked": true
+        }
+      ]
+    },
+    "tts-sync": {
+      "capability_id": "tts-sync",
+      "label": "短文本语音合成",
+      "description": "输入文本，选择模型和音色，生成可播放音频。",
+      "suitable_for": ["短视频旁白", "语音助手", "情绪对话", "有声书片段"],
+      "risk_level": "safe",
+      "form_schema": {
+        "text": {
+          "type": "textarea",
+          "label": "文本",
+          "default": "你好，这是 MiniMax Token Plan 语音合成能力测试。",
+          "placeholder": "输入要合成的文本，建议 300 字以内",
+          "max_chars": 10000
+        },
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "speech-2.8-hd",
+          "options": [
+            {"value": "speech-2.8-hd", "label": "speech-2.8-hd 官方当前·高质量"},
+            {"value": "speech-2.8-turbo", "label": "speech-2.8-turbo 官方当前·低延迟"},
+            {"value": "speech-02-hd", "label": "speech-02-hd 已验收稳定"},
+            {"value": "speech-02-turbo", "label": "speech-02-turbo 已验收稳定"}
+          ]
+        },
+        "voice_id": {
+          "type": "input",
+          "label": "音色 ID",
+          "default": "",
+          "placeholder": "先在「音色列表」查询可用 voice_id"
+        },
+        "speed": {
+          "type": "input",
+          "label": "语速",
+          "default": "1.0",
+          "placeholder": "范围 0.5~2.0"
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "text": "{text}",
+        "voice_setting": {
+          "voice_id": "{voice_id}",
+          "speed": "{speed}"
+        }
+      },
+      "next_steps": []
+    },
+    "voice-list": {
+      "capability_id": "voice-list",
+      "label": "查询音色列表",
+      "description": "查询当前可用 voice_id，用于 TTS 语音合成。",
+      "suitable_for": ["查询可用音色", "选择 TTS 音色"],
+      "risk_level": "safe",
+      "form_schema": {},
+      "payload_template": {},
+      "next_steps": [
+        {
+          "capability_id": "tts-sync",
+          "label": "语音合成",
+          "note": "获取 voice_id 后可进入语音合成",
+          "blocked": false
+        }
+      ]
+    },
+    "image-t2i": {
+      "capability_id": "image-t2i",
+      "label": "文生图",
+      "description": "输入 prompt，选择图片模型，生成图片。",
+      "suitable_for": ["封面", "海报", "情绪 MV 分镜", "产品配图", "设计灵感"],
+      "risk_level": "safe",
+      "form_schema": {
+        "prompt": {
+          "type": "textarea",
+          "label": "图片描述",
+          "default": "一只橘猫坐在窗边，清晨阳光，真实摄影风格",
+          "placeholder": "描述想要的图片内容",
+          "max_chars": 1500
+        },
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "image-01",
+          "options": [
+            {"value": "image-01", "label": "image-01 官方主力·支持尺寸控制"},
+            {"value": "image-01-live", "label": "image-01-live 官方当前·画风控制"}
+          ]
+        },
+        "aspect_ratio": {
+          "type": "select",
+          "label": "尺寸/比例",
+          "default": "1:1",
+          "options": [
+            {"value": "1:1", "label": "1:1 方形"},
+            {"value": "16:9", "label": "16:9 宽屏"},
+            {"value": "9:16", "label": "9:16 竖屏"}
+          ]
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "prompt": "{prompt}",
+        "aspect_ratio": "{aspect_ratio}"
+      },
+      "next_steps": [
+        {
+          "capability_id": "image-i2i",
+          "label": "图生图",
+          "note": "image-i2i 需要参考图和 confirm_asset_source，后续版本支持",
+          "blocked": true
+        }
+      ]
+    },
+    "chat-openai": {
+      "capability_id": "chat-openai",
+      "label": "文本对话",
+      "description": "使用 OpenAI 兼容协议测试 MiniMax 对话模型。",
+      "suitable_for": ["问答", "对话测试", "SDK 接入验证"],
+      "risk_level": "safe",
+      "form_schema": {
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "MiniMax-M2.7-highspeed",
+          "options": [
+            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推·多模态旗舰"},
+            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed Token Plan 高频"},
+            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"}
+          ]
+        },
+        "prompt": {
+          "type": "textarea",
+          "label": "问题",
+          "default": "请用一句话介绍 MiniMax Token Plan 的能力。",
+          "placeholder": "输入你想问的问题"
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "messages": [
+          {"role": "user", "content": "{prompt}"}
+        ],
+        "max_tokens": 1024,
+        "temperature": 0.7
+      },
+      "next_steps": []
+    }
+  }
+}

@@ -89,7 +89,7 @@ export default function CapabilityScenariosPage() {
                   {s.capabilities.map((cap) => (
                     <Link
                       key={cap}
-                      to={`/test-console?capability=${cap}`}
+                      to={`/capability-runner?capability=${cap}`}
                       className="text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-100"
                     >
                       {cap}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   getVerificationIndex,
   getVerificationSummary,
@@ -480,6 +480,22 @@ export default function TestConsole() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* ── Advanced console banner ── */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 flex items-start gap-3">
+        <span className="text-base">🧪</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-700">这是高级测试控制台，适合开发者调试 JSON payload。</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            如果你只是想直接体验能力，请使用
+            <Link to="/capability-runner" className="text-sky-600 hover:underline ml-1">「能力体验」</Link>
+            。
+            {urlCapId && (
+              <span className="ml-2">当前已选中：<span className="font-mono text-slate-700">{urlCapId}</span>，在下方表格中点击 Risk Check 或 Invoke。</span>
+            )}
+          </p>
+        </div>
+      </div>
+
       {/* ── Summary Banner ── */}
       <div className={`rounded-xl border p-5 ${bannerColor}`}>
         <div className="flex items-center justify-between mb-3">
