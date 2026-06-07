@@ -237,6 +237,35 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 | P0-4 | `file_knowledge_entry` 场景的 CTA 显示"暂无直接体验入口"，因为 `file-upload` 不在 Runner 支持列表 | 场景页面 `file_knowledge_entry` 的 CTA 改为"高级测试 file-upload"，不要显示 disabled 按钮 |
 | P0-5 | CapabilityWorkflows 中 non-Runner step 显示 disabled "去体验"，像坏了 | 改为"已验收，Runner 未产品化"（B/C 类）或"风险能力，不默认执行"（D 类） |
 
+### P1-0（标签语义统一）
+
+已废弃文案：`暂无直接体验`（2026-06-07 废弃）
+
+标签语义对照表：
+
+| 分类 | 标签 | 说明 |
+|------|------|------|
+| A 类（Runner 支持） | `可直接体验` | Runner 可用，无特殊确认 |
+| A 类（Runner 支持，需额度） | `需额度确认` | music-gen 等需要 TokenPlan 额度确认 |
+| A 类（Runner 支持，需图片来源） | `需图片来源确认` | image-i2i 需要参考图来源确认 |
+| B 类（已验收未产品化） | `高级测试可用` | in_scope，TestConsole 可用，Runner 未产品化 |
+| C 类（Runner 未产品化） | `Runner 未产品化` | 需要特殊 UI（WS/async/multipart） |
+| D 类（风险能力） | `风险能力` | warning_only / destructive / out_of_scope |
+| 未分类 | `仅详情说明` | 未在任何集合中，仅有详情页 |
+
+相关集合：
+
+- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, image-t2i, image-i2i, chat-openai）
+- `QUOTA_SENSITIVE_CAPABILITIES`：A 类需额度（music-gen）
+- `ASSET_GUARDED_CAPABILITIES`：A 类需图片来源（image-i2i）
+- `ADVANCED_TEST_CAPABILITIES`：B 类（chat-anthropic, chat-responses-create, chat-responses-tokens, file-list, file-retrieve, file-content, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
+- `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws, tts-async, file-upload）
+- `HIGH_RISK_CAPABILITIES`：D 类，包含以下子类：
+  - video（out_of_scope）：video-t2v, video-i2v, video-s2v, video-query, video-download
+  - voice clone/design（warning_only）：voice-clone-upload-audio, voice-clone-upload-prompt, voice-clone-do, voice-design, voice-delete
+  - destructive：file-delete
+  - music（warning_only）：music-cover-prep
+
 ### P1（产品化：补齐关键链路）
 
 | # | 能力 | 修复方案 |
@@ -285,3 +314,24 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 5. 需要 `operation_policy.requires_confirmation` 的能力必须有 RiskGate 确认字段
 6. A 类能力必须有 result display 说明（已在矩阵中标注）
 7. B/C/D 类能力必须有不进 Runner 的原因说明（已在矩阵中标注）
+
+### P1-0 检查项（标签语义统一）
+
+8. `getCapabilityTestabilityLabel` 不返回 `暂无直接体验`（已废弃）
+9. `ADVANCED_TEST_CAPABILITIES` 集合存在
+10. `RUNNER_NOT_PRODUCTIZED_CAPABILITIES` 集合存在
+11. `chat-anthropic` 标签为"高级测试可用"
+12. `file-list` 标签为"高级测试可用"
+13. `tts-async` 标签为"Runner 未产品化"
+14. `file-upload` 标签为"Runner 未产品化"
+15. `file-delete` 不显示"高级测试可用"（D 类：风险能力）
+16. `voice-delete` 不显示"高级测试可用"（D 类：风险能力）
+17. `music-gen` 仍显示"需额度确认"
+18. `image-i2i` 仍显示"需图片来源确认"
+19. `voice-clone-upload-audio` 为"风险能力"（D 类）
+20. `voice-clone-upload-prompt` 为"风险能力"（D 类）
+21. `voice-clone-do` 为"风险能力"（D 类）
+22. `voice-design` 为"风险能力"（D 类）
+23. `music-cover-prep` 为"风险能力"（D 类）
+24. `video-t2v` 为"风险能力"（D 类）
+25. `video-download` 为"风险能力"（D 类）

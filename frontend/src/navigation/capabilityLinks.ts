@@ -24,13 +24,45 @@ export const ASSET_GUARDED_CAPABILITIES = new Set([
   'image-i2i',
 ])
 
-// High-risk capabilities not recommended for direct user testing.
+// D-class capabilities: warning_only / out_of_scope / destructive — risk abilities not default-executable.
 export const HIGH_RISK_CAPABILITIES = new Set([
-  'voice-clone',
+  // video (out_of_scope)
   'video-t2v',
   'video-i2v',
-  'file-upload',
+  'video-s2v',
+  'video-query',
+  'video-download',
+  // voice clone/design (warning_only)
+  'voice-clone-upload-audio',
+  'voice-clone-upload-prompt',
+  'voice-clone-do',
+  'voice-design',
+  // destructive (warning_only)
+  'voice-delete',
   'file-delete',
+  // music (warning_only)
+  'music-cover-prep',
+])
+
+// B-class capabilities: in_scope, verified, but Runner not productized — TestConsole available.
+export const ADVANCED_TEST_CAPABILITIES = new Set([
+  'chat-anthropic',
+  'chat-responses-create',
+  'chat-responses-tokens',
+  'file-list',
+  'file-retrieve',
+  'file-content',
+  'models-openai-list',
+  'models-openai-retrieve',
+  'models-anthropic-list',
+  'models-anthropic-retrieve',
+])
+
+// C-class capabilities: in_scope, Runner not productized, require special UI (WS / async / multipart).
+export const RUNNER_NOT_PRODUCTIZED_CAPABILITIES = new Set([
+  'tts-ws',
+  'tts-async',
+  'file-upload',
 ])
 
 // Map model family → default Runner capability.
@@ -77,6 +109,16 @@ export function isAssetGuarded(capabilityId: string): boolean {
 /** Returns true if a capability is high-risk. */
 export function isHighRisk(capabilityId: string): boolean {
   return HIGH_RISK_CAPABILITIES.has(capabilityId)
+}
+
+/** Returns true if a capability is B-class: in_scope, TestConsole available, Runner not productized. */
+export function isAdvancedTest(capabilityId: string): boolean {
+  return ADVANCED_TEST_CAPABILITIES.has(capabilityId)
+}
+
+/** Returns true if a capability is C-class: Runner not productized, needs special UI. */
+export function isRunnerNotProductized(capabilityId: string): boolean {
+  return RUNNER_NOT_PRODUCTIZED_CAPABILITIES.has(capabilityId)
 }
 
 /** Link to capability detail page (/cap/:id). */
@@ -160,23 +202,39 @@ export function getFirstGuardedRunnerCapability(capabilities: string[]): string 
 
 /**
  * Get a human-readable status label for a capability's testability.
+ *
+ * A 类 (Runner-supported): 可直接体验 / 需额度确认 / 需图片来源确认
+ * B 类 (ADVANCED_TEST):    高级测试可用
+ * C 类 (RUNNER_NOT_PRODUCTIZED): Runner 未产品化
+ * D 类 (HIGH_RISK):        风险能力
+ * Default:                 仅详情说明
  */
 export function getCapabilityTestabilityLabel(
   capabilityId: string
 ): { text: string; cls: string } {
-  if (!isRunnerSupported(capabilityId)) {
-    return { text: '暂无直接体验', cls: 'bg-slate-100 text-slate-500' }
+  if (isRunnerSupported(capabilityId)) {
+    if (isQuotaSensitive(capabilityId)) {
+      return { text: '需额度确认', cls: 'bg-orange-100 text-orange-700' }
+    }
+    if (isAssetGuarded(capabilityId)) {
+      return { text: '需图片来源确认', cls: 'bg-orange-100 text-orange-700' }
+    }
+    return { text: '可直接体验', cls: 'bg-emerald-100 text-emerald-700' }
   }
+
   if (isHighRisk(capabilityId)) {
-    return { text: '高风险/不默认执行', cls: 'bg-red-100 text-red-700' }
+    return { text: '风险能力', cls: 'bg-red-100 text-red-700' }
   }
-  if (isQuotaSensitive(capabilityId)) {
-    return { text: '需额度确认', cls: 'bg-orange-100 text-orange-700' }
+
+  if (isAdvancedTest(capabilityId)) {
+    return { text: '高级测试可用', cls: 'bg-sky-100 text-sky-700' }
   }
-  if (isAssetGuarded(capabilityId)) {
-    return { text: '需图片来源确认', cls: 'bg-orange-100 text-orange-700' }
+
+  if (isRunnerNotProductized(capabilityId)) {
+    return { text: 'Runner 未产品化', cls: 'bg-amber-100 text-amber-700' }
   }
-  return { text: '可直接体验', cls: 'bg-emerald-100 text-emerald-700' }
+
+  return { text: '仅详情说明', cls: 'bg-slate-100 text-slate-500' }
 }
 
 /**

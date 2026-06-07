@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getWorkflows, getWorkflow, type CapabilityWorkflow } from '../api'
-import { getCapabilityDetailLink, getTestConsoleLink, isRunnerSupported, getCapabilityTestabilityLabel } from '../navigation/capabilityLinks'
+import { getCapabilityDetailLink, getTestConsoleLink, isRunnerSupported, getCapabilityTestabilityLabel, isHighRisk, isAdvancedTest, isRunnerNotProductized } from '../navigation/capabilityLinks'
 
 const FAMILY_EMOJI: Record<string, string> = {
   chat: '💬',
@@ -134,17 +134,30 @@ function WorkflowCard({ workflow }: { workflow: CapabilityWorkflow }) {
                         )
                       }
                       // Not Runner-supported — show proper status instead of disabled button
-                      const isHighRisk = testability.text.includes('高风险') || testability.text.includes('不默认执行')
-                      if (isHighRisk) {
+                      if (isHighRisk(step.capability_id)) {
                         return (
                           <span className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-600 px-3 py-1 rounded-lg">
                             风险能力，不默认执行
                           </span>
                         )
                       }
+                      if (isAdvancedTest(step.capability_id)) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs bg-sky-50 text-sky-600 px-3 py-1 rounded-lg">
+                            高级测试可用
+                          </span>
+                        )
+                      }
+                      if (isRunnerNotProductized(step.capability_id)) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-500 px-3 py-1 rounded-lg">
+                            已验收，Runner 未产品化
+                          </span>
+                        )
+                      }
                       return (
                         <span className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-500 px-3 py-1 rounded-lg">
-                          已验收，Runner 未产品化
+                          {testability.text}
                         </span>
                       )
                     })()}

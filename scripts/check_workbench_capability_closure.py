@@ -413,6 +413,229 @@ def check_capability_links_testconsole() -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# P1-0: Label semantic unification checks
+# ---------------------------------------------------------------------------
+
+def check_no_暂无直接体验_in_capability_links() -> bool:
+    """16. getCapabilityTestabilityLabel no longer returns '暂无直接体验'."""
+    cap_links = read(_CAP_LINKS)
+
+    if "暂无直接体验" in cap_links:
+        print("FAIL: '暂无直接体验' still found in capabilityLinks.ts")
+        return False
+
+    print("PASS: getCapabilityTestabilityLabel does not return '暂无直接体验'")
+    return True
+
+
+def check_advanced_test_capabilities_exist() -> bool:
+    """17. ADVANCED_TEST_CAPABILITIES set exists in capabilityLinks.ts."""
+    cap_links = read(_CAP_LINKS)
+
+    if "ADVANCED_TEST_CAPABILITIES" not in cap_links:
+        print("FAIL: ADVANCED_TEST_CAPABILITIES not found in capabilityLinks.ts")
+        return False
+
+    print("PASS: ADVANCED_TEST_CAPABILITIES set exists")
+    return True
+
+
+def check_runner_not_productized_capabilities_exist() -> bool:
+    """18. RUNNER_NOT_PRODUCTIZED_CAPABILITIES set exists in capabilityLinks.ts."""
+    cap_links = read(_CAP_LINKS)
+
+    if "RUNNER_NOT_PRODUCTIZED_CAPABILITIES" not in cap_links:
+        print("FAIL: RUNNER_NOT_PRODUCTIZED_CAPABILITIES not found in capabilityLinks.ts")
+        return False
+
+    print("PASS: RUNNER_NOT_PRODUCTIZED_CAPABILITIES set exists")
+    return True
+
+
+def check_chat_anthropic_is_advanced_test() -> bool:
+    """19. chat-anthropic label should be '高级测试可用'."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if 'chat-anthropic' not in items:
+        print("FAIL: chat-anthropic not in ADVANCED_TEST_CAPABILITIES")
+        return False
+
+    print("PASS: chat-anthropic is in ADVANCED_TEST_CAPABILITIES")
+    return True
+
+
+def check_file_list_is_advanced_test() -> bool:
+    """20. file-list label should be '高级测试可用'."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if 'file-list' not in items:
+        print("FAIL: file-list not in ADVANCED_TEST_CAPABILITIES")
+        return False
+
+    print("PASS: file-list is in ADVANCED_TEST_CAPABILITIES")
+    return True
+
+
+def check_tts_async_is_runner_not_productized() -> bool:
+    """21. tts-async label should be 'Runner 未产品化'."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
+    if 'tts-async' not in items:
+        print("FAIL: tts-async not in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+        return False
+
+    print("PASS: tts-async is in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    return True
+
+
+def check_file_upload_is_runner_not_productized() -> bool:
+    """22. file-upload label should be 'Runner 未产品化'."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'RUNNER_NOT_PRODUCTIZED_CAPABILITIES')
+    if 'file-upload' not in items:
+        print("FAIL: file-upload not in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+        return False
+
+    print("PASS: file-upload is in RUNNER_NOT_PRODUCTIZED_CAPABILITIES")
+    return True
+
+
+def check_file_delete_not_advanced_test() -> bool:
+    """23. file-delete must NOT display '高级测试可用' (it's HIGH_RISK)."""
+    cap_links = read(_CAP_LINKS)
+
+    adv_items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if 'file-delete' in adv_items:
+        print("FAIL: file-delete is in ADVANCED_TEST_CAPABILITIES (should be HIGH_RISK)")
+        return False
+
+    risk_items = _parse_set_from_ts(cap_links, 'HIGH_RISK_CAPABILITIES')
+    if 'file-delete' not in risk_items:
+        print("FAIL: file-delete not in HIGH_RISK_CAPABILITIES")
+        return False
+
+    print("PASS: file-delete is correctly classified as HIGH_RISK, not ADVANCED_TEST")
+    return True
+
+
+def check_voice_delete_not_advanced_test() -> bool:
+    """24. voice-delete must NOT display '高级测试可用' (it's HIGH_RISK)."""
+    cap_links = read(_CAP_LINKS)
+
+    adv_items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if 'voice-delete' in adv_items:
+        print("FAIL: voice-delete is in ADVANCED_TEST_CAPABILITIES (should be HIGH_RISK)")
+        return False
+
+    risk_items = _parse_set_from_ts(cap_links, 'HIGH_RISK_CAPABILITIES')
+    if 'voice-delete' not in risk_items:
+        print("FAIL: voice-delete not in HIGH_RISK_CAPABILITIES")
+        return False
+
+    print("PASS: voice-delete is correctly classified as HIGH_RISK, not ADVANCED_TEST")
+    return True
+
+
+def check_music_gen_shows_需额度确认() -> bool:
+    """25. music-gen should still show '需额度确认' (it's quota-sensitive)."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'QUOTA_SENSITIVE_CAPABILITIES')
+    if 'music-gen' not in items:
+        print("FAIL: music-gen not in QUOTA_SENSITIVE_CAPABILITIES")
+        return False
+
+    print("PASS: music-gen is in QUOTA_SENSITIVE_CAPABILITIES")
+    return True
+
+
+def check_image_i2i_shows_需图片来源确认() -> bool:
+    """26. image-i2i should still show '需图片来源确认' (it's asset-guarded)."""
+    cap_links = read(_CAP_LINKS)
+
+    items = _parse_set_from_ts(cap_links, 'ASSET_GUARDED_CAPABILITIES')
+    if 'image-i2i' not in items:
+        print("FAIL: image-i2i not in ASSET_GUARDED_CAPABILITIES")
+        return False
+
+    print("PASS: image-i2i is in ASSET_GUARDED_CAPABILITIES")
+    return True
+
+
+def _parse_set_from_ts(ts_content: str, set_name: str) -> list[str]:
+    """Parse a Set from TypeScript source, stripping single-line comments to avoid ']' in comments being mistaken for delimiters."""
+    import re
+    # Remove single-line comments to avoid ] in // out_of_scope] etc.
+    stripped = re.sub(r'//.*', '', ts_content)
+    match = re.search(rf'{set_name}\s*=\s*new\s+Set\(\s*\[(.*?)\]', stripped, re.DOTALL)
+    if not match:
+        return []
+    return [x.strip().strip("'\"") for x in match.group(1).split(',') if x.strip()]
+
+
+def _check_high_risk_capability(cap_id: str) -> bool:
+    """Helper: cap_id must be in HIGH_RISK_CAPABILITIES, not in ADVANCED_TEST."""
+    cap_links = read(_CAP_LINKS)
+
+    # Not in ADVANCED_TEST
+    adv_items = _parse_set_from_ts(cap_links, 'ADVANCED_TEST_CAPABILITIES')
+    if cap_id in adv_items:
+        print(f"FAIL: {cap_id} is in ADVANCED_TEST_CAPABILITIES (should be HIGH_RISK)")
+        return False
+
+    # Must be in HIGH_RISK
+    risk_items = _parse_set_from_ts(cap_links, 'HIGH_RISK_CAPABILITIES')
+    if not risk_items:
+        print("FAIL: could not parse HIGH_RISK_CAPABILITIES")
+        return False
+    if cap_id not in risk_items:
+        print(f"FAIL: {cap_id} not in HIGH_RISK_CAPABILITIES")
+        return False
+
+    print(f"PASS: {cap_id} is correctly classified as HIGH_RISK")
+    return True
+
+
+def check_voice_clone_upload_audio_is_high_risk() -> bool:
+    """27. voice-clone-upload-audio must be HIGH_RISK."""
+    return _check_high_risk_capability('voice-clone-upload-audio')
+
+
+def check_voice_clone_upload_prompt_is_high_risk() -> bool:
+    """28. voice-clone-upload-prompt must be HIGH_RISK."""
+    return _check_high_risk_capability('voice-clone-upload-prompt')
+
+
+def check_voice_clone_do_is_high_risk() -> bool:
+    """29. voice-clone-do must be HIGH_RISK."""
+    return _check_high_risk_capability('voice-clone-do')
+
+
+def check_voice_design_is_high_risk() -> bool:
+    """30. voice-design must be HIGH_RISK."""
+    return _check_high_risk_capability('voice-design')
+
+
+def check_music_cover_prep_is_high_risk() -> bool:
+    """31. music-cover-prep must be HIGH_RISK."""
+    return _check_high_risk_capability('music-cover-prep')
+
+
+def check_video_t2v_is_high_risk() -> bool:
+    """32. video-t2v must be HIGH_RISK."""
+    return _check_high_risk_capability('video-t2v')
+
+
+def check_video_download_is_high_risk() -> bool:
+    """33. video-download must be HIGH_RISK."""
+    return _check_high_risk_capability('video-download')
+
+
 def main():
     print("=" * 60)
     print("Workbench Capability Closure checks")
@@ -434,6 +657,26 @@ def main():
         ("Scenarios page has no disabled CTA", check_scenarios_no_disabled_cta),
         ("Workflows page has proper status labels for non-Runner steps", check_workflows_no_disabled_去体验),
         ("getTestConsoleLink available for all B-class capabilities", check_capability_links_testconsole),
+        # P1-0: Label semantic unification
+        ("getCapabilityTestabilityLabel no longer returns '暂无直接体验'", check_no_暂无直接体验_in_capability_links),
+        ("ADVANCED_TEST_CAPABILITIES set exists", check_advanced_test_capabilities_exist),
+        ("RUNNER_NOT_PRODUCTIZED_CAPABILITIES set exists", check_runner_not_productized_capabilities_exist),
+        ("chat-anthropic is ADVANCED_TEST (label: 高级测试可用)", check_chat_anthropic_is_advanced_test),
+        ("file-list is ADVANCED_TEST (label: 高级测试可用)", check_file_list_is_advanced_test),
+        ("tts-async is RUNNER_NOT_PRODUCTIZED (label: Runner 未产品化)", check_tts_async_is_runner_not_productized),
+        ("file-upload is RUNNER_NOT_PRODUCTIZED (label: Runner 未产品化)", check_file_upload_is_runner_not_productized),
+        ("file-delete is NOT ADVANCED_TEST (D类: 风险能力)", check_file_delete_not_advanced_test),
+        ("voice-delete is NOT ADVANCED_TEST (D类: 风险能力)", check_voice_delete_not_advanced_test),
+        ("music-gen shows 需额度确认", check_music_gen_shows_需额度确认),
+        ("image-i2i shows 需图片来源确认", check_image_i2i_shows_需图片来源确认),
+        # D-class: voice-clone / voice-design / music-cover / video
+        ("voice-clone-upload-audio is HIGH_RISK (D类: 风险能力)", check_voice_clone_upload_audio_is_high_risk),
+        ("voice-clone-upload-prompt is HIGH_RISK (D类: 风险能力)", check_voice_clone_upload_prompt_is_high_risk),
+        ("voice-clone-do is HIGH_RISK (D类: 风险能力)", check_voice_clone_do_is_high_risk),
+        ("voice-design is HIGH_RISK (D类: 风险能力)", check_voice_design_is_high_risk),
+        ("music-cover-prep is HIGH_RISK (D类: 风险能力)", check_music_cover_prep_is_high_risk),
+        ("video-t2v is HIGH_RISK (D类: 风险能力)", check_video_t2v_is_high_risk),
+        ("video-download is HIGH_RISK (D类: 风险能力)", check_video_download_is_high_risk),
     ]
 
     all_passed = True

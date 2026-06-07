@@ -159,9 +159,6 @@ export default function CapabilityProfilesPage() {
                               </Link>
                             )}
                             <span className={`text-[9px] px-1 rounded ${testability.cls}`}>{testability.text}</span>
-                            {!isRunnerSupported(id) && (
-                              <span className="text-[9px] text-slate-400">高级测试</span>
-                            )}
                           </div>
                         )
                       })}
