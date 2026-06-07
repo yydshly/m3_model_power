@@ -6,10 +6,10 @@ Covers:
   2. All confirm_* fields are stripped
   3. Business fields are preserved (model, prompt, subject_reference, etc.)
   4. Empty payload handling
-  5. RiskGate still blocks unconfirmed image-i2i
-  6. RiskGate allows image-i2i with payload.confirm_asset_source=true
-  7. RiskGate allows image-i2i with confirmations.confirm_asset_source=true
-  8. Dry-run image smoke passes
+  5. Nested structures are preserved (same reference, not deep-cloned)
+
+Note: RiskGate scenarios and dry-run smoke are covered by separate scripts
+(check_registered_handler_payload_sanitizer.py and e2e_runner_image_smoke.py).
 """
 from __future__ import annotations
 
