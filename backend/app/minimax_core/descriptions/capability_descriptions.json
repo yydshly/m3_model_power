@@ -217,6 +217,638 @@
         "建议前端显示上传进度",
         "file_id 应与能力调用一起管理，避免孤立文件"
       ]
+    },
+    "chat-anthropic": {
+      "summary": "Anthropic Messages API 兼容接口，可直接对接 Claude Code / Cursor 等使用 Claude SDK 的工具。",
+      "use_cases": [
+        "Claude SDK 生态工具集成",
+        "多轮对话应用",
+        "结构化输出场景",
+        "Code Agent 场景对话"
+      ],
+      "not_recommended_for": [
+        "不需要 Claude 特定功能的简单对话（建议 chat-openai）",
+        "纯中文闲聊（成本较高）",
+        "非 Anthropic 生态的 OpenAI 兼容应用"
+      ],
+      "input_notes": [
+        "核心输入为 model、messages（role/content 结构）",
+        "支持 system prompt 控制行为",
+        "支持 streaming 流式响应"
+      ],
+      "output_notes": [
+        "返回 Assistant 消息内容",
+        "流式响应可实时展示打字效果"
+      ],
+      "risk_notes": [
+        "streaming 模式下连接中断可能导致输出不完整",
+        "不支持连续 32 轮以上长对话"
+      ],
+      "billing_notes": [
+        "Token Plan 内正常消耗，无特殊配额限制"
+      ],
+      "common_errors": [
+        "model 参数不支持当前档位",
+        "messages 结构缺少 role",
+        "max_tokens 超出模型限制"
+      ],
+      "product_usage": [
+        "适合接入 Claude Code / Cursor 等 AI 编码工具",
+        "适合需要强 system prompt 控制的 Agent 产品"
+      ],
+      "integration_tips": [
+        "推荐使用 streaming 模式提升体验",
+        "建议在服务端缓存对话历史以支持多轮"
+      ]
+    },
+    "chat-openai": {
+      "summary": "OpenAI Chat Completions 兼容接口，兼容 OpenAI SDK 现有生态，是最通用的对话 API。",
+      "use_cases": [
+        "OpenAI SDK 现有项目零改动迁移",
+        "通用对话机器人",
+        "内容生成与润色",
+        "客服与问答系统"
+      ],
+      "not_recommended_for": [
+        "需要 Anthropic Claude 特有能力的场景",
+        "需要流式输出的实时场景（建议 chat-responses-create）",
+        "非 OpenAI 兼容的内部工具"
+      ],
+      "input_notes": [
+        "核心输入为 model、messages（role/system/user/assistant）",
+        "支持 temperature、top_p 等生成参数",
+        "支持 streaming 流式响应"
+      ],
+      "output_notes": [
+        "返回 assistant 消息内容",
+        "支持 choices 多候选输出"
+      ],
+      "risk_notes": [
+        "streaming 模式下连接中断可能导致不完整输出",
+        "temperature 过高可能产生不稳定输出"
+      ],
+      "billing_notes": [
+        "Token Plan 内正常消耗"
+      ],
+      "common_errors": [
+        "model 不存在或不可用",
+        "messages 中 role 不合法",
+        "token 超出模型上下文窗口"
+      ],
+      "product_usage": [
+        "适合通用对话产品接入",
+        "适合 OpenAI 兼容工具的快速迁移"
+      ],
+      "integration_tips": [
+        "建议统一在服务端封装对话管理",
+        "注意保存完整 messages 历史以支持多轮"
+      ]
+    },
+    "chat-responses-create": {
+      "summary": "MiniMax Responses API，支持流式结构化输出，是面向下一代 AI 应用协议的对话接口。",
+      "use_cases": [
+        "流式结构化输出产品",
+        "实时 AI 助手",
+        "文档分析与问答",
+        "需要统一协议的多模态场景"
+      ],
+      "not_recommended_for": [
+        "需要 OpenAI SDK 兼容的存量项目（建议 chat-openai）",
+        "不需要流式输出的批处理场景",
+        "已有明确 Anthropic SDK 依赖的场景"
+      ],
+      "input_notes": [
+        "核心输入为 model、input（字符串或消息数组）",
+        "支持 streaming 流式响应",
+        "输入格式比 chat-completions 更灵活"
+      ],
+      "output_notes": [
+        "流式响应可实时展示部分结果",
+        "返回结构化 output 可供后续步骤引用"
+      ],
+      "risk_notes": [
+        "streaming 模式下连接质量影响完整性",
+        "input 格式需与 model 支持类型匹配"
+      ],
+      "billing_notes": [
+        "Token Plan 内正常消耗"
+      ],
+      "common_errors": [
+        "model 不支持 Responses API",
+        "input 格式不匹配",
+        "streaming 连接中断"
+      ],
+      "product_usage": [
+        "适合作为 AI 助手类产品的核心接口",
+        "适合需要多模态统一输出的复杂产品"
+      ],
+      "integration_tips": [
+        "建议后端直接代理，减少协议转换开销",
+        "流式响应前端可用 SSE 或 WebSocket 处理"
+      ]
+    },
+    "chat-responses-tokens": {
+      "summary": "提交 input 文本，估算 Tokens 数量，用于规划月度用量预算。",
+      "use_cases": [
+        "月度 Token 预算规划",
+        "用量监控与告警",
+        "成本预估前置检查",
+        "用户用量报表"
+      ],
+      "not_recommended_for": [
+        "实时对话中的 token 计数（建议前端本地估算）",
+        "精确计费（应以平台账单为准）",
+        "非 OpenAI/MiniMax 模型的成本估算"
+      ],
+      "input_notes": [
+        "核心输入为 model 和 input（字符串）",
+        "是估算值，实际消耗以平台账单为准"
+      ],
+      "output_notes": [
+        "返回估算的 token 数量",
+        "可用于成本试算但不能作为结算依据"
+      ],
+      "risk_notes": [
+        "估算值与实际消耗可能有误差",
+        "不同模型 tokenize 方式不同，需对应 model 参数"
+      ],
+      "billing_notes": [
+        "本身不消耗额度，仅为估算用途"
+      ],
+      "common_errors": [
+        "model 参数缺失或无效",
+        "input 为空"
+      ],
+      "product_usage": [
+        "适合成本控制面板",
+        "适合用量监控与告警系统"
+      ],
+      "integration_tips": [
+        "建议在用户发起正式请求前展示预估成本",
+        "可结合 Token Plan 剩余额度做超限提示"
+      ]
+    },
+    "file-content": {
+      "summary": "根据 file_id 下载文件二进制内容，用于获取已上传文件的实际数据。",
+      "use_cases": [
+        "下载已上传的音频文件",
+        "获取已生成的音乐文件",
+        "拉取上传的文档内容",
+        "附件下载功能"
+      ],
+      "not_recommended_for": [
+        "文件不存在或已过期",
+        "大文件频繁拉取（建议使用 CDN 直链）",
+        "非平台生成的文件（外部 URL 直接访问）"
+      ],
+      "input_notes": [
+        "只需 file_id 参数",
+        "文件须由平台成功上传和保存"
+      ],
+      "output_notes": [
+        "返回文件的二进制内容",
+        "前端通过 /api/download/{cap_id} 路由代理下载"
+      ],
+      "risk_notes": [
+        "文件过期或被删除后无法恢复",
+        "大文件下载占用带宽和时间"
+      ],
+      "billing_notes": [
+        "下载本身不消耗 Token Plan 额度",
+        "但部分文件存储可能产生存储费用"
+      ],
+      "common_errors": [
+        "file_id 不存在或已失效",
+        "文件已被平台删除",
+        "下载权限不足"
+      ],
+      "product_usage": [
+        "作为文件管理模块的下载功能",
+        "配合 file-list 和 file-retrieve 完整管理文件生命周期"
+      ],
+      "integration_tips": [
+        "建议通过服务端代理下载，避免前端直接暴露 file_id",
+        "大文件建议提供断点续传或 CDN 直链"
+      ]
+    },
+    "file-list": {
+      "summary": "列出当前账户下所有已上传文件，返回文件元数据列表。",
+      "use_cases": [
+        "文件管理后台列表",
+        "清理过期文件",
+        "查找特定用途的文件",
+        "文件数量统计"
+      ],
+      "not_recommended_for": [
+        "频繁轮询检查新文件（建议使用事件通知）",
+        "大文件列表的全量导出",
+        "代替 file-retrieve 获取单个文件详情"
+      ],
+      "input_notes": [
+        "无需特殊参数，调用即返回全量列表",
+        "建议结合分页或过滤条件使用"
+      ],
+      "output_notes": [
+        "返回文件列表，每项包含 file_id、名称、大小、创建时间",
+        "可结合 file-retrieve 获取单个文件详细信息"
+      ],
+      "risk_notes": [
+        "全量列表可能较大，频繁调用浪费带宽",
+        "文件列表不包含文件内容，需用 file-content 单独拉取"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "账户下文件过多时响应较慢",
+        "认证失效时返回空列表"
+      ],
+      "product_usage": [
+        "适合文件管理控制台",
+        "适合管理员界面的文件维护功能"
+      ],
+      "integration_tips": [
+        "建议缓存列表结果，定期刷新而非实时轮询",
+        "可按创建时间或用途过滤，减少前端处理量"
+      ]
+    },
+    "file-retrieve": {
+      "summary": "根据 file_id 查询单个文件的详细元数据，不返回文件内容。",
+      "use_cases": [
+        "文件详情页面",
+        "上传结果确认",
+        "文件状态查询",
+        "文件属性展示"
+      ],
+      "not_recommended_for": [
+        "需要下载文件内容（应使用 file-content）",
+        "批量查询多个文件（应使用 file-list）",
+        "实时监控文件处理状态"
+      ],
+      "input_notes": [
+        "需要 file_id 参数",
+        "文件须已上传成功"
+      ],
+      "output_notes": [
+        "返回文件元数据：file_id、文件名、大小、格式、创建时间、上传状态",
+        "不包含文件二进制内容"
+      ],
+      "risk_notes": [
+        "只能查询平台已记录的文件",
+        "文件被删除后无法查询"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "file_id 不存在",
+        "文件已过期或被删除"
+      ],
+      "product_usage": [
+        "适合文件上传后的确认流程",
+        "适合文件详情展示页面"
+      ],
+      "integration_tips": [
+        "上传成功后建议立即调用此接口确认元数据正确性",
+        "结合 file-content 支持完整查看+下载流程"
+      ]
+    },
+    "lyrics-gen": {
+      "summary": "根据主题提示词生成结构化歌词，包含主歌、副歌、桥段等完整段落。",
+      "use_cases": [
+        "音乐创作灵感激发",
+        "短视频配乐歌词生成",
+        "歌词素材库构建",
+        "教育场景的歌词创作教学"
+      ],
+      "not_recommended_for": [
+        "需要完全控制歌词内容的精确场景",
+        "批量生成歌词供直接商用（版权需确认）",
+        "已有完整歌词不需要生成"
+      ],
+      "input_notes": [
+        "核心输入为 prompt（主题/风格/情绪描述）",
+        "可选参数指定歌词结构偏好"
+      ],
+      "output_notes": [
+        "返回结构化歌词，包含主歌、副歌、桥段等段落",
+        "可结合 music-gen 直接生成对应音乐"
+      ],
+      "risk_notes": [
+        "生成歌词的版权归属需确认",
+        "prompt 描述不当可能导致歌词风格偏差"
+      ],
+      "billing_notes": [
+        "Token Plan 内正常消耗"
+      ],
+      "common_errors": [
+        "prompt 过于模糊导致歌词质量差",
+        "prompt 包含不当内容被风控拦截"
+      ],
+      "product_usage": [
+        "适合音乐创作工具的歌词模块",
+        "适合与 music-gen 串联的音乐创作工作流"
+      ],
+      "integration_tips": [
+        "建议在产品中明确标注歌词为 AI 生成",
+        "可让用户编辑后再传给 music-gen"
+      ]
+    },
+    "models-anthropic-list": {
+      "summary": "查询当前 Token Plan 可用的模型列表（Anthropic 协议），用于确认可调用的 Claude 系列模型。",
+      "use_cases": [
+        "模型选择器下拉框",
+        "能力探测与降级策略",
+        "多模型路由前的可用性确认",
+        "管理员界面的模型管理"
+      ],
+      "not_recommended_for": [
+        "需要了解模型详细参数（应使用 models-anthropic-retrieve）",
+        "作为模型生成质量判断依据",
+        "代替真实 API 调用探测能力"
+      ],
+      "input_notes": [
+        "无需参数，调用即返回列表",
+        "结果受当前 Token Plan 档位限制"
+      ],
+      "output_notes": [
+        "返回模型 ID 列表和基础信息",
+        "每个模型可进一步调用 retrieve 获取详情"
+      ],
+      "risk_notes": [
+        "列表结果受 Token Plan 档位影响，高级模型可能不在列表中",
+        "不反映模型的实时可用性状态"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "认证信息过期导致返回空列表",
+        "Token Plan 降级后部分模型消失"
+      ],
+      "product_usage": [
+        "适合模型选择器",
+        "适合多模型降级策略的前置检查"
+      ],
+      "integration_tips": [
+        "建议缓存列表结果，定期刷新",
+        "可与 models-openai-list 对比，确认不同协议模型的可用性"
+      ]
+    },
+    "models-anthropic-retrieve": {
+      "summary": "查询指定模型（Anthropic 协议）的详细信息，包括上下文窗口、输出限制等参数。",
+      "use_cases": [
+        "模型详情展示页面",
+        "确认模型是否支持特定功能",
+        "规划输入长度和输出长度",
+        "多模型对比选型"
+      ],
+      "not_recommended_for": [
+        "只需要可用模型列表（应使用 models-anthropic-list）",
+        "作为模型质量评估依据",
+        "实时探测模型可用性（网络问题可能导致误判）"
+      ],
+      "input_notes": [
+        "需要 model 参数指定模型 ID",
+        "model 须在 Token Plan 可用范围内"
+      ],
+      "output_notes": [
+        "返回模型上下文窗口、输出 token 限制、支持的特性等",
+        "这些信息决定输入内容的最大长度规划"
+      ],
+      "risk_notes": [
+        "上下文窗口信息不反映当前负载",
+        "模型参数可能随平台升级调整"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "model ID 不在当前 Plan 可用范围内",
+        "模型已被平台下线"
+      ],
+      "product_usage": [
+        "适合模型详情展示",
+        "适合在用户选择模型前展示能力边界"
+      ],
+      "integration_tips": [
+        "建议在用户切换模型时展示对应参数，帮助理解限制",
+        "可缓存结果避免重复查询"
+      ]
+    },
+    "models-openai-list": {
+      "summary": "查询当前 Token Plan 可用的模型列表（OpenAI 协议），用于确认可调用的 OpenAI 兼容模型。",
+      "use_cases": [
+        "OpenAI 兼容模型选择器",
+        "多模型路由前的可用性确认",
+        "能力探测与降级策略",
+        "管理员界面的模型管理"
+      ],
+      "not_recommended_for": [
+        "需要了解模型详细参数（应使用 models-openai-retrieve）",
+        "代替真实 API 调用探测能力",
+        "作为模型生成质量判断依据"
+      ],
+      "input_notes": [
+        "无需参数，调用即返回列表",
+        "结果受当前 Token Plan 档位限制"
+      ],
+      "output_notes": [
+        "返回模型 ID 列表和基础信息",
+        "每个模型可进一步调用 retrieve 获取详情"
+      ],
+      "risk_notes": [
+        "列表结果受 Token Plan 档位影响",
+        "不反映模型的实时可用性状态"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "认证信息过期导致返回空列表",
+        "Token Plan 降级后部分模型消失"
+      ],
+      "product_usage": [
+        "适合 OpenAI 兼容模型选择器",
+        "适合多模型降级策略的前置检查"
+      ],
+      "integration_tips": [
+        "可与 models-anthropic-list 对比，确认不同协议下模型的可用性差异"
+      ]
+    },
+    "models-openai-retrieve": {
+      "summary": "查询指定模型（OpenAI 协议）的详细信息，包括上下文窗口、输出限制等参数。",
+      "use_cases": [
+        "模型详情展示页面",
+        "确认模型是否支持特定功能（如 vision）",
+        "规划输入长度和输出长度",
+        "多模型对比选型"
+      ],
+      "not_recommended_for": [
+        "只需要可用模型列表（应使用 models-openai-list）",
+        "作为模型质量评估依据",
+        "实时探测模型可用性"
+      ],
+      "input_notes": [
+        "需要 model 参数指定模型 ID",
+        "model 须在 Token Plan 可用范围内"
+      ],
+      "output_notes": [
+        "返回模型上下文窗口、输出 token 限制、支持的特性等",
+        "这些信息决定输入内容的最大长度规划"
+      ],
+      "risk_notes": [
+        "上下文窗口信息不反映当前负载",
+        "模型参数可能随平台升级调整"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "model ID 不在当前 Plan 可用范围内",
+        "模型已被平台下线"
+      ],
+      "product_usage": [
+        "适合模型详情展示",
+        "适合在用户选择模型前展示能力边界"
+      ],
+      "integration_tips": [
+        "建议在用户切换模型时展示对应参数，帮助理解限制"
+      ]
+    },
+    "music-gen": {
+      "summary": "根据歌词和风格描述生成完整音乐文件，支持多种音乐风格和乐器编配。",
+      "use_cases": [
+        "短视频 BGM 生成",
+        "音乐创作灵感激发",
+        "有声内容配乐",
+        "游戏/应用背景音乐"
+      ],
+      "not_recommended_for": [
+        "需要精确控制歌词内容的场景",
+        "商用音乐的高品质要求",
+        "实时交互式音乐生成"
+      ],
+      "input_notes": [
+        "核心输入为 lyrics（歌词结构如主歌/副歌）、model、refer_voice（参考音色）",
+        "refer_instrumental 可指定参考乐器风格",
+        "audio_setting 控制采样率、比特率、格式"
+      ],
+      "output_notes": [
+        "返回音乐文件 AssetRef",
+        "生成时间取决于音乐长度"
+      ],
+      "risk_notes": [
+        "生成音乐可能存在版权风险",
+        "refer_voice 使用他人音色需获得授权",
+        "生成时间较长，前端需显示进度"
+      ],
+      "billing_notes": [
+        "Token Plan 内正常消耗，音乐生成消耗较大"
+      ],
+      "common_errors": [
+        "lyrics 格式不符合要求",
+        "refer_voice 音色不存在",
+        "audio_setting 参数不支持"
+      ],
+      "product_usage": [
+        "适合短视频/内容平台的 BGM 生成",
+        "适合音乐创作工具的核心能力"
+      ],
+      "integration_tips": [
+        "建议先预览短片段，确认风格后再生成完整版",
+        "生成完成后建议缓存 AssetRef，避免重复消耗"
+      ]
+    },
+    "tts-ws": {
+      "summary": "T2A WebSocket 流式接口，边合成边播放，实现低延迟实时语音输出。",
+      "use_cases": [
+        "实时语音助手",
+        "游戏 NPC 语音",
+        "实时导航播报",
+        "低延迟语音播报场景"
+      ],
+      "not_recommended_for": [
+        "预生成音频文件（建议用 tts-sync 或 tts-async）",
+        "批量合成大量音频",
+        "网络不稳定环境（WS 连接易断）",
+        "需要保存音频文件的场景"
+      ],
+      "input_notes": [
+        "通过 WebSocket 协议建立连接",
+        "event: task_start 触发合成",
+        "voice_setting 控制音色和语速",
+        "audio_setting 控制采样率和格式"
+      ],
+      "output_notes": [
+        "流式返回音频片段，前端边收边播",
+        "连接关闭后本次会话结束，音频不持久化"
+      ],
+      "risk_notes": [
+        "WebSocket 连接不稳定可能导致音频中断",
+        "不保存音频，无法重播",
+        "网络延迟影响播放连贯性"
+      ],
+      "billing_notes": [
+        "属于 quota-sensitive 能力，流式合成同样消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "WebSocket 连接建立失败",
+        "voice_id 不存在",
+        "连接在合成完成前被服务器关闭"
+      ],
+      "product_usage": [
+        "适合实时语音交互产品",
+        "适合低延迟播报场景"
+      ],
+      "integration_tips": [
+        "前端需要 WebSocket 客户端处理流式音频",
+        "建议实现断线重连逻辑",
+        "音频片段需要前端混流或直接播放"
+      ]
+    },
+    "voice-list": {
+      "summary": "查询当前账户下可用的音色列表，包括系统音色、克隆音色和设计音色。",
+      "use_cases": [
+        "音色选择器",
+        "Voice Lab 音色浏览",
+        "克隆音色管理",
+        "音色可用性确认"
+      ],
+      "not_recommended_for": [
+        "只需要特定音色（直接使用 voice_id 更高效）",
+        "作为音色质量评估依据",
+        "频繁轮询检查音色变更"
+      ],
+      "input_notes": [
+        "通过 voice_type 参数过滤：system/all/cloned/designed",
+        "无需其他复杂参数"
+      ],
+      "output_notes": [
+        "返回音色 ID、名称、类型、语言支持等信息",
+        "克隆音色需确认账户下是否有权使用"
+      ],
+      "risk_notes": [
+        "音色列表受账户权限影响",
+        "克隆音色可能因账户问题失效",
+        "音色数量过多时列表较大"
+      ],
+      "billing_notes": [
+        "属于只读查询，不消耗 Token Plan 额度"
+      ],
+      "common_errors": [
+        "voice_type 参数不合法",
+        "认证失效返回空列表",
+        "克隆音色已过期或被删除"
+      ],
+      "product_usage": [
+        "适合 Voice Lab 的音色选择器",
+        "适合音色管理后台"
+      ],
+      "integration_tips": [
+        "建议缓存音色列表，定期刷新而非实时轮询",
+        "可按语言/类型过滤，减少用户选择成本"
+      ]
     }
   }
 }

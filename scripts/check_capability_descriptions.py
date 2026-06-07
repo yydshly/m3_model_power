@@ -108,11 +108,20 @@ for cap_id, desc in descriptions.items():
             f"but operation_policy.requires_existing_task = false"
         )
 
-    # billing / cost warnings
+    # billing / cost warnings — check combined billing_notes + risk_notes text
+    billing_text = " ".join(desc.get("billing_notes", []) + desc.get("risk_notes", [])).lower()
     mentions_cost_confirm = (
         "confirm_quota" in desc_text
-        or "billing_notes" in desc.get("billing_notes", [])
-        or any("cost" in n.lower() for n in desc.get("risk_notes", []))
+        or "confirm_paid" in desc_text
+        or "confirm_high_cost" in desc_text
+        or "成本" in billing_text
+        or "计费" in billing_text
+        or "额度" in billing_text
+        or "quota" in billing_text
+        or ("cost" in billing_text and billing_text.strip())
+        or ("billing" in billing_text and billing_text.strip())
+        or "消耗" in billing_text
+        or "token plan" in billing_text
     )
     if not mentions_cost_confirm and bp.may_charge_extra:
         warnings.append(
