@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { getProfiles, type CapabilityProfile } from '../api'
+import {
+  getTestConsoleLink,
+  getScenarioLink,
+  getWorkflowLink,
+  getCapabilityDetailLink,
+  isRunnerSupported,
+  getCapabilityTestabilityLabel,
+  PROFILE_FAMILY_EMOJI,
+} from '../navigation/capabilityLinks'
 
 const FAMILY_EMOJI: Record<string, string> = {
   chat: '💬',
@@ -52,6 +61,9 @@ function StatusBadge({ value, map }: { value: string; map: Record<string, { text
 }
 
 export default function CapabilityProfilesPage() {
+  const [searchParams] = useSearchParams()
+  const urlFamily = searchParams.get('family')
+
   const [profiles, setProfiles] = useState<Record<string, CapabilityProfile> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +78,8 @@ export default function CapabilityProfilesPage() {
   if (error) return <div className="p-8 text-sm text-red-600">加载失败：{error}</div>
   if (!profiles) return <div className="p-8 text-sm text-slate-500">无数据</div>
 
-  const families = Object.keys(profiles)
+  const allFamilies = Object.keys(profiles)
+  const families = urlFamily ? allFamilies.filter(f => f === urlFamily) : allFamilies
 
   return (
     <div className="p-8 max-w-6xl">
@@ -75,6 +88,34 @@ export default function CapabilityProfilesPage() {
         <p className="text-sm text-slate-600 mt-1">
           从用户视角理解每个能力族能做什么、支持哪些模型、有什么风险、如何使用。
         </p>
+      </div>
+
+      {/* Family filter chips */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Link
+          to="/capability-profiles"
+          className={`px-3 py-1 rounded-full text-xs font-medium border transition ${
+            !urlFamily
+              ? 'bg-indigo-600 text-white border-indigo-600'
+              : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
+          }`}
+        >
+          全部
+        </Link>
+        {allFamilies.map((fam) => (
+          <Link
+            key={fam}
+            to={`/capability-profiles?family=${encodeURIComponent(fam)}`}
+            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition ${
+              urlFamily === fam
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
+            }`}
+          >
+            <span>{PROFILE_FAMILY_EMOJI[fam] ?? '📦'}</span>
+            <span>{fam}</span>
+          </Link>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -104,24 +145,43 @@ export default function CapabilityProfilesPage() {
                   <div>
                     <h3 className="text-xs font-medium text-slate-500 mb-1.5">已验收能力</h3>
                     <div className="space-y-1">
-                      {p.verified_capabilities.map((id) => (
-                        <div key={id} className="text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                          {id}
-                        </div>
-                      ))}
+                      {p.verified_capabilities.map((id) => {
+                        const testability = getCapabilityTestabilityLabel(id)
+                        return (
+                          <div key={id} className="flex items-center gap-1.5">
+                            {isRunnerSupported(id) ? (
+                              <Link to={`/capability-runner?capability=${id}`} className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition">
+                                {id}
+                              </Link>
+                            ) : (
+                              <Link to={getCapabilityDetailLink(id)} className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition">
+                                {id}
+                              </Link>
+                            )}
+                            <span className={`text-[9px] px-1 rounded ${testability.cls}`}>{testability.text}</span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                   <div>
                     <h3 className="text-xs font-medium text-slate-500 mb-1.5">风险提示</h3>
                     <div className="space-y-1">
                       {p.not_default_executable.map((id) => (
-                        <div key={id} className="text-xs text-orange-700 bg-orange-50 px-2 py-0.5 rounded">
-                          {id} 不默认执行
+                        <div key={id} className="flex items-center gap-1">
+                          <Link to={getCapabilityDetailLink(id)} className="text-xs text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded transition">
+                            {id} 不默认执行
+                          </Link>
                         </div>
                       ))}
                       {p.guarded_capabilities.map((id) => (
-                        <div key={id} className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
-                          {id} 需确认
+                        <div key={id} className="flex items-center gap-1">
+                          <Link to={getCapabilityDetailLink(id)} className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded transition">
+                            {id} 需确认
+                          </Link>
+                          <Link to={getTestConsoleLink(id)} className="text-[9px] text-slate-400 hover:text-slate-600">
+                            测试 →
+                          </Link>
                         </div>
                       ))}
                       {p.not_default_executable.length === 0 && p.guarded_capabilities.length === 0 && (
@@ -229,6 +289,22 @@ export default function CapabilityProfilesPage() {
                   </div>
                 )}
 
+                {/* Recommended scenarios */}
+                {p.recommended_scenarios.length > 0 && (
+                  <div className="flex gap-2 items-center pt-1">
+                    <span className="text-xs text-slate-500">推荐场景:</span>
+                    {p.recommended_scenarios.map((sc) => (
+                      <Link
+                        key={sc}
+                        to={getScenarioLink(sc)}
+                        className="text-xs text-indigo-600 hover:underline bg-indigo-50 px-2 py-0.5 rounded"
+                      >
+                        {sc}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
                 {/* Recommended workflows */}
                 {p.recommended_workflows.length > 0 && (
                   <div className="flex gap-2 items-center pt-1">
@@ -236,7 +312,7 @@ export default function CapabilityProfilesPage() {
                     {p.recommended_workflows.map((wf) => (
                       <Link
                         key={wf}
-                        to={`/capability-workflows?workflow=${wf}`}
+                        to={getWorkflowLink(wf)}
                         className="text-xs text-sky-600 hover:underline bg-sky-50 px-2 py-0.5 rounded"
                       >
                         {wf}

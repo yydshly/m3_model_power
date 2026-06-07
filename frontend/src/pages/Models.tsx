@@ -1,7 +1,15 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { TierBadge, QuotaBadge } from '../components/StatusBadge'
 import { type Model } from '../api'
 import { useRegistry } from '../store'
+import {
+  getRunnerLink,
+  getTestConsoleLink,
+  getProfileLink,
+  MODEL_FAMILY_TO_PROFILE_FAMILY,
+  getCapabilityTestabilityLabel,
+} from '../navigation/capabilityLinks'
 
 /** 模型清单总览，分组展示官方当前模型 / 历史兼容模型，并提供全量模式。 */
 export default function ModelsPage() {
@@ -292,6 +300,7 @@ export default function ModelsPage() {
                     <th className="text-left px-3 py-2">protocols</th>
                     <th className="text-left px-3 py-2">验证方式</th>
                     <th className="text-left px-3 py-2">说明</th>
+                    <th className="text-left px-3 py-2">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -321,6 +330,65 @@ export default function ModelsPage() {
                         <td className="px-3 py-2 text-xs text-slate-500">{protocols}</td>
                         <td className="px-3 py-2"><DiscoveryBadge m={m} /></td>
                         <td className="px-3 py-2 text-xs text-slate-500 max-w-[160px] truncate" title={m.note}>{m.note}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-1">
+                            {/* 能力说明 */}
+                            <Link
+                              to={getProfileLink(MODEL_FAMILY_TO_PROFILE_FAMILY[m.family])}
+                              className="text-[10px] text-sky-600 hover:underline whitespace-nowrap"
+                            >
+                              能力说明
+                            </Link>
+                            {/* 开始体验 */}
+                            {(() => {
+                              const runnerCap = getRunnerLink(m.family === 'speech' ? 'tts-sync'
+                                : m.family === 'chat' ? 'chat-openai'
+                                : m.family === 'image' ? 'image-t2i'
+                                : m.family === 'music' ? 'music-gen'
+                                : m.family === 'video' ? '' : '')
+                              if (!runnerCap) return (
+                                <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                                  {m.family === 'video' ? '视频类无直接体验' : '暂无直接体验'}
+                                </span>
+                              )
+                              const capId = m.family === 'speech' ? 'tts-sync'
+                                : m.family === 'chat' ? 'chat-openai'
+                                : m.family === 'image' ? 'image-t2i'
+                                : 'music-gen'
+                              const testability = getCapabilityTestabilityLabel(capId)
+                              return (
+                                <Link
+                                  to={`${runnerCap}&model=${encodeURIComponent(m.id)}`}
+                                  className="text-[10px] text-emerald-600 hover:underline whitespace-nowrap"
+                                >
+                                  开始体验
+                                  {testability.text !== '可直接体验' && (
+                                    <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
+                                      {testability.text}
+                                    </span>
+                                  )}
+                                </Link>
+                              )
+                            })()}
+                            {/* 高级测试 */}
+                            {(() => {
+                              const capId = m.family === 'speech' ? 'tts-sync'
+                                : m.family === 'chat' ? 'chat-openai'
+                                : m.family === 'image' ? 'image-t2i'
+                                : m.family === 'music' ? 'music-gen'
+                                : null
+                              if (!capId) return null
+                              return (
+                                <Link
+                                  to={getTestConsoleLink(capId)}
+                                  className="text-[10px] text-slate-400 hover:text-slate-600 whitespace-nowrap"
+                                >
+                                  高级测试 →
+                                </Link>
+                              )
+                            })()}
+                          </div>
+                        </td>
                       </tr>
                     )
                   })}

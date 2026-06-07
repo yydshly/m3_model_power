@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getScenarios, type CapabilityScenario } from '../api'
+import {
+  getPrimaryRunnerCapabilityForScenario,
+  getScenarioChainSteps,
+  getWorkflowLink,
+  type ChainStep,
+} from '../navigation/capabilityLinks'
 
 const FAMILY_EMOJI: Record<string, string> = {
   chat: '💬',
@@ -119,22 +125,40 @@ export default function CapabilityScenariosPage() {
                 <p className="text-xs text-slate-600">{s.expected_output}</p>
               </div>
 
+              {/* Mock chain display */}
+              <div className="pt-1">
+                <h3 className="text-xs font-medium text-slate-500 mb-1">体验链路</h3>
+                <div className="flex flex-wrap items-center gap-1">
+                  {getScenarioChainSteps(s.capabilities).map((step: ChainStep, i: number) => (
+                    <span key={step.capabilityId} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-slate-300">→</span>}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${step.testability.cls}`}>
+                        {step.capabilityId}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               {/* CTA */}
               <div className="pt-2 flex items-center gap-3 flex-wrap">
                 {(() => {
-                  const RUNNER_SUPPORTED = new Set(['lyrics-gen', 'tts-sync', 'voice-list', 'image-t2i', 'chat-openai'])
-                  const primary = s.capabilities.find(c => RUNNER_SUPPORTED.has(c))
+                  const primary = getPrimaryRunnerCapabilityForScenario(s.capabilities)
                   return primary ? (
                     <Link
-                      to={`/capability-runner?capability=${primary}`}
+                      to={`/capability-runner?capability=${primary}&from_scenario=${s.id}`}
                       className="inline-flex items-center gap-1.5 text-sm bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
                     >
                       开始体验 →
                     </Link>
-                  ) : null
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-sm bg-slate-100 text-slate-400 px-4 py-2 rounded-lg cursor-not-allowed">
+                      暂无直接体验入口
+                    </span>
+                  )
                 })()}
                 <Link
-                  to={`/capability-workflows?workflow=${s.workflow_id}`}
+                  to={getWorkflowLink(s.workflow_id, s.id)}
                   className="inline-flex items-center gap-1.5 text-sm bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition"
                 >
                   查看流程 →

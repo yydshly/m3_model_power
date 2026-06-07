@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getWorkflows, getWorkflow, type CapabilityWorkflow } from '../api'
+import { getCapabilityDetailLink, getTestConsoleLink, isRunnerSupported, getCapabilityTestabilityLabel } from '../navigation/capabilityLinks'
 
 const FAMILY_EMOJI: Record<string, string> = {
   chat: '💬',
@@ -108,16 +109,38 @@ function WorkflowCard({ workflow }: { workflow: CapabilityWorkflow }) {
                   </div>
                 )}
 
-                {step.type === 'capability' && (
-                  <div className="mt-2 flex items-center gap-3">
+                {step.type === 'capability' && step.capability_id && (
+                  <div className="mt-2 flex items-center gap-3 flex-wrap">
                     <Link
-                      to={`/capability-runner?capability=${step.capability_id}`}
-                      className="inline-flex items-center gap-1 text-xs bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-700 transition"
+                      to={getCapabilityDetailLink(step.capability_id)}
+                      className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-lg hover:bg-slate-200 transition"
                     >
-                      去体验 →
+                      能力说明
                     </Link>
+                    {(() => {
+                      const runnerSupported = isRunnerSupported(step.capability_id)
+                      const testability = getCapabilityTestabilityLabel(step.capability_id)
+                      return runnerSupported ? (
+                        <Link
+                          to={`/capability-runner?capability=${step.capability_id}&from_workflow=${workflow.id}`}
+                          className="inline-flex items-center gap-1 text-xs bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-700 transition"
+                        >
+                          去体验
+                          <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
+                            {testability.text}
+                          </span>
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-3 py-1 rounded-lg cursor-not-allowed">
+                          去体验
+                          <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
+                            {testability.text}
+                          </span>
+                        </span>
+                      )
+                    })()}
                     <Link
-                      to={`/test-console?capability=${step.capability_id}`}
+                      to={getTestConsoleLink(step.capability_id!)}
                       className="text-[10px] text-slate-400 hover:text-slate-600"
                     >
                       高级测试 →
@@ -244,17 +267,27 @@ export default function CapabilityWorkflowsPage() {
             </div>
             <p className="text-sm text-slate-600 mb-3">{wf.summary}</p>
             <div className="flex flex-wrap gap-2">
-              {wf.steps.filter(s => s.type === 'capability').map((step) => (
+              {wf.steps.filter(s => s.type === 'capability' && s.capability_id).map((step) => (
                 <div key={step.step_id} className="flex items-center gap-1.5 bg-slate-50 rounded px-3 py-1.5 text-xs">
                   <span className="text-slate-400">→</span>
                   <span className="font-mono text-slate-700">{step.capability_id}</span>
                   <span className="text-slate-400">({step.label})</span>
                   <Link
-                    to={`/capability-runner?capability=${step.capability_id}`}
-                    className="text-sky-600 hover:underline ml-1"
+                    to={getCapabilityDetailLink(step.capability_id!)}
+                    className="text-slate-400 hover:text-slate-600 ml-1"
                   >
-                    体验
+                    说明
                   </Link>
+                  {isRunnerSupported(step.capability_id!) ? (
+                    <Link
+                      to={`/capability-runner?capability=${step.capability_id!}`}
+                      className="text-sky-600 hover:underline ml-1"
+                    >
+                      体验
+                    </Link>
+                  ) : (
+                    <span className="text-slate-300 ml-1">体验</span>
+                  )}
                   <Link
                     to={`/test-console?capability=${step.capability_id}`}
                     className="text-slate-400 hover:text-slate-600 ml-1"
