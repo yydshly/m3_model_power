@@ -458,116 +458,42 @@
 
 **官网支持 8 个 M 系列模型，本项目 Runner 只暴露 3 个，且 protocols 标注错误（4 个模型标注为仅 openai，实际支持 anthropic）。**
 
-- **P0 问题**：M2.7 / M2.5 / M2.1 / M2 的 `protocols` 在 models.yaml 中错误标注为仅 `[openai]`，实际 `/v1/models` 返回显示支持 Anthropic
-- **P1 问题**：Runner 表单缺失 system / temperature / top_p / thinking / tools / tool_choice / metadata 等核心参数
-- **P1 问题**：缺少 anthropic-active-cache capability
-
-### 7.2 OpenAI Chat 对齐结论
-
-**Runner 表单缺失多个关键参数（thinking, reasoning_split, top_p, tools, tool_choice, stream_options）。**
-
-- **P0 问题**：模型下拉只有 3 个，缺失 5 个已支持 OpenAI 的模型
-- **P1 问题**：缺少 thinking / reasoning_split / top_p / tools / tool_choice 参数
-
-### 7.3 Responses 对齐结论
-
-**Runner 表单基本 smoke，缺失 input_modality / output_modality / reasoning / thinking / prompt_caching 等参数。**
-
-- **P1 问题**：参数暴露不完整，建议补充说明官方推荐 M3 的原因
-
-### 7.4 图像对齐结论
-
-**基本对齐，image-i2i 的 reference_mode UI 设计与官网 API 语义需确认一致性。**
-
-- **P1 问题**：image-01-live 不支持 width/height，UI 未标注此限制
-
-### 7.5 语音对齐结论
-
-**基本对齐，tts-sync 缺 emotion / voice_modify 等高级参数说明。**
-
-- **P2 问题**：2.8 不支持 whisper/fluent，2.6 不支持 sound_effects，UI 未区分
-
-### 7.6 音乐对齐结论
-
-**基本对齐，music-cover-prep 标注 warning_only 准确。**
-
-### 7.7 文件对齐结论
-
-**完全对齐，无问题。**
-
-### 7.8 视频对齐结论
-
-**video-fl2v（首尾帧视频）和 video-agent-create/query 完全缺失（missing_capability）。**
-
-- **P1 问题**：video-fl2v 缺失
-- **P2 问题**：video-agent-create/query 缺失（高成本高风险，建议 scope=out_of_scope）
-
-### 7.9 模型矩阵结论
-
-**M2.7 / M2.5 / M2.1 / M2 的 protocols 标注错误（P0）。** 其他模型协议标注基本正确。
+**P0 已修复** ✅
+- `official_primary` - 官方首选/推荐
+- `official_current` - 官方当前最新
+- `verified_stable` - 已验收稳定
+- `low_latency` - 低延迟
+- `high_quality` - 高质量
+- `quota_friendly` - 额度友好
+- `compatible` - 兼容性好
+- `guarded` - 需要确认
+- `free_tier` - 免费版
+- `not_default` - 不默认执行
 
 ---
 
-## 八、修复建议
+## P0 修复记录
 
-### P0（立即修复）
+> 本节记录每次 P0 修复的时间、分支和具体变更。
 
-| 编号 | 问题 | 修复文件 | 建议操作 |
-|------|------|---------|---------|
-| P0-1 | M2.7/M2.5/M2.1/M2 protocols=[openai] 错误 | models.yaml | 改为 protocols=[openai, anthropic] |
-| P0-2 | chat-anthropic Runner 模型下拉只有 3 个 | capability_runner_templates.json | 补全 8 个 M 系列模型 |
-| P0-3 | chat-openai Runner 模型下拉只有 3 个 | capability_runner_templates.json | 补全 8 个 M 系列模型 |
+### feature/official-docs-p0-alignment-fix（2026-06-08）
 
-### P1（下一迭代修复）
+| 修复项 | 文件 | 变更 |
+|--------|------|------|
+| M2.7/M2.5/M2.1/M2 protocols=[openai] → [openai, anthropic] | `backend/config/models.yaml` | 4 个模型 protocols 字段已更正，与官方 /v1/models 返回一致 |
+| chat-anthropic Runner 补全 8 模型下拉 | `backend/app/minimax_core/runner/capability_runner_templates.json` | model options 从 3 个扩展为 8 个，新增 note 说明 M3 多模态 / M2.x 文本边界 |
+| chat-openai Runner 补全 8 模型下拉 | `backend/app/minimax_core/runner/capability_runner_templates.json` | model options 从 3 个扩展为 8 个，新增 note 说明当前为文本 smoke 表单 |
 
-| 编号 | 问题 | 修复文件 | 建议操作 |
-|------|------|---------|---------|
-| P1-1 | chat-anthropic 缺 system/temperature/top_p/thinking/tools/tool_choice/metadata | capability_runner_templates.json | 补全 Advanced Test 表单 |
-| P1-2 | chat-openai 缺 thinking/reasoning_split/top_p/tools/tool_choice | capability_runner_templates.json | 补全 Advanced Test 表单 |
-| P1-3 | chat-responses-create 缺 input_modality/output_modality/reasoning/thinking | capability_runner_templates.json | 补全 Advanced Test 表单 |
-| P1-4 | 缺 anthropic-active-cache capability | capabilities.yaml | 新增 capability |
-| P1-5 | 缺 prompt-caching capability | capabilities.yaml | 新增 capability |
-| P1-6 | 缺 video-fl2v capability | capabilities.yaml + models.yaml | 新增 capability，scope=out_of_scope |
-| P1-7 | image-01-live 不支持 width/height 未标注 | capability_runner_templates.json 或 UI | 在 model note 中补充说明 |
+**修复后状态**：
+- `MiniMax-M3` protocols = `[openai, anthropic, responses]` ✅
+- `MiniMax-M2.7` protocols = `[openai, anthropic]` ✅（已修复）
+- `MiniMax-M2.7-highspeed` protocols = `[openai, anthropic]` ✅
+- `MiniMax-M2.5` protocols = `[openai, anthropic]` ✅（已修复）
+- `MiniMax-M2.5-highspeed` protocols = `[openai, anthropic]` ✅
+- `MiniMax-M2.1` protocols = `[openai, anthropic]` ✅（已修复）
+- `MiniMax-M2.1-highspeed` protocols = `[openai, anthropic]` ✅
+- `MiniMax-M2` protocols = `[openai, anthropic]` ✅（已修复）
+- `chat-anthropic` Runner 模型数 = 8 ✅（已修复）
+- `chat-openai` Runner 模型数 = 8 ✅（已修复）
 
-### P2（标注优化）
-
-| 编号 | 问题 | 修复文件 | 建议操作 |
-|------|------|---------|---------|
-| P2-1 | tts-sync 缺 emotion/voice_modify 参数区分说明 | capability_runner_templates.json | 在 model options 中补充说明 2.6 vs 2.8 差异 |
-| P2-2 | 缺 video-agent-create/query capability | capabilities.yaml | 新增，scope=out_of_scope |
-| P2-3 | 需补充 Token Plan 各工具集成说明 | 文档 | Token Plan 工具链单独审计 |
-
-### P3（观察）
-
-| 编号 | 问题 | 建议操作 |
-|------|------|---------|
-| P3-1 | speech 族 live_available=null | 需真实 API 探针验证 |
-| P3-2 | image 族 live_available=null | 需真实 API 探针验证 |
-| P3-3 | video 族 live_available=null | 需真实 API 探针验证 |
-| P3-4 | Token Plan 工具链状态 | 需官方文档确认 |
-
----
-
-## 九、审计元数据
-
-| 字段 | 值 |
-|------|-----|
-| 审计日期 | 2026-06-08 |
-| 审计分支 | feature/official-docs-alignment-audit |
-| base commit | 7abf66b |
-| 官网文档索引 | https://platform.minimaxi.com/docs/llms.txt |
-| 官网 API categories | 文本(Anthropic/OpenAI/Responses) / 语音 / 图像 / 音乐 / 文件 / 视频 / 模型 / Token Plan |
-| 官网 official capabilities 总数 | ~40+ |
-| 本项目 registered capabilities | ~30 |
-| missing_capability | 5 |
-| wrong_protocol | 4 (model-level) |
-| runner_incomplete | 4 |
-| out_of_scope_by_design | 12 |
-| high_risk_by_design | 0 |
-| token_plan_unknown | 8 (工具链) |
-| needs_real_probe | 6+ (非 chat 模型 live 状态) |
-| P0 issues | 3 |
-| P1 issues | 7 |
-| P2 issues | 3 |
-| P3 issues | 4+ |
+**剩余 P0 问题**：无

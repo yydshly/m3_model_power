@@ -282,10 +282,16 @@
           "label": "模型",
           "default": "MiniMax-M2.7-highspeed",
           "options": [
-            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推·多模态旗舰"},
-            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed Token Plan 高频"},
-            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"}
-          ]
+            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推·支持多模态"},
+            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed 极速档"},
+            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"},
+            {"value": "MiniMax-M2.5-highspeed", "label": "MiniMax-M2.5-highspeed 极速档"},
+            {"value": "MiniMax-M2.5", "label": "MiniMax-M2.5 标准档"},
+            {"value": "MiniMax-M2.1-highspeed", "label": "MiniMax-M2.1-highspeed 极速档"},
+            {"value": "MiniMax-M2.1", "label": "MiniMax-M2.1 标准档"},
+            {"value": "MiniMax-M2", "label": "MiniMax-M2 标准档"}
+          ],
+          "note": "官方 OpenAI 兼容接口支持以上 8 个模型；MiniMax-M3 支持图片/视频输入，当前 Runner 仅提供文本 smoke 表单。"
         },
         "prompt": {
           "type": "textarea",
@@ -317,10 +323,16 @@
           "label": "模型",
           "default": "MiniMax-M2.7-highspeed",
           "options": [
-            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推"},
-            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed Token Plan 高频"},
-            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"}
-          ]
+            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推·支持多模态"},
+            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed 极速档"},
+            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"},
+            {"value": "MiniMax-M2.5-highspeed", "label": "MiniMax-M2.5-highspeed 极速档"},
+            {"value": "MiniMax-M2.5", "label": "MiniMax-M2.5 标准档"},
+            {"value": "MiniMax-M2.1-highspeed", "label": "MiniMax-M2.1-highspeed 极速档"},
+            {"value": "MiniMax-M2.1", "label": "MiniMax-M2.1 标准档"},
+            {"value": "MiniMax-M2", "label": "MiniMax-M2 标准档"}
+          ],
+          "note": "官方 Anthropic 兼容接口支持以上 8 个模型；MiniMax-M3 支持图片/视频内容块，M2.x 仅支持文本与工具相关内容块。"
         },
         "prompt": {
           "type": "textarea",
