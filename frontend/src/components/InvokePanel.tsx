@@ -3,6 +3,7 @@ import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } 
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
 import { quotaLabel } from '../domain/workbenchLabels'
+import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 
 export function InvokePanel({
   cap,
@@ -23,7 +24,7 @@ export function InvokePanel({
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
   const requiresExistingTask = cap.operation_policy.requires_existing_task
 
-  const [model, setModel] = useState<string>(models[0]?.id ?? '')
+  const { model, setModel } = useSyncedModelSelection(models)
   const [body, setBody] = useState<string>(JSON.stringify(defaultPayload ?? {}, null, 2))
   const [result, setResult] = useState<unknown>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -76,15 +77,21 @@ export function InvokePanel({
     }
   })()
 
-  const canInvoke = allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
+  const canInvoke = !!model && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
   const invokeDisabled = !canInvoke || loading
-  const invokeDisabledReason = !allConfirmed
+  const invokeDisabledReason = !model
+    ? '请选择模型'
+    : !allConfirmed
     ? '请先完成执行前确认'
     : requiresExistingTask && !hasTaskIdInPayload
     ? '该能力仅限已有任务，请填写 task_id 或 file_id'
     : ''
 
   const submit = async () => {
+    if (!model) {
+      setErr('当前能力没有可用模型，请检查模型配置或协议过滤结果。')
+      return
+    }
     setErr(null)
     setResult(null)
     let parsed: Record<string, unknown>

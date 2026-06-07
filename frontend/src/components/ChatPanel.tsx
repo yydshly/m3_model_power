@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { streamInvoke, type Capability, type Model } from '../api'
 import { quotaLabel } from '../domain/workbenchLabels'
+import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 
 type Msg = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -54,7 +55,7 @@ function buildBody(capId: string, model: string, messages: Msg[]): Record<string
 }
 
 export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] }) {
-  const [model, setModel] = useState(models[0]?.id ?? 'MiniMax-M3')
+  const { model, setModel } = useSyncedModelSelection(models)
   const [messages, setMessages] = useState<Msg[]>(() => {
     const h = loadHistory(cap.id)
     if (h.length > 0) return h
@@ -71,6 +72,11 @@ export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] })
 
   const send = async () => {
     if (!input.trim() || streaming) return
+    const selectedModel = model || models[0]?.id
+    if (!selectedModel) {
+      setErr('当前能力没有可用模型，请检查模型配置或协议过滤结果。')
+      return
+    }
     setErr(null)
     const next: Msg[] = [...messages, { role: 'user', content: input.trim() }, { role: 'assistant', content: '' }]
     setMessages(next)
@@ -79,7 +85,7 @@ export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] })
     const ctl = new AbortController()
     abortRef.current = ctl
     try {
-      const r = await streamInvoke(cap.id, buildBody(cap.id, model, next.slice(0, -1)))
+      const r = await streamInvoke(cap.id, buildBody(cap.id, selectedModel, next.slice(0, -1)))
       if (!r.ok || !r.body) {
         const txt = await r.text().catch(() => '')
         setErr(`[${r.status}] ${txt}`)
