@@ -425,10 +425,30 @@ function RunnerForm({
 
 function ResultBanner({ resultType, data }: { resultType: string; data: unknown }) {
   if (resultType === 'audio') {
+    const audioUrl = extractAudioUrl(data)
     return (
       <div className="mb-3 p-3 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
         <strong>🎧 音频结果</strong>
-        {extractAudioUrl(data) && <div className="mt-1 text-slate-600">可直接播放，或右键另存为下载。</div>}
+        {audioUrl ? (
+          <div className="mt-2 space-y-2">
+            <audio controls src={audioUrl} className="w-full mt-1" />
+            <div className="flex items-center gap-2">
+              <CopyButton text={audioUrl}>
+                <span className="text-sky-600 hover:underline">复制音频 URL</span>
+              </CopyButton>
+              <a
+                href={audioUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-600 hover:underline"
+              >
+                打开链接
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 text-slate-600">无音频 URL，可查看下方完整 JSON。</div>
+        )}
       </div>
     )
   }

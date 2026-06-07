@@ -5,6 +5,9 @@ import {
   getPrimaryRunnerCapabilityForScenario,
   getScenarioChainSteps,
   getWorkflowLink,
+  isRunnerSupported,
+  getCapabilityDetailLink,
+  getCapabilityTestabilityLabel,
   type ChainStep,
 } from '../navigation/capabilityLinks'
 
@@ -92,15 +95,29 @@ export default function CapabilityScenariosPage() {
               <div>
                 <h3 className="text-xs font-medium text-slate-500 mb-1">涉及能力</h3>
                 <div className="flex flex-wrap gap-1">
-                  {s.capabilities.map((cap) => (
-                    <Link
-                      key={cap}
-                      to={`/capability-runner?capability=${cap}`}
-                      className="text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-100"
-                    >
-                      {cap}
-                    </Link>
-                  ))}
+                  {s.capabilities.map((cap) => {
+                    const testability = getCapabilityTestabilityLabel(cap)
+                    const runnerSupported = isRunnerSupported(cap)
+                    return runnerSupported ? (
+                      <Link
+                        key={cap}
+                        to={`/capability-runner?capability=${cap}`}
+                        className="inline-flex items-center gap-1 text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-100"
+                      >
+                        {cap}
+                        <span className={`text-[9px] px-1 rounded ${testability.cls}`}>{testability.text}</span>
+                      </Link>
+                    ) : (
+                      <Link
+                        key={cap}
+                        to={getCapabilityDetailLink(cap)}
+                        className="inline-flex items-center gap-1 text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded hover:bg-slate-200"
+                      >
+                        {cap}
+                        <span className={`text-[9px] px-1 rounded ${testability.cls}`}>{testability.text}</span>
+                      </Link>
+                    )
+                  })}
                 </div>
               </div>
 
