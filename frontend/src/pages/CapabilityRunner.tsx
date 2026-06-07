@@ -844,7 +844,7 @@ function InvokeResultView({
 
       {resultType === 'text' && template.next_steps.some(ns => ns.capability_id === 'music-gen') && (
         <div className="mt-3 pt-3 border-t border-slate-100">
-          <p className="text-xs text-slate-500 mb-2">下一步：</p>
+          <p className="text-xs text-slate-500 mb-2">下一步：使用这段歌词生成音乐</p>
           {(() => {
             const lyrics = extractTextResult(result.data)
             const ns = template.next_steps.find(n => n.capability_id === 'music-gen')
@@ -852,13 +852,13 @@ function InvokeResultView({
             return (
               <div className="flex items-center gap-2">
                 <ChainButton
-                  label={ns.label}
+                  label={lyrics ? '用这段歌词生成音乐 →' : '去 music-gen'}
                   onClick={() => onChain('music-gen', lyrics ? { lyrics } : {})}
                   disabled={!lyrics}
                   variant="primary"
                 />
                 {!lyrics && (
-                  <span className="text-[10px] text-slate-400">未识别到歌词，请手动复制后粘贴</span>
+                  <span className="text-[10px] text-slate-400">未识别到歌词，可从完整 JSON 中复制歌词后粘贴到 music-gen</span>
                 )}
               </div>
             )
@@ -1078,6 +1078,19 @@ function CapabilityCard({
 
         {Object.keys(schema).length > 0 && (
           <div className="mb-4">
+            {template.capability_id === 'image-i2i' && (
+              <div className="mb-3 p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                <p className="font-medium mb-1">🖼 图生图需要参考图片 URL</p>
+                <p className="mb-1">没有参考图片？先去文生图生成一张，再用「用此图片做图生图」自动带入。</p>
+                <button
+                  type="button"
+                  onClick={() => onChainNavigate('image-t2i')}
+                  className="text-sky-600 hover:underline font-medium"
+                >
+                  去文生图 image-t2i →
+                </button>
+              </div>
+            )}
             <RunnerForm schema={schema} values={values} onChange={handleChange} />
           </div>
         )}

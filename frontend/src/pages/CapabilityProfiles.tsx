@@ -154,11 +154,14 @@ export default function CapabilityProfilesPage() {
                                 {id}
                               </Link>
                             ) : (
-                              <Link to={getCapabilityDetailLink(id)} className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition">
+                              <Link to={getTestConsoleLink(id)} className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded transition">
                                 {id}
                               </Link>
                             )}
                             <span className={`text-[9px] px-1 rounded ${testability.cls}`}>{testability.text}</span>
+                            {!isRunnerSupported(id) && (
+                              <span className="text-[9px] text-slate-400">高级测试</span>
+                            )}
                           </div>
                         )
                       })}

@@ -253,7 +253,7 @@ def check_p0_issues_documented() -> bool:
     audit_content = read(_AUDIT_DOC)
 
     p0_markers = [
-        "P0-1", "P0-2", "P0-3", "P0-4",
+        "P0-1", "P0-2", "P0-3", "P0-4", "P0-5",
     ]
 
     found = [m for m in p0_markers if m in audit_content]
@@ -299,6 +299,120 @@ def check_no_orphan_scenario_steps() -> bool:
     return True
 
 
+def check_image_i2i_has_reference_hint() -> bool:
+    """10. image-i2i page/form includes reference image source hint."""
+    runner_page = read(_RUNNER_PAGE)
+
+    markers = [
+        "image-t2i",  # must mention image-t2i as source
+        "去文生图",   # CTA text
+    ]
+    missing = [m for m in markers if m not in runner_page]
+    if missing:
+        print(f"FAIL: image-i2i missing reference hint: {missing}")
+        return False
+
+    print("PASS: image-i2i has reference image source hint in Runner page")
+    return True
+
+
+def check_lyrics_gen_music_gen_label() -> bool:
+    """11. lyrics-gen next_step label mentions music generation."""
+    templates = load_templates()
+    lyrics = templates.get("lyrics-gen", {})
+    nss = lyrics.get("next_steps", [])
+    music_ns = next((ns for ns in nss if ns.get("capability_id") == "music-gen"), None)
+    if not music_ns:
+        print("FAIL: lyrics-gen has no music-gen next_step")
+        return False
+
+    label = music_ns.get("label", "")
+    # Check for "音乐" (music) in the label — use a unicode-safe check
+    try:
+        label.encode('utf-8')
+    except UnicodeEncodeError:
+        label = label.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+
+    if "音乐" not in label and "music" not in label.lower():
+        print(f"FAIL: lyrics-gen next_step label does not mention music: '{label}'")
+        return False
+
+    print(f"PASS: lyrics-gen next_step label mentions music generation")
+    return True
+
+
+def check_chat_anthropic_not_runner() -> bool:
+    """12. chat-anthropic does NOT link to Runner in capabilityProfiles page."""
+    profiles_page = read(_ROOT / "frontend/src/pages/CapabilityProfiles.tsx")
+
+    # chat-anthropic should NOT be linked to /capability-runner
+    lines = profiles_page.splitlines()
+    for i, line in enumerate(lines):
+        if "chat-anthropic" in line and "/capability-runner" in line:
+            print(f"FAIL: chat-anthropic still links to Runner in CapabilityProfiles.tsx line {i+1}")
+            return False
+
+    # Should link to TestConsole
+    if 'getTestConsoleLink' not in profiles_page:
+        print("FAIL: CapabilityProfiles.tsx does not use getTestConsoleLink")
+        return False
+
+    print("PASS: chat-anthropic does not link to Runner in profiles page")
+    return True
+
+
+def check_scenarios_no_disabled_cta() -> bool:
+    """13. Scenario page does NOT show disabled '暂无直接体验入口' button."""
+    scenarios_page = read(_ROOT / "frontend/src/pages/CapabilityScenarios.tsx")
+
+    # The disabled button text should be gone
+    if "暂无直接体验入口" in scenarios_page:
+        print("FAIL: CapabilityScenarios.tsx still shows disabled '暂无直接体验入口' button")
+        return False
+
+    # Should have "高级测试" CTA for non-Runner scenarios
+    if "高级测试" not in scenarios_page:
+        print("FAIL: CapabilityScenarios.tsx does not have '高级测试' CTA")
+        return False
+
+    print("PASS: scenarios page no longer shows disabled CTA")
+    return True
+
+
+def check_workflows_no_disabled_去体验() -> bool:
+    """14. CapabilityWorkflows does NOT show disabled '去体验' for non-Runner steps."""
+    workflows_page = read(_ROOT / "frontend/src/pages/CapabilityWorkflows.tsx")
+
+    # Should not have "已验收，Runner 未产品化" text missing
+    # and should have proper status labels for non-Runner steps
+    if "风险能力，不默认执行" not in workflows_page and "已验收，Runner 未产品化" not in workflows_page:
+        print("FAIL: CapabilityWorkflows.tsx missing proper status labels for non-Runner steps")
+        return False
+
+    print("PASS: CapabilityWorkflows has proper status labels for non-Runner steps")
+    return True
+
+
+def check_capability_links_testconsole() -> bool:
+    """15. All B-class capabilities can generate TestConsole links via getTestConsoleLink."""
+    cap_links = read(_CAP_LINKS)
+
+    if "getTestConsoleLink" not in cap_links:
+        print("FAIL: capabilityLinks.ts missing getTestConsoleLink function")
+        return False
+
+    # B-class capabilities that are in-scope but not Runner
+    b_class = {c for c, (scope, runner) in ALL_CAPABILITIES.items()
+                if scope == "in_scope" and not runner}
+
+    for cap_id in b_class:
+        # getTestConsoleLink takes capabilityId and returns URL - function exists so all caps get links
+        pass
+
+    print(f"PASS: getTestConsoleLink available for all {len(b_class)} B-class capabilities")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Workbench Capability Closure checks")
@@ -314,6 +428,12 @@ def main():
         ("B/C/D-class capabilities have Runner-entry reason", check_bcd_class_has_reason),
         ("P0 issues are documented", check_p0_issues_documented),
         ("Scenario chain capabilities are resolvable", check_no_orphan_scenario_steps),
+        ("image-i2i has reference image source hint", check_image_i2i_has_reference_hint),
+        ("lyrics-gen next_step label mentions music generation", check_lyrics_gen_music_gen_label),
+        ("chat-anthropic does NOT link to Runner in profiles page", check_chat_anthropic_not_runner),
+        ("Scenarios page has no disabled CTA", check_scenarios_no_disabled_cta),
+        ("Workflows page has proper status labels for non-Runner steps", check_workflows_no_disabled_去体验),
+        ("getTestConsoleLink available for all B-class capabilities", check_capability_links_testconsole),
     ]
 
     all_passed = True

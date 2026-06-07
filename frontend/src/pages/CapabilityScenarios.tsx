@@ -8,6 +8,7 @@ import {
   isRunnerSupported,
   getCapabilityDetailLink,
   getCapabilityTestabilityLabel,
+  getTestConsoleLink,
   type ChainStep,
 } from '../navigation/capabilityLinks'
 
@@ -161,17 +162,25 @@ export default function CapabilityScenariosPage() {
               <div className="pt-2 flex items-center gap-3 flex-wrap">
                 {(() => {
                   const primary = getPrimaryRunnerCapabilityForScenario(s.capabilities)
-                  return primary ? (
+                  if (primary) {
+                    return (
+                      <Link
+                        to={`/capability-runner?capability=${primary}&from_scenario=${s.id}`}
+                        className="inline-flex items-center gap-1.5 text-sm bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
+                      >
+                        开始体验 →
+                      </Link>
+                    )
+                  }
+                  // No Runner capability — check if TestConsole is available
+                  const firstCap = s.capabilities[0]
+                  return (
                     <Link
-                      to={`/capability-runner?capability=${primary}&from_scenario=${s.id}`}
-                      className="inline-flex items-center gap-1.5 text-sm bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
+                      to={getTestConsoleLink(firstCap)}
+                      className="inline-flex items-center gap-1.5 text-sm bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition"
                     >
-                      开始体验 →
+                      高级测试 {firstCap} →
                     </Link>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-sm bg-slate-100 text-slate-400 px-4 py-2 rounded-lg cursor-not-allowed">
-                      暂无直接体验入口
-                    </span>
                   )
                 })()}
                 <Link
@@ -181,6 +190,12 @@ export default function CapabilityScenariosPage() {
                   查看流程 →
                 </Link>
               </div>
+              {/* Note for scenarios without Runner */}
+              {!getPrimaryRunnerCapabilityForScenario(s.capabilities) && (
+                <p className="text-[10px] text-slate-400 mt-1">
+                  该场景能力当前未产品化为 Runner 流程，可通过「高级测试」先行体验。
+                </p>
+              )}
             </div>
           </div>
         ))}

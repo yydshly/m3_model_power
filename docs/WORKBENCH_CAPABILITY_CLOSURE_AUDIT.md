@@ -235,6 +235,7 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 | P0-2 | 场景 `emotion_mv_music` 的 CTA "开始体验" 链接 `lyrics-gen`，但流程是 `lyrics-gen → music-gen`，缺少中间步骤引导 | 在 `lyrics-gen` Runner 结果页 next_steps 增加 music-gen 引导说明 |
 | P0-3 | `chat-anthropic` 出现在能力画像"已验收能力"列表，但无 Runner 入口，只显示"暂无直接体验" | 能力画像中 `chat-anthropic` 的链接改为 `/test-console?capability=chat-anthropic`，不要链接到 Runner |
 | P0-4 | `file_knowledge_entry` 场景的 CTA 显示"暂无直接体验入口"，因为 `file-upload` 不在 Runner 支持列表 | 场景页面 `file_knowledge_entry` 的 CTA 改为"高级测试 file-upload"，不要显示 disabled 按钮 |
+| P0-5 | CapabilityWorkflows 中 non-Runner step 显示 disabled "去体验"，像坏了 | 改为"已验收，Runner 未产品化"（B/C 类）或"风险能力，不默认执行"（D 类） |
 
 ### P1（产品化：补齐关键链路）
 

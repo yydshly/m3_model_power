@@ -120,28 +120,37 @@ function WorkflowCard({ workflow }: { workflow: CapabilityWorkflow }) {
                     {(() => {
                       const runnerSupported = isRunnerSupported(step.capability_id)
                       const testability = getCapabilityTestabilityLabel(step.capability_id)
-                      return runnerSupported ? (
-                        <Link
-                          to={`/capability-runner?capability=${step.capability_id}&from_workflow=${workflow.id}`}
-                          className="inline-flex items-center gap-1 text-xs bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-700 transition"
-                        >
-                          去体验
-                          <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
-                            {testability.text}
+                      if (runnerSupported) {
+                        return (
+                          <Link
+                            to={`/capability-runner?capability=${step.capability_id}&from_workflow=${workflow.id}`}
+                            className="inline-flex items-center gap-1 text-xs bg-slate-900 text-white px-3 py-1 rounded-lg hover:bg-slate-700 transition"
+                          >
+                            去体验
+                            <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
+                              {testability.text}
+                            </span>
+                          </Link>
+                        )
+                      }
+                      // Not Runner-supported — show proper status instead of disabled button
+                      const isHighRisk = testability.text.includes('高风险') || testability.text.includes('不默认执行')
+                      if (isHighRisk) {
+                        return (
+                          <span className="inline-flex items-center gap-1 text-xs bg-red-50 text-red-600 px-3 py-1 rounded-lg">
+                            风险能力，不默认执行
                           </span>
-                        </Link>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-xs bg-slate-100 text-slate-400 px-3 py-1 rounded-lg cursor-not-allowed">
-                          去体验
-                          <span className={`ml-1 text-[9px] px-1 rounded ${testability.cls}`}>
-                            {testability.text}
-                          </span>
+                        )
+                      }
+                      return (
+                        <span className="inline-flex items-center gap-1 text-xs bg-slate-50 text-slate-500 px-3 py-1 rounded-lg">
+                          已验收，Runner 未产品化
                         </span>
                       )
                     })()}
                     <Link
                       to={getTestConsoleLink(step.capability_id!)}
-                      className="text-[10px] text-slate-400 hover:text-slate-600"
+                      className="text-[10px] text-sky-500 hover:text-sky-700"
                     >
                       高级测试 →
                     </Link>
@@ -286,7 +295,7 @@ export default function CapabilityWorkflowsPage() {
                       体验
                     </Link>
                   ) : (
-                    <span className="text-slate-300 ml-1">体验</span>
+                    <span className="text-slate-400 ml-1">高级测试</span>
                   )}
                   <Link
                     to={`/test-console?capability=${step.capability_id}`}
