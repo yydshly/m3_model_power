@@ -13,6 +13,31 @@ type ChatTextExtraction = {
   path: string
 } | null
 
+// ── Block helpers ────────────────────────────────────────────────────────────────
+
+type TextLikeBlock = {
+  type?: string
+  text?: string
+  thinking?: string
+}
+
+function getBlockText(block: TextLikeBlock): string | null {
+  return block.text ?? block.thinking ?? null
+}
+
+function getBlockSource(block: TextLikeBlock): ChatTextSource {
+  if (block.type === 'thinking' || block.type === 'reasoning_text') return 'reasoning'
+  if (!block.type || block.type === 'text' || block.type === 'output_text') return 'final'
+  return 'unknown'
+}
+
+// Legacy alias for backward compatibility with existing checks
+export function getTextBlockText(block: { type?: string; text?: string } | null | undefined): string | null {
+  // Delegates to getBlockText for consistency; kept for string-scan compatibility
+  const b: TextLikeBlock = block as TextLikeBlock
+  return getBlockText(b)
+}
+
 // ── Protocol detection ─────────────────────────────────────────────────────────
 
 function detectProtocol(data: unknown): ChatProtocol {
@@ -21,13 +46,17 @@ function detectProtocol(data: unknown): ChatProtocol {
 
   // Anthropic Messages: content array with a text-like block
   if (Array.isArray(d.content)) {
-    const first = (d as { content?: Array<{ type?: string; text?: string }> }).content?.[0]
-    if (first?.text && (!first.type || first.type === 'text' || first.type === 'thinking')) return 'anthropic'
+    const first = (d as { content?: TextLikeBlock[] }).content?.[0]
+    if (first) {
+      const firstText = first.text ?? first.thinking
+      if (firstText && (!first.type || first.type === 'text' || first.type === 'thinking')) return 'anthropic'
+    }
   }
 
   // Also check nested data.content (proxy wrapper)
-  const nested = (d as { data?: { content?: Array<{ type?: string; text?: string }> } }).data
-  if (nested?.content?.[0]?.text) return 'anthropic'
+  const nested = (d as { data?: { content?: TextLikeBlock[] } }).data
+  const nestedFirstText = nested?.content?.[0]?.text ?? nested?.content?.[0]?.thinking
+  if (nestedFirstText) return 'anthropic'
 
   // Responses API: has output_text or output array
   if ('output_text' in d) return 'responses'
@@ -37,6 +66,37 @@ function detectProtocol(data: unknown): ChatProtocol {
   if (Array.isArray(d.choices)) return 'openai'
 
   return 'unknown'
+}
+
+// ── Content blocks extraction with final-first priority ─────────────────────────
+
+function extractFromContentBlocks(
+  content: TextLikeBlock[],
+  basePath: string,
+): ChatTextExtraction {
+  // First pass: prefer final text
+  for (let i = 0; i < content.length; i++) {
+    const block = content[i]
+    const source = getBlockSource(block)
+    const text = getBlockText(block)
+    if (text && source === 'final') {
+      const field = block.thinking ? 'thinking' : 'text'
+      return { text, source: 'final', path: `${basePath}[${i}].${field}` }
+    }
+  }
+
+  // Second pass: fallback to reasoning
+  for (let i = 0; i < content.length; i++) {
+    const block = content[i]
+    const source = getBlockSource(block)
+    const text = getBlockText(block)
+    if (text && source === 'reasoning') {
+      const field = block.thinking ? 'thinking' : 'text'
+      return { text, source: 'reasoning', path: `${basePath}[${i}].${field}` }
+    }
+  }
+
+  return null
 }
 
 // ── Text extraction with source ────────────────────────────────────────────────
@@ -55,59 +115,38 @@ function extractChatTextSource(data: unknown): ChatTextExtraction {
     }
   }
 
-  // Anthropic Messages: content[0].type === "text" — FINAL
-  // Anthropic Messages: content[0].type === "thinking" — REASONING
+  // Anthropic Messages: scan all content blocks, final-first
   if (Array.isArray(d.content)) {
-    const content = d.content as Array<{ type?: string; text?: string }>
-    const first = content[0]
-    if (first) {
-      if (first.type === 'text' || (!first.type && first.text)) {
-        const text = first.text
-        if (text) return { text, source: 'final', path: 'content[0].text' }
-      }
-      if (first.type === 'thinking' || first.type === 'reasoning_text') {
-        const text = first.text
-        if (text) return { text, source: 'reasoning', path: `content[0].${first.type}` }
-      }
-    }
-  }
-  // Also check nested data.content
-  const nested = (d as { data?: { content?: Array<{ type?: string; text?: string }> } }).data
-  if (nested?.content?.[0]?.text) {
-    const first = nested.content[0]
-    if (!first) return null
-    if (first.type === 'thinking' || first.type === 'reasoning_text') {
-      const text = first.text
-      if (text) return { text, source: 'reasoning', path: 'data.content[0].reasoning' }
-    }
-    const text = first.text
-    if (text) return { text, source: 'final', path: 'data.content[0].text' }
+    const result = extractFromContentBlocks(d.content as TextLikeBlock[], 'content')
+    if (result) return result
   }
 
-  // Responses API: output_text — FINAL
+  // Also check nested data.content (proxy wrapper)
+  const nested = (d as { data?: { content?: TextLikeBlock[] } }).data
+  if (Array.isArray(nested?.content)) {
+    const result = extractFromContentBlocks(nested.content, 'data.content')
+    if (result) return result
+  }
+
+  // Responses API: output_text — FINAL (highest priority)
   if ('output_text' in d && typeof d.output_text === 'string') {
     return { text: d.output_text, source: 'final', path: 'output_text' }
   }
 
-  // Responses API: output[].content[].type === "reasoning_text" — REASONING
+  // Responses API: output[].content[] — final-first
   if (Array.isArray(d.output)) {
-    const output = d.output as Array<{ content?: Array<{ type?: string; text?: string }>; text?: string; type?: string }>
-    for (const o of output) {
-      // output_text type block
+    const output = d.output as Array<{ content?: TextLikeBlock[]; text?: string; type?: string }>
+    // First pass: look for final in any output item's content
+    for (let oi = 0; oi < output.length; oi++) {
+      const o = output[oi]
+      // Direct output text block
       if (o.text && (!o.type || o.type === 'output_text')) {
-        return { text: o.text, source: 'final', path: 'output[0].text' }
+        return { text: o.text, source: 'final', path: `output[${oi}].text` }
       }
+      // Content array in this output item
       if (Array.isArray(o.content)) {
-        for (const c of o.content) {
-          if (c.type === 'reasoning_text') {
-            const text = c.text
-            if (text) return { text, source: 'reasoning', path: 'output[0].content[0].reasoning_text' }
-          }
-          if (c.type === 'text' || (!c.type && c.text)) {
-            const text = c.text
-            if (text) return { text, source: 'final', path: 'output[0].content[0].text' }
-          }
-        }
+        const result = extractFromContentBlocks(o.content, `output[${oi}].content`)
+        if (result) return result
       }
     }
   }

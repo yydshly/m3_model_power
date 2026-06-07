@@ -16,6 +16,10 @@ Covers:
 12. RunnerForm renders field.note
 13. Overview runner templates loading failure shows explicit error
 14. get_history_status returns relative path, not absolute
+15. ChatResultPreview supports block.thinking field
+16. ChatResultPreview has final-first priority for content blocks
+17. ChatResultPreview handles nested data.content with thinking
+18. Responses output content also uses final-first priority
 """
 from __future__ import annotations
 
@@ -282,6 +286,55 @@ def check_14_get_history_status_relative_path() -> bool:
     return True
 
 
+def check_15_chat_preview_supports_thinking_field() -> bool:
+    """ChatResultPreview supports block.thinking field."""
+    content = read(_CHAT_PREVIEW)
+    if "thinking?: string" not in content:
+        print("FAIL: TextLikeBlock type does not include thinking field")
+        return False
+    if "block.thinking" not in content:
+        print("FAIL: getBlockText does not check block.thinking")
+        return False
+    print("PASS: ChatResultPreview supports block.thinking field")
+    return True
+
+
+def check_16_chat_preview_final_first_priority() -> bool:
+    """ChatResultPreview uses final-first priority for content blocks."""
+    content = read(_CHAT_PREVIEW)
+    if "extractFromContentBlocks" not in content:
+        print("FAIL: extractFromContentBlocks function not found")
+        return False
+    print("PASS: ChatResultPreview has final-first priority logic via extractFromContentBlocks")
+    return True
+
+
+def check_17_chat_preview_nested_content_thinking() -> bool:
+    """ChatResultPreview handles nested data.content with thinking."""
+    content = read(_CHAT_PREVIEW)
+    if "nested?.content" not in content and "nested.content" not in content:
+        print("FAIL: nested data.content not handled")
+        return False
+    if "data.content" not in content:
+        print("FAIL: data.content path not used in extraction")
+        return False
+    print("PASS: ChatResultPreview handles nested data.content with thinking")
+    return True
+
+
+def check_18_chat_preview_responses_final_first() -> bool:
+    """Responses output content also uses final-first priority."""
+    content = read(_CHAT_PREVIEW)
+    if "output[" not in content:
+        print("FAIL: Responses output array not handled")
+        return False
+    if content.count("output[") < 2:
+        print("FAIL: Responses output iteration not found")
+        return False
+    print("PASS: Responses output content uses final-first priority")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Workbench Main Hardening checks")
@@ -302,6 +355,10 @@ def main():
         ("RunnerForm renders field.note", check_12_runner_form_renders_note),
         ("Overview shows runner load error", check_13_overview_shows_runner_load_error),
         ("get_history_status uses relative path", check_14_get_history_status_relative_path),
+        ("ChatResultPreview supports thinking field", check_15_chat_preview_supports_thinking_field),
+        ("ChatResultPreview final-first priority", check_16_chat_preview_final_first_priority),
+        ("ChatResultPreview nested content thinking", check_17_chat_preview_nested_content_thinking),
+        ("ChatResultPreview Responses final-first", check_18_chat_preview_responses_final_first),
     ]
 
     all_passed = True
