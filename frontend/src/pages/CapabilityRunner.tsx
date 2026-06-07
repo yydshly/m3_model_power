@@ -173,6 +173,7 @@ function extractImageUrl(data: unknown): string {
 function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string }> {
   // Try multiple voice array field names and container paths
   const voiceArrays = [
+    findArrayField(data, 'system_voice'),
     findArrayField(data, 'voices'),
     findArrayField(data, 'voice_list'),
     findArrayField(data, 'items'),
@@ -181,7 +182,7 @@ function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string
   for (const arr of voiceArrays) {
     if (!arr.length) continue
     const parsed = arr
-      .slice(0, 20)
+      .slice(0, 30)
       .map((item) => {
         if (typeof item === 'string') return { voice_id: item }
         if (typeof item === 'object' && item !== null) {
@@ -189,7 +190,9 @@ function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string
           // voice_id can be at top level or nested under voice object
           const id = v.voice_id ?? v.voiceId ?? v.id
           if (id) {
-            return { voice_id: String(id), name: v.name ? String(v.name) : undefined }
+            // name preference: voice_name > name
+            const rawName = v.voice_name ?? v.name
+            return { voice_id: String(id), name: rawName ? String(rawName) : undefined }
           }
         }
         return null
@@ -604,24 +607,40 @@ function ResultBanner({ resultType, data }: { resultType: string; data: unknown 
 
 function VoiceListHint({ data, onUseVoiceId }: { data: unknown; onUseVoiceId: (vid: string) => void }) {
   const voices = extractVoiceIds(data)
-  if (!voices.length) return null
+
+  // Fallback: no voice_id could be identified
+  if (!voices.length) {
+    return (
+      <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+        <p className="text-xs text-amber-700">
+          未识别到 voice_id，请从下方完整 JSON 中手动复制。
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="mt-3">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs text-slate-600 font-medium">voice_id 复制</span>
+        <span className="text-xs text-slate-600 font-medium">可用音色</span>
         <span className="text-[10px] text-slate-400">点击 voice_id 复制，点击「合成」跳转</span>
       </div>
-      <div className="space-y-1 max-h-48 overflow-y-auto">
+      <div className="space-y-1 max-h-64 overflow-y-auto">
         {voices.map((v, i) => (
-          <div key={i} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1.5">
+          <div key={i} className="flex items-center gap-2 bg-slate-50 rounded px-3 py-2">
+            {v.name && (
+              <span className="text-xs text-slate-700 truncate flex-[2] min-w-0" title={v.name}>
+                {v.name}
+              </span>
+            )}
             <CopyButton text={v.voice_id}>
-              <span className="text-xs font-mono">{v.voice_id}</span>
+              <span className={`text-xs font-mono ${v.name ? 'text-slate-500' : 'text-slate-700'}`}>
+                {v.voice_id}
+              </span>
             </CopyButton>
-            {v.name && <span className="text-[10px] text-slate-400 truncate flex-1">{v.name}</span>}
             <button
               onClick={() => onUseVoiceId(v.voice_id)}
-              className="text-[10px] text-emerald-600 hover:text-emerald-800 whitespace-nowrap"
+              className="text-[10px] text-emerald-600 hover:text-emerald-800 whitespace-nowrap ml-auto"
             >
               用此音色合成 →
             </button>
