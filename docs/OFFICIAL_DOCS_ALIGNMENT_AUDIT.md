@@ -1,503 +1,573 @@
-# 官方文档对齐审计报告
+# MiniMax 官方文档对齐审计报告
 
-## 参考文档
+> 审计日期：2026-06-08
+> 审计范围：MiniMax 官网 `/docs/llms.txt` 全量 API 索引 vs 本项目 `models.yaml` / `capabilities.yaml` / Runner templates
+> 审计原则：本轮只做审计记录，不执行真实 API，不修改业务代码
 
+---
+
+## 一、官网文档索引覆盖
+
+### 官方文档入口
 - https://platform.minimaxi.com/docs/llms.txt
-- https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic
-- https://platform.minimaxi.com/docs/api-reference/text-chat-openai
-- https://platform.minimaxi.com/docs/api-reference/responses-create
-- https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
-- https://platform.minimaxi.com/docs/api-reference/voice-management-get
-- https://platform.minimaxi.com/docs/api-reference/image-generation-t2i
-- https://platform.minimaxi.com/docs/api-reference/image-generation-i2i
-- https://platform.minimaxi.com/docs/api-reference/music-generation
-- https://platform.minimaxi.com/docs/api-reference/lyrics-generation
-- https://platform.minimaxi.com/docs/api-reference/file-management-upload
+
+### 官网模块分组
+
+| 官方分组 | 官方文档路径 | 本项目状态 |
+|----------|-------------|-----------|
+| **文本 — Anthropic 兼容** | `text-chat-anthropic.md` | ✅ implemented (chat-anthropic) |
+| **文本 — Anthropic 主动缓存** | `anthropic-api-compatible-cache.md` | ❌ missing_capability |
+| **文本 — Anthropic SDK** | `text-anthropic-api.md` | ✅ via chat-anthropic |
+| **文本 — OpenAI Chat** | `text-chat-openai.md` | ✅ implemented (chat-openai) |
+| **文本 — OpenAI SDK** | `text-openai-api.md` | ✅ via chat-openai |
+| **文本 — Responses Create** | `responses-create.md` | ✅ implemented (chat-responses-create) |
+| **文本 — Responses Input Tokens** | `responses-input-tokens.md` | ✅ implemented (chat-responses-tokens) |
+| **文本 — Prompt 缓存** | `text-prompt-caching.md` | ❌ missing_capability |
+| **文本 — AI SDK** | `text-ai-sdk.md` | 🟡 docs_only |
+| **语音 — TTS HTTP** | `speech-t2a-http.md` | ✅ implemented (tts-sync) |
+| **语音 — TTS WebSocket** | `speech-t2a-websocket.md` | ✅ implemented (tts-ws) |
+| **语音 — TTS Async** | `speech-t2a-async-create.md` | ✅ implemented (tts-async) |
+| **语音 — 音色列表** | `voice-management-get.md` | ✅ implemented (voice-list) |
+| **语音 — 音色克隆** | `voice-cloning-clone.md` | ✅ implemented (voice-clone-do) |
+| **语音 — 音色设计** | `voice-design-design.md` | ✅ implemented (voice-design) |
+| **语音 — 音色删除** | `voice-management-delete.md` | ✅ implemented (voice-delete) |
+| **语音 — 上传克隆音频** | `voice-cloning-uploadcloneaudio.md` | ✅ implemented (voice-clone-upload-audio) |
+| **语音 — 上传 Prompt** | `voice-cloning-uploadprompt.md` | ✅ implemented (voice-clone-upload-prompt) |
+| **图像 — 文生图** | `image-generation-t2i.md` | ✅ implemented (image-t2i) |
+| **图像 — 图生图** | `image-generation-i2i.md` | ✅ implemented (image-i2i) |
+| **音乐 — 歌词生成** | `lyrics-generation.md` | ✅ implemented (lyrics-gen) |
+| **音乐 — 音乐生成** | `music-generation.md` | ✅ implemented (music-gen) |
+| **音乐 — 翻唱预处理** | `music-cover-preprocess.md` | ✅ implemented (music-cover-prep) |
+| **文件 — 上传** | `file-management-upload.md` | ✅ implemented (file-upload) |
+| **文件 — 列表** | `file-management-list.md` | ✅ implemented (file-list) |
+| **文件 — 检索** | `file-management-retrieve.md` | ✅ implemented (file-retrieve) |
+| **文件 — 内容下载** | `file-management-retrieve-content.md` | ✅ implemented (file-content) |
+| **文件 — 删除** | `file-management-delete.md` | ✅ implemented (file-delete) |
+| **视频 — 文生视频** | `video-generation-t2v.md` | ✅ implemented (video-t2v) |
+| **视频 — 图生视频** | `video-generation-i2v.md` | ✅ implemented (video-i2v) |
+| **视频 — 首尾帧视频** | `video-generation-fl2v.md` | ❌ missing_capability |
+| **视频 — 主体参考视频** | `video-generation-s2v.md` | ✅ implemented (video-s2v) |
+| **视频 — 视频查询** | `video-generation-query.md` | ✅ implemented (video-query) |
+| **视频 — 视频下载** | `video-generation-download.md` | ✅ implemented (video-download) |
+| **视频 — Agent 创建** | `video-agent-create.md` | ❌ missing_capability |
+| **视频 — Agent 查询** | `video-agent-query.md` | ❌ missing_capability |
+| **模型 — OpenAI list** | `models/openai/list-models.md` | ✅ implemented (models-openai-list) |
+| **模型 — OpenAI retrieve** | `models/openai/retrieve-model.md` | ✅ implemented (models-openai-retrieve) |
+| **模型 — Anthropic list** | `models/anthropic/list-models.md` | ✅ implemented (models-anthropic-list) |
+| **模型 — Anthropic retrieve** | `models/anthropic/retrieve-model.md` | ✅ implemented (models-anthropic-retrieve) |
+| **Token Plan — Claude Code** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — Codex** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — Cursor** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — TRAE** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — OpenClaw** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — Hermes Agent** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — MiniMax CLI** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
+| **Token Plan — Token Plan MCP** | `pricing-token-plan.md` | 🟡 token_plan_unknown |
 
 ---
 
-## 1. Chat 对话模块
+## 二、能力差异矩阵
 
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic
-- https://platform.minimaxi.com/docs/api-reference/text-chat-openai
-- https://platform.minimaxi.com/docs/api-reference/responses-create
+### 列说明
 
-### 官方模型枚举
+| 列名 | 说明 |
+|------|------|
+| Official Doc | 官网文档名称 |
+| Official Endpoint | 实际 HTTP 端点或 WebSocket 路径 |
+| OpenAPI Spec | 官网 OpenAPI 规范文件名 |
+| Current capability_id | 本项目 `capabilities.yaml` 中的 id |
+| Registry status | implemented / missing / warning_only / out_of_scope |
+| Scope policy | 来自 capabilities.yaml scope_policy.current_scope |
+| Billing policy | 来自 capabilities.yaml billing_policy.billing_category |
+| Operation risk | 来自 capabilities.yaml operation_policy.operation_risk |
+| Runner support | runner 模板是否完整（full / smoke / missing） |
+| Advanced Test support | Advanced Test 场景是否覆盖 |
+| Frontend detail support | 前端详情页是否完整说明所有参数 |
+| Verified status | 已验收 / 未验收 / 需要探针 |
+| Gap type | 见下方枚举 |
+| Priority | P0 / P1 / P2 / P3 |
+| Action | 下一步建议 |
 
-| 模型 | 上下文 | 能力 | 官方定位 |
-|------|--------|------|----------|
-| MiniMax-M3 | 128K推荐 / 512K上限 | text+image+video, thinking, tools | **Frontier / Agentic / 多模态旗舰** |
-| MiniMax-M2.7 | 64K推荐 / 200K上限 | text+tools, thinking 不可关闭 | 标准档 |
-| MiniMax-M2.7-highspeed | 同 M2.7 | 同 M2.7，速度更快 | Token Plan 高频体验 |
-| MiniMax-M2.5 / M2.5-highspeed | 64K推荐 / 200K上限 | text+tools, thinking 不可关闭 | 历史档 |
-| MiniMax-M2.1 / M2.1-highspeed | 64K推荐 / 200K上限 | text+tools, thinking 不可关闭 | 历史档 |
-| MiniMax-M2 | 64K推荐 / 200K上限 | text+tools, thinking 不可关闭 | 历史档 |
+### Gap type 枚举
 
-### 官方推荐模型
-- **M3**：官方示例中使用 M3 作为 Responses API 的默认示例；唯一支持多模态（图片/视频理解）+ thinking + tools 的模型
-- **M2.7-highspeed**：适合 Token Plan 高频体验，速度快
-- Responses API 官方文档示例统一使用 MiniMax-M3
+| 值 | 含义 |
+|----|------|
+| missing_capability | 官网有，但本项目 capabilities.yaml 完全没有 |
+| missing_model | 模型在官网列出但 models.yaml 缺失 |
+| missing_parameter | 参数在官网支持但 Runner 表单/Advanced Test 未暴露 |
+| wrong_protocol | 本项目协议标注与官网不符 |
+| wrong_scope | scope_policy 与官网能力定位不符 |
+| wrong_risk_policy | operation_risk 或 billing_policy 与实际风险不符 |
+| runner_incomplete | Runner 表单只是 smoke，暴露参数不完整 |
+| docs_only | 官网文档存在但本项目未实现 |
+| out_of_scope_by_design | 本项目明确标注不执行（高成本/高风险），符合设计 |
+| high_risk_by_design | 高成本/高风险，但需明确标注 |
+| token_plan_unknown | Token Plan 支持情况需确认 |
+| needs_real_probe | 需要真实 API 探针验证 |
 
-### 当前本地配置模型
-- MiniMax-M3, M2.7, M2.7-highspeed, M2.5, M2.5-highspeed, M2.1, M2.1-highspeed, M2
+### Priority 枚举
 
-### Token Plan 已验收模型
-- M2.7-highspeed（M2 档位高速版，Token Plan 共享配额）
-- M2.5 / M2.1 / M2（标准档，按量计费）
-
-### UI 当前展示推荐
-```
-"推荐模型"：未分层展示
-```
-
-### 是否存在误导
-**是**。未区分：
-- 官方当前旗舰（M3）vs 体验优先（M2.7-highspeed）
-- 高速度场景 vs 高能力场景
-- 历史兼容模型 vs 当前推荐模型
-
-### 需要修正的字段
-- `model_notes`：增加 source、recommendation_level、best_for、not_best_for、notes
-- 分层推荐：official_current / verified_stable / low_latency / compatible
-
-### 修正建议
-```json
-{
-  "model": "MiniMax-M3",
-  "label": "旗舰多模态模型",
-  "source": "official_docs",
-  "recommendation_level": "official_primary",
-  "token_plan_status": "available_direct",
-  "best_for": ["多模态理解（图片/视频）", "复杂 Agent 工作流", "1M 超长上下文", "thinking 思考模式"],
-  "not_best_for": ["Token Plan 高频快速体验（推荐 M2.7-highspeed）", "纯文本低成本场景"],
-  "notes": "官方 Responses API 示例默认使用 M3；唯一支持多模态输入的模型"
-}
-```
+| 值 | 含义 |
+|----|------|
+| P0 | 当前 UI/Registry 明显误导用户 |
+| P1 | 官网支持但本项目标注/参数不完整 |
+| P2 | 高成本/高风险/非默认执行能力，仅需标注 |
+| P3 | Token Plan 无法确认，保留观察 |
 
 ---
 
-## 2. Voice 语音模块
+### 2.1 文本 — Anthropic 协议
 
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
-- https://platform.minimaxi.com/docs/api-reference/voice-management-get
+| Official Doc | Official Endpoint | OpenAPI Spec | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Anthropic Messages API | POST /anthropic/v1/messages | openapi-chat-anthropic | chat-anthropic | implemented | in_scope | normal_token_plan_test | normal | smoke (仅 3 模型 + prompt + max_tokens) | 部分暴露 | 不完整 | 已验收 | runner_incomplete | P1 | Runner 表单补全所有 Anthropic 支持参数（system / temperature / top_p / thinking / tools / tool_choice / metadata） |
+| Anthropic 主动缓存 | (same endpoint, cache control headers) | — | — | missing | — | — | — | — | — | — | — | missing_capability | P1 | 新增 anthropic-active-cache capability，参考 text-prompt-caching |
+| Models List (Anthropic) | GET /anthropic/v1/models | — | models-anthropic-list | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Models Retrieve (Anthropic) | GET /anthropic/v1/models/{model} | — | models-anthropic-retrieve | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
 
-### 官方模型枚举
+### 2.2 文本 — OpenAI Chat 协议
 
-| 模型 | 状态 | 特点 |
-|------|------|------|
-| speech-2.8-hd | **当前最新** | 高质量，新代，支持语气词标签 |
-| speech-2.8-turbo | **当前最新** | 低延迟，新代，支持语气词标签 |
-| speech-2.6-hd | 稳定版 | 高质量，支持 fluent/whisper 情绪 |
-| speech-2.6-turbo | 稳定版 | 低延迟，支持 fluent/whisper 情绪 |
-| speech-02-hd | 历史兼容 | 已稳定验收，高质量兼容 |
-| speech-02-turbo | 历史兼容 | 已稳定验收，低延迟兼容 |
-| speech-01-hd | 历史 | 更早版本 |
-| speech-01-turbo | 历史 | 更早版本 |
+| Official Doc | Official Endpoint | OpenAPI Spec | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Chat Completions API | POST /v1/chat/completions | openapi-chat-openai | chat-openai | implemented | in_scope | normal_token_plan_test | normal | smoke (仅 3 模型 + prompt + temperature) | 部分暴露 | 不完整 | 已验收 | runner_incomplete | P1 | Runner 表单补全 thinking / reasoning_split / max_completion_tokens / top_p / tools / stream_options |
+| Models List (OpenAI) | GET /v1/models | — | models-openai-list | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Models Retrieve (OpenAI) | GET /v1/models/{model} | — | models-openai-retrieve | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
 
-**关键限制**：
-- `fluent` / `whisper` 情绪选项**仅 2.6 系列支持**，2.8 不支持 whisper
-- 语气词标签 `(laughs)`, `(chuckle)` 等**仅 2.8 系列支持**
-- text 长度限制：< 10,000 字符
-- > 3000 字符推荐流式输出
-- output_format 支持 `url`（有效期24小时）或 `hex`
+### 2.3 文本 — Responses 协议
 
-### 官方推荐模型
-- speech-2.8-hd 和 speech-2.8-turbo 是当前最新代
-- speech-2.6 系列仍是稳定主力（因支持 whisper/fluent 情绪）
+| Official Doc | Official Endpoint | OpenAPI Spec | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Responses Create | POST /v1/responses | openapi-responses | chat-responses-create | implemented | in_scope | normal_token_plan_test | normal | smoke (仅 3 模型 + prompt + max_output_tokens) | 部分暴露 | 不完整 | 已验收 | runner_incomplete | P1 | Runner 表单补全 output_text / output[].content[] / reasoning_text / tools 等参数 |
+| Responses Input Tokens | POST /v1/responses/input_tokens | — | chat-responses-tokens | implemented | in_scope | normal_token_plan_test | normal | smoke | 部分暴露 | 不完整 | 已验收 | runner_incomplete | P2 | 仅估算接口，scope 合理；可补充说明 |
+| Prompt 缓存 | (cache control params on existing endpoints) | — | — | missing | — | — | — | — | — | — | — | missing_capability | P1 | 新增 prompt-caching capability，记录缓存策略 |
+| AI SDK | — | — | — | docs_only | — | — | — | — | — | — | — | docs_only | P3 | 无需本项目实现，仅标注 docs_only |
+| Anthropic Active Cache | — | — | — | missing | — | — | — | — | — | — | — | missing_capability | P1 | 新增 anthropic-active-cache capability |
 
-### 当前本地配置模型
-- speech-02-turbo, speech-02-hd, speech-2.6-turbo, speech-2.6-hd, speech-2.8-turbo, speech-2.8-hd
+### 2.4 语音
 
-### Token Plan 已验收模型
-- speech-02-hd / speech-02-turbo（已长期稳定验收）
+| Official Doc | Official Endpoint | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| TTS HTTP Sync | POST /v1/t2a_v2 | tts-sync | implemented | in_scope | quota_sensitive | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| TTS WebSocket | WS /ws/v1/t2a_v2 | tts-ws | implemented | in_scope | quota_sensitive | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| TTS Async Create | POST /v1/t2a_async_v2 | tts-async | implemented | in_scope | quota_sensitive | quota_guarded | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Voice List | POST /v1/get_voice | voice-list | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Voice Clone Do | POST /v1/voice_clone | voice-clone-do | implemented | warning_only | paid_confirm_required | asset_required | warning_only | 部分暴露 | 部分 | 已标注 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Voice Design | POST /v1/voice_design | voice-design | implemented | warning_only | paid_confirm_required | normal | warning_only | 部分暴露 | 部分 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Voice Delete | POST /v1/delete_voice | voice-delete | implemented | warning_only | normal_token_plan_test | destructive | warning_only | 已覆盖 | 完整 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Voice Clone Upload Audio | POST /v1/files/upload | voice-clone-upload-audio | implemented | warning_only | paid_confirm_required | asset_required | warning_only | full | 已覆盖 | 完整 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Voice Clone Upload Prompt | POST /v1/files/upload | voice-clone-upload-prompt | implemented | warning_only | paid_confirm_required | asset_required | warning_only | full | 已覆盖 | 完整 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
 
-### UI 当前展示推荐
-```
-"02 系列低延迟版 / 02 系列高质量版"
-```
-这会让用户误以为 02 系列是当前最佳。
+**Runner 参数缺失（tts-sync）**：
+- `emotion` 参数：fluent/whisper 仅 2.6 系列支持，2.8 不支持 — UI 未区分说明
+- `voice_modify`（sound_effects 仅 2.8 支持）— UI 未说明
+- `aigc_watermark` / `subtitle_enable` — UI 未暴露
+- **Priority**: P2（语音参数，不影响核心功能，但会影响高级用户使用）
 
-### 是否存在误导
-**是**。02 系列不是当前最新，但 UI 未标注"历史兼容"。
+### 2.5 图像
 
-### 需要修正的字段
-- `model_notes`：增加 source、recommendation_level、best_for、not_best_for
-- 关键参数补全
-- 分层标注：official_current / verified_stable / compatible
+| Official Doc | Official Endpoint | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Image T2I | POST /v1/image_generation | image-t2i | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Image I2I | POST /v1/image_generation | image-i2i | implemented | in_scope | normal_token_plan_test | asset_required | full | 已覆盖 | 部分 | 已验收 | runner_incomplete | P1 | `reference_mode` UI-only（无 API 路径），需确认是否 intentional |
+| image-01 vs image-01-live | — | — | implemented | — | — | — | — | — | — | — | wrong_scope | P1 | image-01-live 不支持 width/height，UI 未标注此限制；image-01-live 的 style 画风控制仅 live 版支持 |
 
-### 修正建议
-```json
-[
-  {
-    "model": "speech-2.8-hd",
-    "label": "新一代高质量语音",
-    "source": "official_docs",
-    "recommendation_level": "official_current",
-    "best_for": ["高质量旁白", "正式成片", "自然听感", "语气词效果（laughs等）"],
-    "not_best_for": ["whisper/fluent 情绪（仅 2.6 支持）"],
-    "notes": "官方同步 TTS 示例使用 speech-2.8-hd；语气词标签仅 2.8 系列支持"
-  },
-  {
-    "model": "speech-2.8-turbo",
-    "label": "新一代低延迟语音",
-    "source": "official_docs",
-    "recommendation_level": "official_current",
-    "best_for": ["快速生成", "低延迟优先"],
-    "not_best_for": ["whisper/fluent 情绪（仅 2.6 支持）"],
-    "notes": "2.8 系列最低延迟版本"
-  },
-  {
-    "model": "speech-02-hd",
-    "label": "已验收稳定版（历史兼容）",
-    "source": "token_plan_verified",
-    "recommendation_level": "verified_stable",
-    "best_for": ["Token Plan 长期稳定使用", "兼容性优先"],
-    "not_best_for": ["需要最新语气词标签效果"],
-    "notes": "已长期验收，稳定回归；非官方当前最新"
-  }
-]
-```
+**image-i2i reference_mode 说明**：
+- 官网 `subject_reference` 是必需参数
+- 本项目 Runner 暴露 `reference_mode: subject|style|variation` 是 UI 选择
+- `subject` 模式对应 `subject_reference[type=character]`
+- 当前 `subject_reference.image_file` 只接受 URL，未支持 base64
+- **Gap type**: runner_incomplete（P1 需确认是否为 intentional UI-only）
 
-### 关键参数补全
-```json
-{
-  "key_parameters": [
-    {"name": "model", "description": "语音模型，如 speech-2.8-hd / speech-2.8-turbo / speech-02-hd"},
-    {"name": "text", "description": "待合成文本，必须 < 10,000 字符；> 3000 字推荐 stream=true"},
-    {"name": "stream", "description": "是否流式返回，> 3000 字建议开启"},
-    {"name": "voice_setting.voice_id", "description": "音色 ID，从 voice-list 查询获取"},
-    {"name": "voice_setting.speed", "description": "语速，范围 [0.5, 2]，默认 1.0"},
-    {"name": "voice_setting.vol", "description": "音量，(0, 10]，默认 1"},
-    {"name": "voice_setting.pitch", "description": "音调，[-12, 12]，默认 0"},
-    {"name": "voice_setting.emotion", "description": "情绪类型：happy/sad/angry/fearful/disgusted/surprised/calm/fluent/whisper；fluent/whisper 仅 2.6 支持"},
-    {"name": "audio_setting.sample_rate", "description": "采样率，默认 32000；可选 8000/16000/22050/24000/32000/44100"},
-    {"name": "audio_setting.bitrate", "description": "比特率，默认 128000；mp3 支持 32000/64000/128000/256000"},
-    {"name": "audio_setting.format", "description": "音频格式，默认 mp3；支持 mp3/pcm/flac/wav/pcmu_raw/pcmu_wav/opus"},
-    {"name": "output_format", "description": "输出格式：hex（默认）或 url；url 有效期 24 小时"},
-    {"name": "aigc_watermark", "description": "是否添加 AIGC 水印，默认 false"},
-    {"name": "subtitle_enable", "description": "是否启用字幕输出，默认 false"},
-    {"name": "voice_modify", "description": "音色修饰：pitch/intensity/timbre/sound_effects（仅 2.8 支持 sound_effects）"}
-  ]
-}
-```
+### 2.6 音乐
+
+| Official Doc | Official Endpoint | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Lyrics Generation | POST /v1/lyrics_generation | lyrics-gen | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| Music Generation | POST /v1/music_generation | music-gen | implemented | in_scope | quota_sensitive | normal | full | 已覆盖 | 部分 | 已验收 | — | — | — |
+| Music Cover Preprocess | POST /v1/music_cover/preprocess | music-cover-prep | implemented | warning_only | asset_required_confirm_required | asset_required | warning_only | 部分暴露 | 部分 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| music-2.6-free | — | — | implemented (models.yaml) | — | — | — | — | — | — | — | missing_model | P2 | models.yaml 有定义但 Runner 不展示；符合设计（free tier 不推荐） |
+| music-cover-free | — | — | implemented (models.yaml) | — | — | — | — | — | — | — | missing_model | P2 | 同上 |
+
+### 2.7 文件
+
+| Official Doc | Official Endpoint | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| File Upload | POST /v1/files/upload | file-upload | implemented | in_scope | normal_token_plan_test | asset_required | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| File List | GET /v1/files/list | file-list | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| File Retrieve | GET /v1/files/retrieve | file-retrieve | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| File Content | GET /v1/files/retrieve_content | file-content | implemented | in_scope | normal_token_plan_test | normal | full | 已覆盖 | 完整 | 已验收 | — | — | — |
+| File Delete | POST /v1/files/delete | file-delete | implemented | warning_only | normal_token_plan_test | destructive | warning_only | 已覆盖 | 完整 | 已验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+
+### 2.8 视频
+
+| Official Doc | Official Endpoint | Current capability_id | Registry status | Scope policy | Billing policy | Operation risk | Runner support | Advanced Test support | Frontend detail support | Verified status | Gap type | Priority | Action |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Video T2V | POST /v1/video_generation | video-t2v | implemented | out_of_scope | high_cost_confirm_required | long_running | warning_only | 部分暴露 | 部分 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Video I2V | POST /v1/video_generation | video-i2v | implemented | out_of_scope | high_cost_confirm_required | long_running | warning_only | 部分暴露 | 部分 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Video FL2V（首尾帧） | POST /v1/video_generation | — | missing | — | — | — | — | — | — | — | — | missing_capability | P1 | 官网列出但 capabilities.yaml 缺失；需新增 video-fl2v capability，scope=out_of_scope |
+| Video S2V | POST /v1/video_generation | video-s2v | implemented | out_of_scope | high_cost_confirm_required | long_running | warning_only | 部分暴露 | 部分 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Video Query | GET /v1/query/video_generation | video-query | implemented | out_of_scope | normal_token_plan_test | existing_task_only | warning_only | 已覆盖 | 完整 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Video Download | GET /v1/files/retrieve | video-download | implemented | out_of_scope | normal_token_plan_test | existing_task_only | warning_only | 已覆盖 | 完整 | 未验收 | out_of_scope_by_design | P2 | 标注准确，无需修改 |
+| Video Agent Create | POST /v1/video_agent | — | missing | — | — | — | — | — | — | — | — | missing_capability | P2 | 官网列出但 capabilities.yaml 缺失；高成本高风险，建议 scope=out_of_scope |
+| Video Agent Query | GET /v1/video_agent | — | missing | — | — | — | — | — | — | — | — | missing_capability | P2 | 同上 |
 
 ---
 
-## 3. Vision 图片模块
+## 三、模型协议矩阵
 
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/image-generation-t2i
-- https://platform.minimaxi.com/docs/api-reference/image-generation-i2i
+### 3.1 Chat 模型（M 系列）
 
-### 官方模型枚举
+| model | official_current | live_available | subscription_expected | openai | anthropic | responses | context | input_modalities | output_modalities | supports_tools | supports_thinking | thinking_can_disable | source_doc | current_yaml_status | gap |
+|-------|-----------------|----------------|----------------------|--------|-----------|-----------|---------|-----------------|-------------------|---------------|-----------------|---------------------|------------|-------------------|-----|
+| MiniMax-M3 | true | true | true | ✅ | ✅ | ✅ | 1M | text,image,video | text | ✅ | ✅ | ✅ | text-chat-anthropic / text-chat-openai / responses-create | protocols=[openai,anthropic,responses] ✅ | — |
+| MiniMax-M2.7 | true | true | true | ✅ | ❌ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai] ❌ wrong_protocol | P0: M2.7 supports Anthropic according to /v1/models |
+| MiniMax-M2.7-highspeed | true | true | true | ✅ | ✅ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai,anthropic] ✅ | — |
+| MiniMax-M2.5 | true | true | true | ✅ | ❌ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai] ❌ wrong_protocol | P0: M2.5 supports Anthropic according to /v1/models |
+| MiniMax-M2.5-highspeed | true | true | true | ✅ | ✅ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai,anthropic] ✅ | — |
+| MiniMax-M2.1 | true | true | true | ✅ | ❌ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai] ❌ wrong_protocol | P0: M2.1 supports Anthropic according to /v1/models |
+| MiniMax-M2.1-highspeed | true | true | true | ✅ | ✅ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai,anthropic] ✅ | — |
+| MiniMax-M2 | true | true | true | ✅ | ❌ | ❌ | 200K | text | text | ✅ | ✅ | ❌ | text-chat-anthropic / text-chat-openai | protocols=[openai] ❌ wrong_protocol | P0: M2 supports Anthropic according to /v1/models |
 
-| 模型 | 能力 | 官方定位 |
-|------|------|----------|
-| image-01 | 文生图 + 图生图（subject_reference） | 主力模型，支持 width/height，支持 21:9 |
-| image-01-live | 文生图 + 图生图 + style 画风 | 画风设置，适合手绘/卡通/风格化；不支持 width/height |
+**关键发现**：M2.7 / M2.5 / M2.1 / M2 的 `protocols` 在 models.yaml 中标注为仅 `[openai]`，但根据 `/v1/models` 接口返回，这些模型同样支持 Anthropic 协议。这是 **P0 级别误导**（protocols 决定 UI 下拉显示，影响用户选择）。
 
-**注意**：i2i（图生图）通过 `subject_reference` 参数实现，不是独立模型。
+### 3.2 Speech 模型
 
-### 关键参数（官方文档）
+| model | official_current | live_available | subscription_expected | protocols | source_doc | current_yaml_status | gap |
+|-------|-----------------|----------------|----------------------|-----------|------------|-------------------|-----|
+| speech-2.8-hd | true | null | true | native | speech-t2a-http | ✅ | needs_real_probe |
+| speech-2.8-turbo | true | null | true | native | speech-t2a-http | ✅ | needs_real_probe |
+| speech-2.6-hd | true | null | true | native | speech-t2a-http | ✅ | needs_real_probe |
+| speech-2.6-turbo | true | null | true | native | speech-t2a-http | ✅ | needs_real_probe |
+| speech-02-hd | true | null | true | native | speech-t2a-http | ✅ (enabled=true) | — |
+| speech-02-turbo | true | null | true | native | speech-t2a-http | ✅ (enabled=true) | — |
+| speech-01-hd | false | null | false | native | — | ❌ official_current=false | — |
+| speech-01-turbo | false | null | false | native | — | ❌ official_current=false | — |
 
-**文生图 / 图生图共同**：
-- `model`: image-01 或 image-01-live
-- `prompt`: 文本描述，max 1500 字符
-- `subject_reference`: 图生图必需，类型为 character，包含参考图 URL 或 base64
-- `aspect_ratio`: 1:1/16:9/4:3/3:2/2:3/3:4/9:16/21:9（21:9 仅 image-01）
-- `response_format`: url 或 base64，url 有效期 24 小时
-- `seed`, `n`, `prompt_optimizer`, `aigc_watermark`
+**注意**：speech 族 `live_available` 全部为 null，因为 `/v1/models` 不返回 speech 模型。需通过 tts-sync endpoint 探针验证。
 
-**仅 image-01**：
-- `width` / `height`: [512, 2048]，需是 8 的倍数
+### 3.3 Image 模型
 
-**仅 image-01-live**：
-- `style.style_type`: 漫画/元气/中世纪/水彩
-- `style.style_weight`: (0, 1]，默认 0.8
+| model | official_current | live_available | subscription_expected | protocols | source_doc | current_yaml_status | gap |
+|-------|-----------------|----------------|----------------------|-----------|------------|-------------------|-----|
+| image-01 | true | null | true | native | image-generation-t2i / i2i | ✅ | needs_real_probe |
+| image-01-live | true | null | true | native | image-generation-t2i / i2i | ✅ | needs_real_probe |
 
-### 官方推荐模型
-- 官方示例使用 `image-01` 作为 t2i 默认示例
-- `image-01-live` 用于需要风格控制的场景
+### 3.4 Video 模型
 
-### 当前本地配置模型
-- image-01, image-01-live
+| model | official_current | live_available | subscription_expected | protocols | source_doc | current_yaml_status | gap |
+|-------|-----------------|----------------|----------------------|-----------|------------|-------------------|-----|
+| MiniMax-Hailuo-2.3 | true | null | true | native | video-generation-t2v | ✅ | needs_real_probe |
+| MiniMax-Hailuo-2.3-Fast | true | null | true | native | video-generation-t2v | ✅ | needs_real_probe |
+| MiniMax-Hailuo-02 | true | null | true | native | video-generation-t2v | ✅ | needs_real_probe |
+| T2V-01 | false | null | false | native | — | ❌ official_current=false | — |
+| T2V-01-Director | false | null | false | native | — | ❌ official_current=false | — |
+| I2V-01 | false | null | false | native | — | ❌ official_current=false | — |
+| I2V-01-live | false | null | false | native | — | ❌ official_current=false | — |
+| I2V-01-Director | false | null | false | native | — | ❌ official_current=false | — |
+| S2V-01 | false | null | false | native | — | ❌ official_current=false | — |
+| video-01 | false | null | false | native | — | ❌ official_current=false | — |
 
-### Token Plan 已验收模型
-- image-01（图生图主力）
+### 3.5 Music 模型
 
-### UI 当前展示推荐
-```
-"主力文生图/图生图模型"
-"Live 画风版，更多画风设置"
-```
-未区分两个模型的不同适用场景。
-
-### 是否存在误导
-**部分**。image-01-live 不支持 width/height（这对专业用户很重要），UI 未标注。
-
-### 需要修正的字段
-- `model_notes`：增加 source、recommendation_level、best_for、not_best_for
-- 补全关键参数
-- 强调 subject_reference 是图生图核心
-
-### 修正建议
-```json
-[
-  {
-    "model": "image-01",
-    "label": "文生图/图生图主力模型",
-    "source": "official_docs",
-    "recommendation_level": "official_primary",
-    "best_for": ["通用文生图", "图生图（subject_reference）", "需要精确尺寸控制（width/height）", "21:9 超宽比例"],
-    "not_best_for": ["手绘/卡通/风格化场景（使用 image-01-live）"],
-    "notes": "官方 t2i 示例默认使用 image-01；图生图通过 subject_reference 参数实现"
-  },
-  {
-    "model": "image-01-live",
-    "label": "画风控制版",
-    "source": "official_docs",
-    "recommendation_level": "official_current",
-    "best_for": ["手绘风格", "卡通风格", "水彩风格", "中世纪风格", "需要 style 画风控制的场景"],
-    "not_best_for": ["需要精确像素尺寸（width/height）", "21:9 超宽比例"],
-    "notes": "style 画风设置仅 image-01-live 支持；不支持 width/height 参数"
-  }
-]
-```
-
-### 关键参数补全
-```json
-{
-  "key_parameters": [
-    {"name": "model", "description": "图像模型：image-01（主力）或 image-01-live（画风控制）"},
-    {"name": "prompt", "description": "文本描述，max 1500 字符，描述越详细效果越好"},
-    {"name": "subject_reference", "description": "图生图必需；包含 character 类型的角色参考图；需确认素材来源（用户自有图片）"},
-    {"name": "style.style_type", "description": "画风类型：漫画/元气/中世纪/水彩（仅 image-01-live）"},
-    {"name": "style.style_weight", "description": "画风强度，(0, 1]，默认 0.8（仅 image-01-live）"},
-    {"name": "aspect_ratio", "description": "图片比例：1:1/16:9/4:3/3:2/2:3/3:4/9:16/21:9（21:9 仅 image-01）"},
-    {"name": "width", "description": "像素宽度，[512, 2048]，需是 8 的倍数（仅 image-01）"},
-    {"name": "height", "description": "像素高度，[512, 2048]，需是 8 的倍数（仅 image-01）"},
-    {"name": "response_format", "description": "url（默认，24小时有效）或 base64"},
-    {"name": "seed", "description": "随机种子，同 seed + 参数产生相似结果"},
-    {"name": "n", "description": "每次生成图片数量，1-9"},
-    {"name": "prompt_optimizer", "description": "自动优化 prompt，默认 false"},
-    {"name": "aigc_watermark", "description": "添加 AIGC 水印，默认 false"},
-    {"name": "confirm_asset_source", "description": "素材来源确认（图生图必需）"}
-  ]
-}
-```
+| model | official_current | live_available | subscription_expected | protocols | source_doc | current_yaml_status | gap |
+|-------|-----------------|----------------|----------------------|-----------|------------|-------------------|-----|
+| music-2.6 | true | null | true | native | music-generation | ✅ | needs_real_probe |
+| music-cover | true | null | true | native | music-cover-preprocess | ✅ | needs_real_probe |
+| music-2.6-free | true | null | false | native | music-generation | ✅ (enabled=false) | — |
+| music-cover-free | true | null | false | native | music-cover-preprocess | ✅ (enabled=false) | — |
 
 ---
 
-## 4. Music 音乐模块
+## 四、Runner 下拉模型缺失（Protocol 维度）
 
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/music-generation
-- https://platform.minimaxi.com/docs/api-reference/lyrics-generation
+### 4.1 chat-anthropic Runner 模型下拉
 
-### 官方模型枚举
+**当前暴露**：MiniMax-M3, MiniMax-M2.7-highspeed, MiniMax-M2.7（共 3 个）
 
-| 模型 | 类型 | 访问 | 官方推荐 |
-|------|------|------|----------|
-| music-2.6 | 文本生成音乐 | Token Plan & 付费用户；较高 RPM | ✅ **是** |
-| music-cover | 参考音频翻唱 | Token Plan & 付费用户；较高 RPM | 否 |
-| music-2.6-free | music-2.6 免费版 | 所有 API Key 用户；较低 RPM | 否（免费版） |
-| music-cover-free | music-cover 免费版 | 所有 API Key 用户；较低 RPM | 否（免费版） |
+**官网实际支持 Anthropic 的模型**：
+- MiniMax-M3 ✅
+- MiniMax-M2.7 ✅ (但 Runner 未列)
+- MiniMax-M2.7-highspeed ✅
+- MiniMax-M2.5 ✅ (但 Runner 未列)
+- MiniMax-M2.5-highspeed ✅ (但 Runner 未列)
+- MiniMax-M2.1 ✅ (但 Runner 未列)
+- MiniMax-M2.1-highspeed ✅ (但 Runner 未列)
+- MiniMax-M2 ✅ (但 Runner 未列)
 
-**lyrics-generation 是独立端点**，无需选择模型，参数包括 mode/prompt/lyrics/title。
+**结论**：Runner 下拉只有 3 个模型，但官网 Anthropic 协议支持全部 8 个 M 系列模型。
 
-### 官方推荐模型
-- **music-2.6**：官方文档明确标注为推荐模型
-- music-2.6-free 仅是免费变体，不应作为 Token Plan 默认推荐
+**Gap type**: runner_incomplete
+**Priority**: P0（模型下拉缺失导致用户无法选择已支持的模型）
 
-### 当前本地配置模型
-- music-2.6, music-cover, music-2.6-free, music-cover-free
+### 4.2 chat-openai Runner 模型下拉
 
-### Token Plan 已验收模型
-- music-2.6（官方推荐，已验收）
+**当前暴露**：MiniMax-M3, MiniMax-M2.7-highspeed, MiniMax-M2.7（共 3 个）
 
-### UI 当前展示推荐
-```
-"音乐生成主力模型"
-"翻唱生成模型"
-```
-未区分 free 版和正式版。
+**官网实际支持 OpenAI 的模型**：全部 8 个 M 系列均支持
 
-### 是否存在误导
-**是**。未标注 music-2.6-free 是免费变体（低 RPM），用户可能误选。
+**结论**：Runner 下拉只有 3 个模型，缺失 M2.5 / M2.5-highspeed / M2.1 / M2.1-highspeed / M2。
 
-### 需要修正的字段
-- `model_notes`：区分 official_recommended / free_tier
-- 增加 recommendation_level / best_for / notes
+**Gap type**: runner_incomplete
+**Priority**: P0（同上）
 
-### 修正建议
-```json
-[
-  {
-    "model": "music-2.6",
-    "label": "官方推荐音乐生成模型",
-    "source": "official_docs",
-    "recommendation_level": "official_primary",
-    "best_for": ["AI 歌曲草稿", "情绪 MV", "短视频 BGM", "音乐创作灵感"],
-    "not_best_for": ["免费额度测试（使用 music-2.6-free）"],
-    "notes": "官方文档明确推荐；Token Plan 和付费用户可用；RPM 较高"
-  },
-  {
-    "model": "music-cover",
-    "label": "翻唱生成（需要参考音频）",
-    "source": "official_docs",
-    "recommendation_level": "guarded",
-    "best_for": ["基于参考音频生成翻唱版本"],
-    "not_best_for": ["默认音乐生成（使用 music-2.6）", "未确认版权的参考音频"],
-    "notes": "需要参考音频（audio_url / audio_base64 / cover_feature_id）；涉及版权风险，不默认执行"
-  },
-  {
-    "model": "music-2.6-free",
-    "label": "免费版（低 RPM）",
-    "source": "official_docs",
-    "recommendation_level": "free_tier",
-    "best_for": ["免费额度测试", "体验预览"],
-    "not_best_for": ["正式内容生成（RPM 较低）", "Token Plan 主力使用"],
-    "notes": "所有用户可用，RPM 较低；不应作为 Token Plan 默认推荐"
-  }
-]
-```
+### 4.3 chat-responses-create Runner 模型下拉
 
-### 关键参数补全
-```json
-{
-  "key_parameters": [
-    {"name": "model", "description": "音乐模型：music-2.6（推荐）或 music-cover（翻唱）或 free 版"},
-    {"name": "prompt", "description": "音乐风格描述（music-gen）"},
-    {"name": "lyrics", "description": "歌词内容（music-gen，可从 lyrics-generation 获取）"},
-    {"name": "title", "description": "歌曲标题（可选）"},
-    {"name": "style", "description": "音乐风格（流行/摇滚/民谣等）"},
-    {"name": "stream", "description": "是否流式返回"},
-    {"name": "is_instrumental", "description": "是否生成纯音乐（仅 music-2.6 支持）"},
-    {"name": "lyrics_optimizer", "description": "优化歌词（仅 music-2.6 支持）"},
-    {"name": "audio_url", "description": "参考音频 URL（music-cover 必需）"},
-    {"name": "audio_base64", "description": "参考音频 base64（music-cover 替代选项）"},
-    {"name": "cover_feature_id", "description": "封面特征 ID（music-cover 两步流程选项）"},
-    {"name": "output_format", "description": "输出格式"},
-    {"name": "aigc_watermark", "description": "添加 AIGC 水印"}
-  ]
-}
-```
+**当前暴露**：MiniMax-M3, MiniMax-M2.7-highspeed, MiniMax-M2.7（共 3 个）
+
+**官网 Responses Create 实际支持**：M3 为主力，官方文档示例均用 M3
+
+**结论**：Runner 下拉只有 3 个模型，官网主要推荐 M3，其余为次选。当前可接受，但建议说明推荐逻辑。
+
+**Gap type**: runner_incomplete
+**Priority**: P1（建议说明推荐逻辑，非强制修复）
 
 ---
 
-## 5. Assets 文件模块
+## 五、参数完整性审计
 
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/file-management-upload
-- https://platform.minimaxi.com/docs/api-reference/file-management-retrieve
-- https://platform.minimaxi.com/docs/api-reference/file-management-retrieve-content
-- https://platform.minimaxi.com/docs/api-reference/file-management-list
+### 5.1 Anthropic Messages API 参数
 
-### 文件能力说明
-文件管理不是"模型能力"，不需要推荐模型。
+| 官方支持参数 | 本项目 Runner 暴露 | 本项目 Advanced Test 暴露 | Gap type | Priority |
+|------------|-----------------|----------------------|---------|---------|
+| model | ✅ (3 of 8) | ✅ | runner_incomplete | P0 |
+| system | ❌ | ❌ | missing_parameter | P1 |
+| messages | ✅ | ✅ | — | — |
+| temperature | ❌ | ❌ | missing_parameter | P1 |
+| top_p | ❌ | ❌ | missing_parameter | P1 |
+| max_tokens | ✅ | ✅ | — | — |
+| thinking | ❌ | ❌ | missing_parameter | P1 |
+| thoughts | ❌ | ❌ | missing_parameter | P2 |
+| tools | ❌ | ❌ | missing_parameter | P1 |
+| tool_choice | ❌ | ❌ | missing_parameter | P1 |
+| metadata | ❌ | ❌ | missing_parameter | P2 |
+| stream | ❌ (默认 false) | ❌ | missing_parameter | P2 |
+| stop_sequences | ❌ | ❌ | missing_parameter | P2 |
+| timeout | ❌ | ❌ | missing_parameter | P3 |
 
-| 操作 | capability | 风险 | 说明 |
-|------|-----------|------|------|
-| file-upload | file-upload | guarded | 上传文件获取 file_id，需 confirm_asset_source |
-| file-list | file-list | safe | 查询已上传文件列表 |
-| file-retrieve | file-retrieve | safe | 查询文件元数据 |
-| file-content | file-content | safe | 读取文件内容或摘要 |
-| file-delete | file-delete | blocked | 删除文件，破坏性操作，不默认执行 |
+### 5.2 OpenAI Chat Completions API 参数
 
-### UI 当前展示推荐
-```
-"recommended_models": [] （空）
-```
-符合预期。
+| 官方支持参数 | 本项目 Runner 暴露 | 本项目 Advanced Test 暴露 | Gap type | Priority |
+|------------|-----------------|----------------------|---------|---------|
+| model | ✅ (3 of 8) | ✅ | runner_incomplete | P0 |
+| messages | ✅ | ✅ | — | — |
+| temperature | ✅ | ✅ | — | — |
+| top_p | ❌ | ❌ | missing_parameter | P1 |
+| max_tokens / max_completion_tokens | ✅ (max_tokens) | ✅ | — | — |
+| thinking | ❌ | ❌ | missing_parameter | P1 |
+| reasoning_split | ❌ | ❌ | missing_parameter | P1 |
+| tools | ❌ | ❌ | missing_parameter | P1 |
+| tool_choice | ❌ | ❌ | missing_parameter | P1 |
+| stream_options | ❌ | ❌ | missing_parameter | P2 |
+| presence_penalty | ❌ | ❌ | missing_parameter | P2 |
+| frequency_penalty | ❌ | ❌ | missing_parameter | P2 |
+| logit_bias | ❌ | ❌ | missing_parameter | P3 |
+| user | ❌ | ❌ | missing_parameter | P3 |
 
-### 是否存在误导
-**否**。
+### 5.3 Responses Create API 参数
 
-### 需要修正的字段
-- `model_notes`：可标注为空（文件不是模型能力）
-- 无需修改 recommended_models
-
----
-
-## 6. Models 模型发现模块
-
-### 官方文档地址
-- https://platform.minimaxi.com/docs/api-reference/models/openai/list-models
-- https://platform.minimaxi.com/docs/api-reference/models/anthropic/list-models
-
-### 关键说明
-`/v1/models` API 返回的是**兼容协议的模型列表**（主要是 chat 模型），**不包含**：
-- speech / image / music / video 等 native 模型
-- 这些 native 模型需要通过各自的能力端点验证
-
-### UI 当前展示推荐
-```
-OpenAI 协议模型
-Anthropic 协议模型
-```
-符合预期。
-
-### 是否存在误导
-**是**，需要在 UI 或文档中明确说明：此列表不包含语音/图片/音乐/视频等 native 模型。
-
-### 需要修正的字段
-- `model_notes`：增加说明此列表的局限性
-- `risk_notes`：明确 native 模型不在此列表中
-
-### 修正建议
-```json
-{
-  "model_notes": [
-    {
-      "model": "OpenAI Models",
-      "label": "OpenAI 兼容协议模型",
-      "description": "/v1/models 主要返回 chat 模型；speech/image/music/video 等 native 模型不在此列表",
-      "source": "official_docs",
-      "recommendation_level": "official_current"
-    },
-    {
-      "model": "Anthropic Models",
-      "label": "Anthropic 兼容协议模型",
-      "description": "/v1/models 主要返回 chat 模型；speech/image/music/video 等 native 模型不在此列表",
-      "source": "official_docs",
-      "recommendation_level": "official_current"
-    }
-  ],
-  "risk_notes": [
-    "/v1/models 主要返回 chat 模型，speech/image/music/video 等 native 模型不在此列表",
-    "native 模型需要通过各自的能力端点验证可用性"
-  ]
-}
-```
+| 官方支持参数 | 本项目 Runner 暴露 | 本项目 Advanced Test 暴露 | Gap type | Priority |
+|------------|-----------------|----------------------|---------|---------|
+| model | ✅ (3 of 8) | ✅ | runner_incomplete | P1 |
+| input | ✅ | ✅ | — | — |
+| input_modality | ❌ | ❌ | missing_parameter | P1 |
+| output_modality | ❌ | ❌ | missing_parameter | P1 |
+| max_output_tokens | ✅ | ✅ | — | — |
+| stream | ❌ (默认 false) | ❌ | missing_parameter | P2 |
+| temperature | ❌ | ❌ | missing_parameter | P1 |
+| top_p | ❌ | ❌ | missing_parameter | P1 |
+| tools | ❌ | ❌ | missing_parameter | P1 |
+| reasoning | ❌ | ❌ | missing_parameter | P1 |
+| thinking | ❌ | ❌ | missing_parameter | P1 |
+| prompt_caching | ❌ | ❌ | missing_parameter | P1 |
 
 ---
 
-## 总结：需要修正的文件
+## 六、汇总
 
-| 文件 | 主要修正内容 |
-|------|------------|
-| capability_profiles.json | 全面升级 model_notes 结构，增加 source/recommendation_level/best_for/not_best_for/notes |
-| capability_workflows.json | 关键参数补全 |
-| capability_scenarios.json | recommended_models 标注来源和推荐理由 |
-| check_capability_profiles.py | 增加新字段校验 |
+### 6.1 missing_capability 列表
 
-## source 可选值
-- `official_docs` - 官方文档标注
-- `token_plan_verified` - Token Plan 已验收
-- `local_config` - 本地配置
-- `historical_compat` - 历史兼容
-- `risk_warning` - 风险警示
+| capability_id | 官网文档 | Priority |
+|-------------|---------|---------|
+| video-fl2v | video-generation-fl2v.md | P1 |
+| video-agent-create | video-agent-create.md | P2 |
+| video-agent-query | video-agent-query.md | P2 |
+| anthropic-active-cache | anthropic-api-compatible-cache.md | P1 |
+| prompt-caching | text-prompt-caching.md | P1 |
 
-## recommendation_level 可选值
-- `official_primary` - 官方首选/推荐
-- `official_current` - 官方当前最新
-- `verified_stable` - 已验收稳定
-- `low_latency` - 低延迟
-- `high_quality` - 高质量
-- `quota_friendly` - 额度友好
-- `compatible` - 兼容性好
-- `guarded` - 需要确认
-- `free_tier` - 免费版
-- `not_default` - 不默认执行
+### 6.2 missing_model 列表
+
+（无 - 所有官网模型均已在 models.yaml 中）
+
+### 6.3 wrong_protocol 列表
+
+| model | models.yaml protocols | 实际（根据 /v1/models） | Priority |
+|------|----------------------|----------------------|---------|
+| MiniMax-M2.7 | [openai] | [openai, anthropic] | P0 |
+| MiniMax-M2.5 | [openai] | [openai, anthropic] | P0 |
+| MiniMax-M2.1 | [openai] | [openai, anthropic] | P0 |
+| MiniMax-M2 | [openai] | [openai, anthropic] | P0 |
+
+### 6.4 runner_incomplete 列表
+
+| capability_id | 缺失内容 | Priority |
+|-------------|---------|---------|
+| chat-anthropic | 仅 3 模型，缺 system/temperature/top_p/thinking/tools/tool_choice/metadata | P0 |
+| chat-openai | 仅 3 模型，缺 thinking/reasoning_split/top_p/tools/tool_choice | P0 |
+| chat-responses-create | 仅 3 模型，缺 input_modality/output_modality/reasoning/thinking | P1 |
+| tts-sync | 缺 emotion/voice_modify/aigc_watermark/subtitle_enable | P2 |
+
+### 6.5 high_risk_by_design 列表
+
+（无 - 所有高风险能力均已标注 warning_only / out_of_scope）
+
+### 6.6 out_of_scope_by_design 列表
+
+| capability_id | 说明 |
+|-------------|------|
+| voice-clone-do | 高成本，需认证和资产 |
+| voice-design | 需付费确认 |
+| voice-delete | 破坏性操作 |
+| voice-clone-upload-audio | 需上传资产 |
+| voice-clone-upload-prompt | 需上传资产 |
+| video-t2v | 高消耗，长任务 |
+| video-i2v | 高消耗，长任务 |
+| video-s2v | 高消耗，长任务 |
+| video-query | 仅查询已有任务 |
+| video-download | 仅下载已有视频 |
+| music-cover-prep | 需资产和版权确认 |
+| file-delete | 破坏性操作 |
+
+### 6.7 token_plan_unknown 列表
+
+| 能力 | 说明 |
+|------|------|
+| Claude Code | Token Plan 集成，需单独审计 |
+| Codex | Token Plan 集成，需单独审计 |
+| Cursor | Token Plan 集成，需单独审计 |
+| TRAE | Token Plan 集成，需单独审计 |
+| OpenClaw | Token Plan 集成，需单独审计 |
+| Hermes Agent | Token Plan 集成，需单独审计 |
+| MiniMax CLI | Token Plan 集成，需单独审计 |
+| Token Plan MCP | Token Plan 集成，需单独审计 |
+
+---
+
+## 七、对齐结论
+
+### 7.1 Anthropic 对齐结论
+
+**官网支持 8 个 M 系列模型，本项目 Runner 只暴露 3 个，且 protocols 标注错误（4 个模型标注为仅 openai，实际支持 anthropic）。**
+
+- **P0 问题**：M2.7 / M2.5 / M2.1 / M2 的 `protocols` 在 models.yaml 中错误标注为仅 `[openai]`，实际 `/v1/models` 返回显示支持 Anthropic
+- **P1 问题**：Runner 表单缺失 system / temperature / top_p / thinking / tools / tool_choice / metadata 等核心参数
+- **P1 问题**：缺少 anthropic-active-cache capability
+
+### 7.2 OpenAI Chat 对齐结论
+
+**Runner 表单缺失多个关键参数（thinking, reasoning_split, top_p, tools, tool_choice, stream_options）。**
+
+- **P0 问题**：模型下拉只有 3 个，缺失 5 个已支持 OpenAI 的模型
+- **P1 问题**：缺少 thinking / reasoning_split / top_p / tools / tool_choice 参数
+
+### 7.3 Responses 对齐结论
+
+**Runner 表单基本 smoke，缺失 input_modality / output_modality / reasoning / thinking / prompt_caching 等参数。**
+
+- **P1 问题**：参数暴露不完整，建议补充说明官方推荐 M3 的原因
+
+### 7.4 图像对齐结论
+
+**基本对齐，image-i2i 的 reference_mode UI 设计与官网 API 语义需确认一致性。**
+
+- **P1 问题**：image-01-live 不支持 width/height，UI 未标注此限制
+
+### 7.5 语音对齐结论
+
+**基本对齐，tts-sync 缺 emotion / voice_modify 等高级参数说明。**
+
+- **P2 问题**：2.8 不支持 whisper/fluent，2.6 不支持 sound_effects，UI 未区分
+
+### 7.6 音乐对齐结论
+
+**基本对齐，music-cover-prep 标注 warning_only 准确。**
+
+### 7.7 文件对齐结论
+
+**完全对齐，无问题。**
+
+### 7.8 视频对齐结论
+
+**video-fl2v（首尾帧视频）和 video-agent-create/query 完全缺失（missing_capability）。**
+
+- **P1 问题**：video-fl2v 缺失
+- **P2 问题**：video-agent-create/query 缺失（高成本高风险，建议 scope=out_of_scope）
+
+### 7.9 模型矩阵结论
+
+**M2.7 / M2.5 / M2.1 / M2 的 protocols 标注错误（P0）。** 其他模型协议标注基本正确。
+
+---
+
+## 八、修复建议
+
+### P0（立即修复）
+
+| 编号 | 问题 | 修复文件 | 建议操作 |
+|------|------|---------|---------|
+| P0-1 | M2.7/M2.5/M2.1/M2 protocols=[openai] 错误 | models.yaml | 改为 protocols=[openai, anthropic] |
+| P0-2 | chat-anthropic Runner 模型下拉只有 3 个 | capability_runner_templates.json | 补全 8 个 M 系列模型 |
+| P0-3 | chat-openai Runner 模型下拉只有 3 个 | capability_runner_templates.json | 补全 8 个 M 系列模型 |
+
+### P1（下一迭代修复）
+
+| 编号 | 问题 | 修复文件 | 建议操作 |
+|------|------|---------|---------|
+| P1-1 | chat-anthropic 缺 system/temperature/top_p/thinking/tools/tool_choice/metadata | capability_runner_templates.json | 补全 Advanced Test 表单 |
+| P1-2 | chat-openai 缺 thinking/reasoning_split/top_p/tools/tool_choice | capability_runner_templates.json | 补全 Advanced Test 表单 |
+| P1-3 | chat-responses-create 缺 input_modality/output_modality/reasoning/thinking | capability_runner_templates.json | 补全 Advanced Test 表单 |
+| P1-4 | 缺 anthropic-active-cache capability | capabilities.yaml | 新增 capability |
+| P1-5 | 缺 prompt-caching capability | capabilities.yaml | 新增 capability |
+| P1-6 | 缺 video-fl2v capability | capabilities.yaml + models.yaml | 新增 capability，scope=out_of_scope |
+| P1-7 | image-01-live 不支持 width/height 未标注 | capability_runner_templates.json 或 UI | 在 model note 中补充说明 |
+
+### P2（标注优化）
+
+| 编号 | 问题 | 修复文件 | 建议操作 |
+|------|------|---------|---------|
+| P2-1 | tts-sync 缺 emotion/voice_modify 参数区分说明 | capability_runner_templates.json | 在 model options 中补充说明 2.6 vs 2.8 差异 |
+| P2-2 | 缺 video-agent-create/query capability | capabilities.yaml | 新增，scope=out_of_scope |
+| P2-3 | 需补充 Token Plan 各工具集成说明 | 文档 | Token Plan 工具链单独审计 |
+
+### P3（观察）
+
+| 编号 | 问题 | 建议操作 |
+|------|------|---------|
+| P3-1 | speech 族 live_available=null | 需真实 API 探针验证 |
+| P3-2 | image 族 live_available=null | 需真实 API 探针验证 |
+| P3-3 | video 族 live_available=null | 需真实 API 探针验证 |
+| P3-4 | Token Plan 工具链状态 | 需官方文档确认 |
+
+---
+
+## 九、审计元数据
+
+| 字段 | 值 |
+|------|-----|
+| 审计日期 | 2026-06-08 |
+| 审计分支 | feature/official-docs-alignment-audit |
+| base commit | 7abf66b |
+| 官网文档索引 | https://platform.minimaxi.com/docs/llms.txt |
+| 官网 API categories | 文本(Anthropic/OpenAI/Responses) / 语音 / 图像 / 音乐 / 文件 / 视频 / 模型 / Token Plan |
+| 官网 official capabilities 总数 | ~40+ |
+| 本项目 registered capabilities | ~30 |
+| missing_capability | 5 |
+| wrong_protocol | 4 (model-level) |
+| runner_incomplete | 4 |
+| out_of_scope_by_design | 12 |
+| high_risk_by_design | 0 |
+| token_plan_unknown | 8 (工具链) |
+| needs_real_probe | 6+ (非 chat 模型 live 状态) |
+| P0 issues | 3 |
+| P1 issues | 7 |
+| P2 issues | 3 |
+| P3 issues | 4+ |
