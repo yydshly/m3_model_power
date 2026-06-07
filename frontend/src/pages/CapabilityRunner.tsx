@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { invoke, riskCheck, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
@@ -191,6 +191,44 @@ function clearHandoff(capId: string) {
   sessionStorage.removeItem(`${HANDOFF_PREFIX}${capId}`)
 }
 
+function clearHandoffFields(capId: string, keys: string[]) {
+  const existing = loadHandoff(capId)
+  const remaining = Object.fromEntries(
+    Object.entries(existing).filter(([k]) => !keys.includes(k))
+  )
+  if (Object.keys(remaining).length) {
+    saveHandoff(capId, remaining)
+  } else {
+    clearHandoff(capId)
+  }
+}
+
+// ── Clipboard feedback ─────────────────────────────────────────────────────────
+
+type ClipboardFeedback = 'idle' | 'success' | 'error'
+
+function CopyButton({ text, children }: { text: string; children: ReactNode }) {
+  const [fb, setFb] = useState<ClipboardFeedback>('idle')
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setFb('success')
+      setTimeout(() => setFb('idle'), 2000)
+    }).catch(() => {
+      setFb('error')
+      setTimeout(() => setFb('idle'), 2000)
+    })
+  }
+
+  return (
+    <button onClick={handleCopy} className="text-sky-600 hover:underline disabled:opacity-50">
+      {children}
+      {fb === 'success' && <span className="ml-1 text-[10px] text-emerald-600">✓ 已复制</span>}
+      {fb === 'error' && <span className="ml-1 text-[10px] text-red-600">✗ 复制失败</span>}
+    </button>
+  )
+}
+
 // ── Risk level badge ───────────────────────────────────────────────────────────
 
 const RISK_BADGE: Record<string, { text: string; cls: string }> = {
@@ -249,74 +287,44 @@ function getFieldValue(key: string, schema: FormSchema, values: Record<string, s
   return raw
 }
 
-// ── Type-aware payload builder ─────────────────────────────────────────────────
+// ── Recursive template value resolver ───────────────────────────────────────────
+
+function resolveTemplateValue(
+  val: unknown,
+  values: Record<string, string>,
+  schema: FormSchema,
+): unknown {
+  if (typeof val === 'string') {
+    const exact = val.match(/^\{(\w+)\}$/)
+    if (exact) return getFieldValue(exact[1], schema, values)
+    return val.replace(/\{(\w+)\}/g, (_, k) => {
+      const v = getFieldValue(k, schema, values)
+      return typeof v === 'string' ? v : String(v)
+    })
+  }
+
+  if (Array.isArray(val)) {
+    return val.map(item => resolveTemplateValue(item, values, schema))
+  }
+
+  if (val && typeof val === 'object') {
+    return Object.fromEntries(
+      Object.entries(val as Record<string, unknown>).map(([k, v]) => [
+        k,
+        resolveTemplateValue(v, values, schema),
+      ])
+    )
+  }
+
+  return val
+}
 
 function buildPayload(
   template: Record<string, unknown>,
   values: Record<string, string>,
   schema: FormSchema,
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-
-  for (const [key, val] of Object.entries(template)) {
-    if (typeof val === 'string') {
-      const exact = val.match(/^\{(\w+)\}$/)
-      if (exact) {
-        result[key] = getFieldValue(exact[1], schema, values)
-      } else {
-        result[key] = val.replace(/\{(\w+)\}/g, (_, k) => {
-          const v = getFieldValue(k, schema, values)
-          return typeof v === 'string' ? v : String(v)
-        })
-      }
-    } else if (Array.isArray(val)) {
-      result[key] = val.map((item) => {
-        if (typeof item === 'string') {
-          const exact = item.match(/^\{(\w+)\}$/)
-          if (exact) return getFieldValue(exact[1], schema, values)
-          return item.replace(/\{(\w+)\}/g, (_, k) => {
-            const v = getFieldValue(k, schema, values)
-            return typeof v === 'string' ? v : String(v)
-          })
-        }
-        if (typeof item === 'object' && item !== null) {
-          const copy: Record<string, unknown> = {}
-          for (const [mk, mv] of Object.entries(item as Record<string, unknown>)) {
-            if (typeof mv === 'string') {
-              const exact = mv.match(/^\{(\w+)\}$/)
-              if (exact) copy[mk] = getFieldValue(exact[1], schema, values)
-              else copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => {
-                const v = getFieldValue(k, schema, values)
-                return typeof v === 'string' ? v : String(v)
-              })
-            } else {
-              copy[mk] = mv
-            }
-          }
-          return copy
-        }
-        return item
-      })
-    } else if (typeof val === 'object' && val !== null) {
-      const copy: Record<string, unknown> = {}
-      for (const [mk, mv] of Object.entries(val as Record<string, unknown>)) {
-        if (typeof mv === 'string') {
-          const exact = mv.match(/^\{(\w+)\}$/)
-          if (exact) copy[mk] = getFieldValue(exact[1], schema, values)
-          else copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => {
-            const v = getFieldValue(k, schema, values)
-            return typeof v === 'string' ? v : String(v)
-          })
-        } else {
-          copy[mk] = mv
-        }
-      }
-      result[key] = copy
-    } else {
-      result[key] = val
-    }
-  }
-  return result
+  return resolveTemplateValue(template, values, schema) as Record<string, unknown>
 }
 
 // ── Form renderer ─────────────────────────────────────────────────────────────
@@ -425,17 +433,13 @@ function ResultBanner({ resultType, data }: { resultType: string; data: unknown 
     )
   }
   if (resultType === 'image') {
+    const imgUrl = extractImageUrl(data)
     return (
       <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200 text-xs text-violet-700">
         <strong>🖼 图片结果</strong>
-        {extractImageUrl(data) && (
+        {imgUrl && (
           <div className="mt-1">
-            <button
-              onClick={() => navigator.clipboard.writeText(extractImageUrl(data))}
-              className="text-sky-600 hover:underline"
-            >
-              复制图片 URL
-            </button>
+            <CopyButton text={imgUrl}>复制图片 URL</CopyButton>
           </div>
         )}
       </div>
@@ -481,12 +485,9 @@ function VoiceListHint({ data, onUseVoiceId }: { data: unknown; onUseVoiceId: (v
       <div className="space-y-1 max-h-48 overflow-y-auto">
         {voices.map((v, i) => (
           <div key={i} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1.5">
-            <button
-              onClick={() => navigator.clipboard.writeText(v.voice_id)}
-              className="text-xs font-mono text-sky-600 hover:text-sky-800 hover:underline"
-            >
-              {v.voice_id}
-            </button>
+            <CopyButton text={v.voice_id}>
+              <span className="text-xs font-mono">{v.voice_id}</span>
+            </CopyButton>
             {v.name && <span className="text-[10px] text-slate-400 truncate flex-1">{v.name}</span>}
             <button
               onClick={() => onUseVoiceId(v.voice_id)}
@@ -560,6 +561,21 @@ function InvokeResultView({
 
   const bizErr = extractBusinessError(result.data)
 
+  // Business error: hide results, show only error
+  if (bizErr) {
+    return (
+      <div className="mt-3 p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+        <strong>业务错误：</strong>{bizErr}
+        <details className="mt-2 text-[10px] text-slate-500">
+          <summary>完整响应 JSON</summary>
+          <pre className="mt-1 text-[10px] overflow-auto max-h-40 whitespace-pre-wrap">
+            {JSON.stringify(result.data, null, 2)}
+          </pre>
+        </details>
+      </div>
+    )
+  }
+
   return (
     <div className="mt-4">
       <ResultBanner resultType={resultType} data={result.data} />
@@ -623,12 +639,6 @@ function InvokeResultView({
       <div className="mt-3">
         <AssetResultPreview data={result.data} />
       </div>
-
-      {bizErr && (
-        <div className="mt-2 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-          <strong>业务错误：</strong>{bizErr}
-        </div>
-      )}
     </div>
   )
 }
@@ -663,11 +673,13 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
 function CapabilityCard({
   template,
   initialValues,
+  handoffKeys,
   onBack,
   onChainNavigate,
 }: {
   template: RunnerTemplate
   initialValues?: Record<string, string>
+  handoffKeys?: string[]
   onBack: () => void
   onChainNavigate: (capId: string) => void
 }) {
@@ -683,6 +695,20 @@ function CapabilityCard({
   const disabledReason = getExecutionDisabled(template, values)
 
   const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
+
+  const handleClearHandoffField = (key: string) => {
+    handleChange(key, template.form_schema[key]?.default ?? '')
+    if (handoffKeys?.includes(key)) {
+      clearHandoffFields(template.capability_id, [key])
+    }
+  }
+
+  // Show handoff banner if any fields came from handoff
+  const activeHandoffKeys = (handoffKeys ?? []).filter(k => values[k]?.trim())
+  const confirmKey = template.capability_id === 'music-gen'
+    ? 'confirm_quota' : template.capability_id === 'image-i2i'
+    ? 'confirm_asset_source' : null
+  const confirmChecked = confirmKey ? values[confirmKey] === 'true' : null
 
   const handleRun = async () => {
     if (disabledReason) return
@@ -752,6 +778,20 @@ function CapabilityCard({
         )}
       </div>
       <div className="px-5 py-4">
+        {/* Handoff visibility bar */}
+        {activeHandoffKeys.length > 0 && (
+          <div className="mb-3 p-2 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
+            <strong>已从上一步带入：</strong>{' '}
+            {activeHandoffKeys.join('、')}
+            <button
+              onClick={() => activeHandoffKeys.forEach(k => handleClearHandoffField(k))}
+              className="ml-2 text-sky-600 hover:underline"
+            >
+              清除带入内容
+            </button>
+          </div>
+        )}
+
         {/* Guard warnings */}
         {template.capability_id === 'tts-sync' && !values['voice_id']?.trim() && (
           <div className="mb-3 p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
@@ -766,15 +806,19 @@ function CapabilityCard({
           </div>
         )}
 
-        {resultType === 'image' && runState !== 'done' && (
-          <div className="mb-3 p-2 rounded bg-violet-50 border border-violet-100 text-xs text-violet-600">
-            💡 此能力会消耗 Token Plan 额度，请确认后再执行。
+        {template.capability_id === 'music-gen' && runState !== 'done' && (
+          <div className={`mb-3 p-2 rounded border text-xs ${confirmChecked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-orange-50 border-orange-100 text-orange-600'}`}>
+            {confirmChecked
+              ? '✓ 已确认，音乐生成会消耗 Token Plan 额度，可执行'
+              : '⚠ 该能力会消耗 Token Plan 额度，请勾选确认后再执行'}
           </div>
         )}
 
-        {template.capability_id === 'music-gen' && runState !== 'done' && (
-          <div className="mb-3 p-2 rounded bg-orange-50 border border-orange-100 text-xs text-orange-600">
-            💡 音乐生成会消耗 Token Plan 额度，请勾选确认后再执行。
+        {template.capability_id === 'image-i2i' && runState !== 'done' && (
+          <div className={`mb-3 p-2 rounded border text-xs ${confirmChecked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-orange-50 border-orange-100 text-orange-600'}`}>
+            {confirmChecked
+              ? '✓ 已确认，参考图片来源合法，可执行'
+              : '⚠ 该能力会使用参考图片，请确认图片来源合法后勾选确认'}
           </div>
         )}
 
@@ -896,12 +940,9 @@ function CapabilitySelector({ onSelect, capabilities }: { onSelect: (id: string)
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page (loads templates only, all hooks before any returns) ─────────────
 
 export default function CapabilityRunnerPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const selected = searchParams.get('capability')
-
   const [templates, setTemplates] = useState<Record<string, RunnerTemplate> | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -912,6 +953,19 @@ export default function CapabilityRunnerPage() {
       .catch((e: any) => { setLoadError(e?.message ?? String(e)); setLoading(false) })
   }, [])
 
+  if (loading) return <div className="p-8 text-sm text-slate-500">加载中…</div>
+  if (loadError) return <div className="p-8 text-sm text-red-600">加载失败：{loadError}</div>
+  if (!templates) return <div className="p-8 text-sm text-slate-500">无数据</div>
+
+  return <CapabilityRunnerLoaded templates={templates} />
+}
+
+// ── Inner page (handles selection, handoff, UI — no loading hooks here) ─────────
+
+function CapabilityRunnerLoaded({ templates }: { templates: Record<string, RunnerTemplate> }) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selected = searchParams.get('capability')
+
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
   }
@@ -919,10 +973,6 @@ export default function CapabilityRunnerPage() {
   const handleBack = () => {
     setSearchParams({})
   }
-
-  if (loading) return <div className="p-8 text-sm text-slate-500">加载中…</div>
-  if (loadError) return <div className="p-8 text-sm text-red-600">加载失败：{loadError}</div>
-  if (!templates) return <div className="p-8 text-sm text-slate-500">无数据</div>
 
   const supportedCapabilities = Object.keys(templates)
 
@@ -936,9 +986,13 @@ export default function CapabilityRunnerPage() {
 
   // Merge: URL params > sessionStorage handoff
   const selectedId = selected as string
+  const storedHandoff = selectedTemplate ? loadHandoff(selectedId) : {}
   const initialValues = selectedTemplate
-    ? { ...loadHandoff(selectedId), ...queryInitialValues }
+    ? { ...storedHandoff, ...queryInitialValues }
     : {}
+
+  // handoffKeys: which fields came from sessionStorage handoff (not URL params)
+  const handoffKeys = Object.keys(storedHandoff)
 
   // Clear handoff after loading to prevent stale reuse
   useEffect(() => {
@@ -963,6 +1017,7 @@ export default function CapabilityRunnerPage() {
               key={selected}
               template={selectedTemplate}
               initialValues={initialValues}
+              handoffKeys={handoffKeys}
               onBack={handleBack}
               onChainNavigate={handleSelect}
             />
