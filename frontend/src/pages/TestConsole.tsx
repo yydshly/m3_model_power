@@ -16,6 +16,7 @@ import {
 } from '../api'
 import { useRegistry } from '../store'
 import AssetResultPreview from '../components/AssetResultPreview'
+import HistoryAssetPreview from '../components/HistoryAssetPreview'
 
 // ── Confirmation logic (mirrors InvokePanel.tsx) ───────────────────────
 
@@ -403,6 +404,9 @@ export default function TestConsole() {
   const [search, setSearch] = useState<string>('')
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'>('all')
+  const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
 
   // Support ?capability=xxx URL param to auto-select a capability
@@ -544,14 +548,34 @@ export default function TestConsole() {
 
       {/* ── History Panel ── */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="font-semibold text-slate-800">调用历史</h3>
-          <button
-            onClick={refreshHistory}
-            className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-          >
-            刷新历史
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={filterHistoryAction}
+              onChange={e => setFilterHistoryAction(e.target.value as typeof filterHistoryAction)}
+              className="border border-slate-300 rounded px-2 py-1 text-xs"
+            >
+              <option value="all">全部动作</option>
+              <option value="risk_check">Risk Check</option>
+              <option value="invoke">Invoke</option>
+            </select>
+            <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={filterHistoryHasAssets}
+                onChange={e => setFilterHistoryHasAssets(e.target.checked)}
+                className="rounded"
+              />
+              有资产
+            </label>
+            <button
+              onClick={refreshHistory}
+              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+            >
+              刷新
+            </button>
+          </div>
         </div>
 
         {historyErr && (
@@ -561,28 +585,123 @@ export default function TestConsole() {
         {history.length === 0 && !historyErr ? (
           <p className="text-sm text-slate-400">暂无历史记录</p>
         ) : (
-          <div className="space-y-1 max-h-64 overflow-y-auto">
-            {history.map((item) => {
-              const ok = item.result?.ok ?? item.result?.allowed ?? false
-              const err = item.result?.error ?? (item.result?.blocked_reasons?.length ? item.result.blocked_reasons.join('; ') : null)
-              const time = item.created_at ? new Date(item.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : ''
-              return (
-                <div key={item.id} className="flex items-start gap-3 text-xs border-b border-slate-100 pb-1 last:border-0">
-                  <span className="text-slate-400 shrink-0 w-20">{time}</span>
-                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${item.action === 'risk_check' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                    {item.action === 'risk_check' ? 'RC' : 'INV'}
-                  </span>
-                  <span className="font-mono text-slate-700">{item.capability_id}</span>
-                  <span className={`shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
-                    {ok ? '✓' : '✗'}
-                  </span>
-                  {err && <span className="text-red-500 truncate">{err}</span>}
-                  <span className="ml-auto text-slate-400 shrink-0">
-                    {item.payload_summary.payload_size_chars > 0 ? `${item.payload_summary.payload_size_chars} chars` : ''}
-                  </span>
-                </div>
-              )
-            })}
+          <div className="space-y-1 max-h-80 overflow-y-auto">
+            {history
+              .filter(item => {
+                if (filterHistoryAction !== 'all' && item.action !== filterHistoryAction) return false
+                if (filterHistoryHasAssets && !item.result_summary?.asset_count) return false
+                return true
+              })
+              .map((item) => {
+                const ok = item.result?.ok ?? item.result?.allowed ?? false
+                const time = item.created_at
+                  ? new Date(item.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : ''
+                const dateStr = item.created_at
+                  ? new Date(item.created_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+                  : ''
+                const isExpanded = expandedHistoryId === item.id
+                return (
+                  <div key={item.id} className="border border-slate-100 rounded-lg bg-white overflow-hidden">
+                    {/* Header row — always visible */}
+                    <button
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-slate-50 text-left"
+                      onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                    >
+                      <span className="text-slate-400 shrink-0 w-16">{dateStr}</span>
+                      <span className="text-slate-400 shrink-0 w-16">{time}</span>
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${item.action === 'risk_check' ? 'bg-sky-100 text-sky-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                        {item.action === 'risk_check' ? 'RC' : 'INV'}
+                      </span>
+                      <span className="font-mono text-slate-700">{item.capability_id}</span>
+                      {item.result_summary?.output_type && item.result_summary.output_type !== 'unknown' && (
+                        <span className="shrink-0 px-1 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]">
+                          {item.result_summary.output_type}
+                        </span>
+                      )}
+                      {item.result_summary?.asset_count ? (
+                        <span className="shrink-0 text-[10px] text-slate-400">
+                          {item.result_summary.asset_count} asset{item.result_summary.asset_count !== 1 ? 's' : ''}
+                        </span>
+                      ) : null}
+                      <span className={`ml-auto shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
+                        {ok ? '✓' : '✗'}
+                      </span>
+                      <span className="shrink-0 text-slate-300">{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="px-4 pb-3 pt-1 border-t border-slate-100 space-y-3 text-xs">
+                        {/* Error message */}
+                        {!ok && item.result?.error && (
+                          <div className="bg-red-50 border border-red-200 rounded p-2 text-red-700">
+                            <strong>错误：</strong>{item.result.error}
+                            {item.result.blocked_reasons?.length ? (
+                              <div className="mt-1">阻断原因：{item.result.blocked_reasons.join('；')}</div>
+                            ) : null}
+                            {item.result.required_confirmations?.length ? (
+                              <div className="mt-1">需要确认：{item.result.required_confirmations.join('、')}</div>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {/* Payload summary */}
+                        <div>
+                          <p className="font-medium text-slate-700 mb-1">Payload</p>
+                          <div className="bg-slate-100 rounded p-2 space-y-1">
+                            <div>keys: {item.payload_summary.payload_keys.join(', ') || '(无)'}</div>
+                            {item.payload_summary.payload_preview && (
+                              <div className="text-slate-600 font-mono whitespace-pre-wrap break-all">
+                                {item.payload_summary.payload_preview}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Confirmations */}
+                        {item.confirmations && Object.keys(item.confirmations).length > 0 && (
+                          <div>
+                            <p className="font-medium text-slate-700 mb-1">Confirmations</p>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(item.confirmations).map(([k, v]) => (
+                                <span key={k} className={`px-1.5 py-0.5 rounded text-[10px] ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                  {k}: {String(v)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Result summary / assets */}
+                        {item.result_summary && (
+                          <div>
+                            <p className="font-medium text-slate-700 mb-1">结果摘要</p>
+                            <div className="bg-slate-100 rounded p-2">
+                              {item.result_summary.output_type && (
+                                <div className="mb-1">output_type: <span className="text-slate-700">{item.result_summary.output_type}</span></div>
+                              )}
+                              {item.result_summary.text_preview && (
+                                <div className="mb-1 text-slate-600 italic truncate">
+                                  文本：{item.result_summary.text_preview}
+                                </div>
+                              )}
+                              <HistoryAssetPreview result_summary={item.result_summary} rawResult={item.result} />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* result_warning */}
+                        {item.result?.warnings && item.result.warnings.length > 0 && (
+                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-yellow-700">
+                            warnings: {item.result.warnings.join('；')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
           </div>
         )}
       </div>

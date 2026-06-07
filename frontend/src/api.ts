@@ -282,6 +282,24 @@ export type TestConsoleHistoryItem = {
     required_confirmations?: string[]
     warnings?: string[]
   }
+  result_summary?: {
+    ok?: boolean | null
+    error?: string | null
+    message?: string | null
+    output_type?: string
+    asset_count?: number
+    assets?: Array<{
+      type: 'image' | 'audio' | 'file' | 'unknown'
+      url: string | null
+      label: string
+      file_id?: string | null
+      filename?: string | null
+      mime_type?: string | null
+      content_length?: number | null
+    }>
+    text_preview?: string | null
+    raw_keys?: string[]
+  }
 }
 
 export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestConsoleHistoryItem[] }> {

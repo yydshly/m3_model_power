@@ -94,6 +94,6 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
         capability_id=cap_id,
         payload=payload,
         confirmations=confirmations,
-        result={"ok": True},
+        result={"ok": True, "data": result},
     )
     return JSONResponse(content=content)
