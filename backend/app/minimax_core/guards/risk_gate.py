@@ -151,21 +151,33 @@ def evaluate_capability_risk(
 
         # tts-async 的 is_long_running 保护由字符数逻辑覆盖，不再单独阻断
     else:
-        # ── 2. 长任务确认（is_long_running）──────────────────────────────────
+        # ── 2. quota_sensitive + explicit confirmation → quota confirm ────────
+        if (
+            bp.billing_category == "quota_sensitive"
+            and bp.requires_explicit_confirmation
+            and not confirmations.get(CONFIRM_QUOTA, False)
+            and not payload.get(CONFIRM_QUOTA, False)
+        ):
+            blocked_reasons.append(
+                f"{capability.id}: billing_category=quota_sensitive and requires_explicit_confirmation=true but confirm_quota=false"
+            )
+            required_confirmations.append(CONFIRM_QUOTA)
+
+        # ── 3. 长任务确认（is_long_running）────────────────────────────────
         if op.is_long_running and not confirmations.get(CONFIRM_LONG_RUNNING, False):
             blocked_reasons.append(
                 f"{capability.id}: operation_policy.is_long_running=true but confirm_long_running=false"
             )
             required_confirmations.append(CONFIRM_LONG_RUNNING)
 
-    # ── 3. 付费确认（may_charge_extra）─────────────────────────────────────────
+    # ── 4. 付费确认（may_charge_extra）─────────────────────────────────────────
     if bp.may_charge_extra and not confirmations.get(CONFIRM_PAID, False):
         blocked_reasons.append(
             f"{capability.id}: billing_policy.may_charge_extra=true but confirm_paid=false"
         )
         required_confirmations.append(CONFIRM_PAID)
 
-    # ── 4. 高成本确认（billing_category=high_cost_confirm_required）────────────
+    # ── 5. 高成本确认（billing_category=high_cost_confirm_required）────────────
     if bp.billing_category == "high_cost_confirm_required" and not confirmations.get(
         CONFIRM_HIGH_COST, False
     ):
@@ -174,21 +186,21 @@ def evaluate_capability_risk(
         )
         required_confirmations.append(CONFIRM_HIGH_COST)
 
-    # ── 5. 破坏性确认（is_destructive）────────────────────────────────────────
+    # ── 6. 破坏性确认（is_destructive）────────────────────────────────────────
     if op.is_destructive and not confirmations.get(CONFIRM_DESTRUCTIVE, False):
         blocked_reasons.append(
             f"{capability.id}: operation_policy.is_destructive=true but confirm_destructive=false"
         )
         required_confirmations.append(CONFIRM_DESTRUCTIVE)
 
-    # ── 6. 素材来源确认（requires_uploaded_asset）─────────────────────────────
+    # ── 7. 素材来源确认（requires_uploaded_asset）─────────────────────────────
     if op.requires_uploaded_asset and not confirmations.get(CONFIRM_ASSET_SOURCE, False):
         blocked_reasons.append(
             f"{capability.id}: operation_policy.requires_uploaded_asset=true but confirm_asset_source=false"
         )
         required_confirmations.append(CONFIRM_ASSET_SOURCE)
 
-    # ── 7. 已有任务确认（requires_existing_task）──────────────────────────────
+    # ── 8. 已有任务确认（requires_existing_task）──────────────────────────────
     if op.requires_existing_task:
         task_id = payload.get("task_id") or payload.get("file_id")
         if not task_id:
@@ -216,6 +228,8 @@ def capability_requires_any_confirmation(capability: CapabilitySpec) -> bool:
     if bp.may_charge_extra:
         return True
     if bp.billing_category == "high_cost_confirm_required":
+        return True
+    if bp.billing_category == "quota_sensitive" and bp.requires_explicit_confirmation:
         return True
     if bp.requires_explicit_confirmation:
         return True
@@ -249,6 +263,8 @@ def get_required_confirmations(capability: CapabilitySpec) -> list[str]:
             required.append(CONFIRM_PAID)
         if bp.billing_category == "high_cost_confirm_required":
             required.append(CONFIRM_HIGH_COST)
+        if bp.billing_category == "quota_sensitive" and bp.requires_explicit_confirmation:
+            required.append(CONFIRM_QUOTA)
         if op.is_destructive:
             required.append(CONFIRM_DESTRUCTIVE)
         if op.requires_uploaded_asset:

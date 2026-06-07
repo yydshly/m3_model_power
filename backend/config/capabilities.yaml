@@ -865,13 +865,13 @@ capabilities:
   - music
   cost_level: medium
   billing_policy:
-    billing_category: normal_token_plan_test
-    requires_explicit_confirmation: false
+    billing_category: quota_sensitive
+    requires_explicit_confirmation: true
     may_charge_extra: false
     consumes_token_plan_quota: true
     requires_certification: false
     requires_uploaded_asset: false
-    billing_note: TokenPlanPlus 极速档共享配额，已完成 model_level 验收（music-2.6）
+    billing_note: TokenPlanPlus 音乐生成会消耗音乐额度；Runner 默认要求 confirm_quota=true 后才执行
     official_pricing_note: ''
   operation_policy:
     operation_risk: normal
