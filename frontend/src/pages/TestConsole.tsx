@@ -14,7 +14,7 @@ import {
   type VerificationSummary,
 } from '../api'
 import { useRegistry } from '../store'
-import { JsonView } from '../components/JsonView'
+import AssetResultPreview from '../components/AssetResultPreview'
 
 // ── Confirmation logic (mirrors InvokePanel.tsx) ───────────────────────
 
@@ -377,7 +377,7 @@ function InvokePanel({
 
       {result && (
         <div className="mt-3">
-          <JsonView data={result} />
+          <AssetResultPreview data={result} />
         </div>
       )}
     </div>
