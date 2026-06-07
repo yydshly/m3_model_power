@@ -370,12 +370,11 @@
         {
           "step_id": "chat_invoke",
           "label": "发起对话",
-          "type": "capability",
+          "type": "parameter",
           "capability_id": "chat-openai / chat-anthropic / chat-responses-create",
-          "action": "invoke",
           "input": "model + messages + max_tokens + temperature + stream",
-          "output": "对话文本回复（流式或完整）",
-          "next_usage": "展示回复内容",
+          "output": "确认对话参数",
+          "next_usage": "填入 chat 的必填参数",
           "risk_level": "safe"
         },
         {
