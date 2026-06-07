@@ -494,7 +494,11 @@ export default function CapabilityPage() {
       ) : models.length > 0 ? (
         <section className="mt-6">
           <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
-          <div className="text-[10px] text-slate-400 mb-2">这里只显示当前 capability 可用模型，不代表 Token Plan 全量模型。</div>
+          <div className="text-[10px] text-slate-400 mb-2">
+            按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。
+            默认选择优先成本友好模型，不代表官方推荐模型。
+            Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。
+          </div>
           <div className="flex flex-wrap gap-2">
             {models.map((m) => (
               <span key={m.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-xs">

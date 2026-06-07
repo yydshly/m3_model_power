@@ -31,9 +31,11 @@ export function QuotaBadge({ eligible }: { eligible: boolean }) {
       className={`inline-block px-1.5 py-0.5 text-[10px] rounded ${
         eligible ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
       }`}
-      title={eligible ? '走 TokenPlanPlus 共享配额' : '按 token 单独计费，不走极速档配额'}
+      title={eligible
+        ? '走 TokenPlanPlus 极速档共享额度'
+        : '不走极速档共享额度，按模型标准计量；不等于一定产生额外收费'}
     >
-      {eligible ? '走配额' : '另计费'}
+      {eligible ? '极速额度' : '标准计量'}
     </span>
   )
 }
