@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { invoke, riskCheck, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
+import AssetResultPreview from '../components/AssetResultPreview'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,43 +175,6 @@ function InvokeResultView({ result }: { result: InvokeResult }) {
       <AssetResultPreview data={result.data} />
     </div>
   )
-}
-
-// ── Asset Result Preview (inline, avoids import issue) ────────────────────────
-
-function AssetResultPreview({ data }: { data: unknown }) {
-  if (!data) return null
-  const d = data as Record<string, unknown>
-  if (d.audio_url) return (
-    <div className="mt-2">
-      <audio controls src={d.audio_url as string} className="w-full" />
-      {!!d.voice_id && <div className="text-xs text-slate-500 mt-1">voice_id: {String(d.voice_id as string)}</div>}
-    </div>
-  )
-  if (d.image_url) return (
-    <div className="mt-2">
-      <img src={d.image_url as string} alt="生成结果" className="max-w-sm rounded" />
-    </div>
-  )
-  if (d.lyrics) return (
-    <pre className="mt-2 p-3 bg-slate-50 rounded text-xs whitespace-pre-wrap">{String(d.lyrics)}</pre>
-  )
-  if (d.choices && Array.isArray(d.choices)) {
-    const first = d.choices[0] as Record<string, unknown>
-    const content = (first?.message as Record<string, unknown>)?.content
-    if (content) return <div className="mt-2 p-3 bg-slate-50 rounded text-xs whitespace-pre-wrap">{String(content)}</div>
-  }
-  if (d.voices && Array.isArray(d.voices)) return (
-    <div className="mt-2 space-y-1">
-      {(d.voices as Array<Record<string, unknown>>).slice(0, 10).map((v, i) => (
-        <div key={i} className="text-xs bg-slate-50 rounded px-2 py-1">
-          <span className="font-mono text-sky-700">{String(v.voice_id)}</span>
-          <span className="text-slate-500 ml-2">{String(v.name ?? v.voice_id)}</span>
-        </div>
-      ))}
-    </div>
-  )
-  return <div className="mt-2 text-xs text-slate-500">{JSON.stringify(data, null, 2)}</div>
 }
 
 // ── Helper: get default values from schema ───────────────────────────────────

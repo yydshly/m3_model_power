@@ -8,6 +8,7 @@ _root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_root))
 
 from backend.app.minimax_core.runner import load_runner_templates, is_runner_supported
+from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
@@ -40,6 +41,10 @@ if "templates" not in templates_data:
 
 templates = templates_data["templates"]
 
+# ── 2b. Load registry ─────────────────────────────────────────────────────────
+reg = get_capability_registry()
+all_reg_cap_ids = {cap.id for cap in reg.all()}
+
 # ── 3. Must contain all expected capabilities ─────────────────────────────────
 if set(templates.keys()) != EXPECTED_CAPABILITIES:
     missing = EXPECTED_CAPABILITIES - set(templates.keys())
@@ -71,7 +76,9 @@ for cap_id, template in templates.items():
         if field not in template:
             errors.append(f"'{cap_id}': missing field '{field}'")
 
-    # 4c. capability_id must be in registry-supported set
+    # 4c. capability_id must exist in registry (ERROR) AND be runner-supported (ERROR)
+    if cap_id not in all_reg_cap_ids:
+        errors.append(f"'{cap_id}': capability_id not found in registry")
     if not is_runner_supported(cap_id):
         errors.append(f"'{cap_id}': capability_id not in runner-supported set")
 
@@ -113,8 +120,11 @@ for cap_id, template in templates.items():
                 errors.append(f"'{cap_id}'.next_steps[{i}]: must be a dict")
                 continue
             ns_cap_id = ns.get("capability_id", "")
+            # Must exist in registry — ERROR if missing
+            if ns_cap_id and ns_cap_id not in all_reg_cap_ids:
+                errors.append(f"'{cap_id}'.next_steps[{i}]: capability_id '{ns_cap_id}' not found in registry")
+            # Warn if exists in registry but not in runner-supported set
             if ns_cap_id and ns_cap_id not in EXPECTED_CAPABILITIES:
-                # warn if referenced capability is not a known runner capability (but not error — could be future capability)
                 warnings.append(f"'{cap_id}'.next_steps[{i}]: capability_id '{ns_cap_id}' not in runner-supported set")
             for ns_field in ["capability_id", "label", "note", "blocked"]:
                 if ns_field not in ns:
