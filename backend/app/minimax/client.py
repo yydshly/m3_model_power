@@ -17,10 +17,11 @@ class MiniMaxError(Exception):
 
 
 def _auth_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
-    if not settings.minimax_api_key:
-        raise MiniMaxError(500, "MINIMAX_API_KEY 未配置，请检查 backend/.env")
+    key = settings.minimax_effective_api_key
+    if not key:
+        raise MiniMaxError(500, "MINIMAX_TOKEN_PLAN_KEY / MINIMAX_API_KEY 均未配置，请检查 backend/.env")
     headers = {
-        "Authorization": f"Bearer {settings.minimax_api_key}",
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
     if extra:

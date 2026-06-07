@@ -31,10 +31,11 @@ UPLOAD_MAP = {
 
 
 def _headers() -> dict[str, str]:
-    if not settings.minimax_api_key:
-        raise MiniMaxError(500, "MINIMAX_API_KEY 未配置")
+    key = settings.minimax_effective_api_key
+    if not key:
+        raise MiniMaxError(500, "MINIMAX_TOKEN_PLAN_KEY / MINIMAX_API_KEY 均未配置，请检查 backend/.env")
     # 注意：multipart 不能预设 Content-Type，让 httpx 自动加 boundary
-    return {"Authorization": f"Bearer {settings.minimax_api_key}"}
+    return {"Authorization": f"Bearer {key}"}
 
 
 def _params(extra: dict | None = None) -> dict:

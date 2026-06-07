@@ -9,13 +9,15 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health() -> dict:
     """探活：是否能拿到 MiniMax 模型列表。前端用它显示连通状态。"""
+    key_configured = bool(settings.minimax_effective_api_key)
     info = {
         "backend": "ok",
         "base_url": settings.minimax_base_url,
         "group_id_tail": settings.minimax_group_id[-4:] if settings.minimax_group_id else "",
-        "api_key_configured": bool(settings.minimax_api_key),
+        "api_key_configured": key_configured,
+        "key_source": settings.minimax_key_source or "-",
     }
-    if not settings.minimax_api_key:
+    if not key_configured:
         return {**info, "minimax": "no_key"}
     try:
         data = await get_json("/v1/models")  # OpenAI 风格 list

@@ -39,13 +39,13 @@ async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
         await ws.send_json({"error": f"unknown ws capability: {cap_id}"})
         await ws.close()
         return
-    if not settings.minimax_api_key:
-        await ws.send_json({"error": "MINIMAX_API_KEY 未配置"})
+    if not settings.minimax_effective_api_key:
+        await ws.send_json({"error": "MINIMAX_TOKEN_PLAN_KEY / MINIMAX_API_KEY 均未配置，请检查 backend/.env"})
         await ws.close()
         return
 
     upstream_url = _upstream_ws_url(UPSTREAM_MAP[cap_id])
-    headers = [("Authorization", f"Bearer {settings.minimax_api_key}")]
+    headers = [("Authorization", f"Bearer {settings.minimax_effective_api_key}")]
 
     try:
         async with websockets.connect(upstream_url, additional_headers=headers, max_size=None) as up:
