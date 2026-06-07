@@ -40,6 +40,14 @@ SCENARIO_REQUIRED_FIELDS = [
     "expected_output", "default_inputs", "cta"
 ]
 
+VALID_SOURCES = {"official_docs", "token_plan_verified", "local_config", "historical_compat", "risk_warning"}
+VALID_RECOMMENDATION_LEVELS = {
+    "official_primary", "official_current", "verified_stable",
+    "low_latency", "high_quality", "quota_friendly",
+    "compatible", "guarded", "free_tier", "not_default", "not_applicable"
+}
+MODEL_NOTES_REQUIRED_FIELDS = ["model", "label", "source", "recommendation_level", "best_for", "notes"]
+
 errors: list[str] = []
 warnings: list[str] = []
 
@@ -118,6 +126,23 @@ for key, profile in profiles.items():
     for sc_id in profile.get("recommended_scenarios", []):
         if sc_id not in EXPECTED_SCENARIOS:
             errors.append(f"profiles.{key}.recommended_scenarios: scenario '{sc_id}' not in expected scenarios")
+
+    # model_notes 结构校验
+    for i, note in enumerate(profile.get("model_notes", [])):
+        if not isinstance(note, dict):
+            errors.append(f"profiles.{key}.model_notes[{i}]: must be a dict")
+            continue
+        for field in MODEL_NOTES_REQUIRED_FIELDS:
+            if field not in note:
+                errors.append(f"profiles.{key}.model_notes[{i}]: missing field '{field}'")
+        source = note.get("source", "")
+        if source and source not in VALID_SOURCES:
+            errors.append(f"profiles.{key}.model_notes[{i}]: source '{source}' not in {VALID_SOURCES}")
+        rec_level = note.get("recommendation_level", "")
+        if rec_level and rec_level not in VALID_RECOMMENDATION_LEVELS:
+            errors.append(f"profiles.{key}.model_notes[{i}]: recommendation_level '{rec_level}' not in {VALID_RECOMMENDATION_LEVELS}")
+        if not isinstance(note.get("best_for", []), list):
+            errors.append(f"profiles.{key}.model_notes[{i}]: 'best_for' must be a list")
 
 profiles_ok = len([p for p in profiles.values() if isinstance(p, dict) and p.get("family") in EXPECTED_PROFILES]) == 6
 print(f"- profiles: {len(profiles)} / 6 {'OK' if profiles_ok else 'FAIL'}")
