@@ -222,3 +222,97 @@ export async function riskCheck(
   }
   return r.json()
 }
+
+// ── Verification index ───────────────────────────────────────────────
+
+export type VerificationSummary = {
+  in_scope_total: number
+  in_scope_verified: number
+  in_scope_unverified: number
+  in_scope_unverified_ids: string[]
+  completion_rate: number
+}
+
+export type VerificationIndex = {
+  schema_version: number
+  updated_at: string
+  updated_by: string
+  capabilities: Record<string, {
+    capability_id: string
+    best_status: string
+    verified: boolean
+    last_success: string | null
+    last_failure: string | null
+    source: string
+    evidence: Record<string, unknown>
+  }>
+}
+
+export async function getVerificationSummary(): Promise<VerificationSummary> {
+  const r = await fetch('/api/verification/summary')
+  if (!r.ok) throw new Error(`verification summary ${r.status}`)
+  return r.json()
+}
+
+export async function getVerificationIndex(): Promise<VerificationIndex> {
+  const r = await fetch('/api/verification/index')
+  if (!r.ok) throw new Error(`verification index ${r.status}`)
+  return r.json()
+}
+
+// ── Test Console History ──────────────────────────────────────────────
+
+export type TestConsoleHistoryItem = {
+  id: string
+  created_at: string
+  action: 'risk_check' | 'invoke'
+  capability_id: string
+  payload_summary: {
+    payload_keys: string[]
+    payload_size_chars: number
+    payload_preview: string
+  }
+  confirmations: Record<string, boolean>
+  result: {
+    ok?: boolean
+    allowed?: boolean
+    status?: number | null
+    error?: string | null
+    blocked_reasons?: string[]
+    required_confirmations?: string[]
+    warnings?: string[]
+  }
+}
+
+export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestConsoleHistoryItem[] }> {
+  const r = await fetch(`/api/history/test-console?limit=${limit}`)
+  if (!r.ok) throw new Error(`history ${r.status}`)
+  return r.json()
+}
+
+// ── Capability Descriptions ────────────────────────────────────────────
+
+export type CapabilityDescription = {
+  summary: string
+  use_cases: string[]
+  not_recommended_for: string[]
+  input_notes: string[]
+  output_notes: string[]
+  risk_notes: string[]
+  billing_notes: string[]
+  common_errors: string[]
+  product_usage: string[]
+  integration_tips: string[]
+}
+
+export type CapabilityDescriptionsResponse = {
+  schema_version: number
+  updated_at?: string
+  descriptions: Record<string, CapabilityDescription>
+}
+
+export async function getCapabilityDescriptions(): Promise<CapabilityDescriptionsResponse> {
+  const r = await fetch('/api/descriptions/capabilities')
+  if (!r.ok) throw new Error(`descriptions ${r.status}`)
+  return r.json()
+}

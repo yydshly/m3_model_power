@@ -15,6 +15,7 @@ backend/runtime/
 # Frontend TypeScript build outputs
 frontend/src/**/*.js
 frontend/src/**/*.js.map
+*.tsbuildinfo
 
 # Media assets from capability verification
 *.mp3
