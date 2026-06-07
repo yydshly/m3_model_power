@@ -160,16 +160,58 @@ function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string
   return []
 }
 
-function extractAudioUrl(data: unknown): string {
+type AudioSource = {
+  src: string
+  kind: 'url' | 'base64'
+}
+
+function extractAudioSource(data: unknown, depth = 0): AudioSource | null {
+  if (depth > MAX_DEPTH || data == null || typeof data !== 'object') return null
+
   const d = data as Record<string, unknown>
-  if (typeof d.audio_url === 'string' && d.audio_url) return d.audio_url
-  if (typeof d.url === 'string' && d.url) {
-    const u = d.url as string
-    if (/\.(mp3|wav|ogg|m4a|aac)$/i.test(u)) return u
+
+  // 1. URL type
+  for (const key of ['audio_url', 'audio_file', 'url', 'file_url']) {
+    const val = d[key]
+    if (typeof val === 'string' && val) {
+      const lower = val.toLowerCase()
+      if (/\.(mp3|wav|ogg|m4a|aac)$/i.test(lower) || lower.startsWith('http')) {
+        return { src: val, kind: 'url' }
+      }
+    }
   }
-  const found = findStringField(data, ['audio_url', 'audio_file', 'url', 'file_url', 'audio'], 0)
-  if (found && /\.(mp3|wav|ogg|m4a|aac)$/i.test(found)) return found
-  return ''
+
+  // 2. base64 type
+  for (const key of ['audio_base64', 'audio']) {
+    const val = d[key]
+    if (typeof val === 'string' && val.length > 100) {
+      if (val.startsWith('data:audio/')) {
+        return { src: val, kind: 'base64' }
+      }
+      return { src: `data:audio/mpeg;base64,${val}`, kind: 'base64' }
+    }
+  }
+
+  // 3. Recurse into common containers
+  for (const key of ['data', 'result', 'output', 'response', 'body', 'content']) {
+    const child = d[key]
+    if (child && typeof child === 'object') {
+      const found = extractAudioSource(child, depth + 1)
+      if (found) return found
+    }
+  }
+
+  // 4. Recurse into arrays
+  for (const val of Object.values(d)) {
+    if (Array.isArray(val)) {
+      for (const item of val) {
+        const found = extractAudioSource(item, depth + 1)
+        if (found) return found
+      }
+    }
+  }
+
+  return null
 }
 
 // ── Session storage handoff ─────────────────────────────────────────────────────
@@ -425,29 +467,38 @@ function RunnerForm({
 
 function ResultBanner({ resultType, data }: { resultType: string; data: unknown }) {
   if (resultType === 'audio') {
-    const audioUrl = extractAudioUrl(data)
+    const audio = extractAudioSource(data)
     return (
       <div className="mb-3 p-3 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
         <strong>🎧 音频结果</strong>
-        {audioUrl ? (
+        {audio ? (
           <div className="mt-2 space-y-2">
-            <audio controls src={audioUrl} className="w-full mt-1" />
+            <audio controls src={audio.src} className="w-full mt-1" />
             <div className="flex items-center gap-2">
-              <CopyButton text={audioUrl}>
-                <span className="text-sky-600 hover:underline">复制音频 URL</span>
+              <CopyButton text={audio.src}>
+                <span className="text-sky-600 hover:underline">
+                  {audio.kind === 'base64' ? '复制音频 Data URL' : '复制音频 URL'}
+                </span>
               </CopyButton>
-              <a
-                href={audioUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sky-600 hover:underline"
-              >
-                打开链接
-              </a>
+              {audio.kind === 'url' && (
+                <a
+                  href={audio.src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sky-600 hover:underline"
+                >
+                  打开链接
+                </a>
+              )}
+              {audio.kind === 'base64' && (
+                <span className="text-[10px] text-slate-400">
+                  base64 音频已转为浏览器可播放 Data URL
+                </span>
+              )}
             </div>
           </div>
         ) : (
-          <div className="mt-1 text-slate-600">无音频 URL，可查看下方完整 JSON。</div>
+          <div className="mt-1 text-slate-600">未识别到可播放音频，可查看下方完整 JSON。</div>
         )}
       </div>
     )
