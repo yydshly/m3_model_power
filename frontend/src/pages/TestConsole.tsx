@@ -487,7 +487,7 @@ export default function TestConsole() {
             推荐流程：1. 搜索或筛选能力 → 2. 点击「安全检查」验证 RiskGate → 3. 确认 payload 和确认项 → 4. 再点击「真实调用」→ 5. 在最近调用记录中查看结果和资产
           </p>
           <div className="flex flex-wrap gap-4 text-[10px] text-slate-400 mt-1">
-            <span>💡 <strong>能力体验：</strong>推荐普通测试，表单化、带提示、带结果预览</span>
+            <span>💡 <strong>普通体验请使用「能力体验」：</strong>表单化、带提示、带结果预览</span>
             <span>⚠️ <strong>开发者测试：</strong>手动填写 raw JSON payload</span>
             <span>📖 <strong>能力详情：</strong>查看 API、风险、计费、scope、说明</span>
           </div>

@@ -495,7 +495,22 @@ export default function CapabilityPage() {
       ) : models.length > 0 ? (
         <section className="mt-6">
           <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
-          <div className="text-[10px] text-slate-400 mb-2">按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。默认选择优先成本友好模型，不代表官方推荐模型。</div>
+          <div className="text-[10px] text-slate-400 mb-2">
+            按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。
+            {cap.id === 'chat-anthropic' && (
+              <span className="block mt-1 text-amber-600">Anthropic 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持图片/视频输入；M2.x 系列仅支持文本与工具调用相关内容块。</span>
+            )}
+            {cap.id === 'chat-openai' && (
+              <span className="block mt-1 text-amber-600">OpenAI 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持多模态输入（图片/视频）。</span>
+            )}
+            {cap.id === 'chat-responses-create' && (
+              <span className="block mt-1 text-amber-600">Responses API 官方文档示例使用 MiniMax-M3；其他模型是否支持以实测为准。</span>
+            )}
+            {!['chat-anthropic', 'chat-openai', 'chat-responses-create'].includes(cap.id) && (
+              <span>Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。</span>
+            )}
+            {' '}默认选择优先成本友好模型，不代表官方推荐模型。
+          </div>
           <div className="flex flex-wrap gap-2">
             {models.map((m) => (
               <span key={m.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-xs">
