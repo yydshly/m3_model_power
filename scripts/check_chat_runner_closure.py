@@ -22,8 +22,10 @@ Checks:
 18. audit 文档 B 类保留 chat-responses-tokens
 19. ChatResultPreview has getTextBlockText helper
 20. ChatResultPreview supports output_text type block
-21. ChatResultPreview supports content block without type
-22. ChatResultPreview supports nested data.content
+21. ChatResultPreview supports reasoning_text type block
+22. ChatResultPreview supports thinking type block
+23. ChatResultPreview supports content block without type
+24. ChatResultPreview supports nested data.content
 """
 from __future__ import annotations
 
@@ -288,18 +290,41 @@ def check_20_supports_output_text_type_block() -> bool:
     return True
 
 
-def check_21_supports_bare_content_block() -> bool:
+def check_21_supports_reasoning_text_type_block() -> bool:
+    content = read(_CHAT_PREVIEW)
+    if "reasoning_text" not in content:
+        print("FAIL: ChatResultPreview does not handle reasoning_text type block")
+        return False
+    if "type === 'reasoning_text'" not in content and 'type === "reasoning_text"' not in content:
+        print("FAIL: getTextBlockText does not handle reasoning_text type")
+        return False
+    print("PASS: ChatResultPreview supports reasoning_text type block")
+    return True
+
+
+def check_22_supports_thinking_type_block() -> bool:
+    content = read(_CHAT_PREVIEW)
+    if "thinking" not in content:
+        print("FAIL: ChatResultPreview does not handle thinking type block")
+        return False
+    if "type === 'thinking'" not in content and 'type === "thinking"' not in content:
+        print("FAIL: detectProtocol / getTextBlockText does not handle thinking type")
+        return False
+    print("PASS: ChatResultPreview supports thinking type block")
+    return True
+
+
+def check_23_supports_bare_content_block() -> bool:
     content = read(_CHAT_PREVIEW)
     # Should handle content blocks without type (bare block)
-    if "(!first.type || first.type === 'text')" not in content and \
-       '(!first.type || first.type === "text")' not in content:
+    if "!first.type" not in content:
         print("FAIL: ChatResultPreview does not handle bare content block (no type)")
         return False
     print("PASS: ChatResultPreview supports bare content block without type")
     return True
 
 
-def check_22_supports_nested_data_content() -> bool:
+def check_24_supports_nested_data_content() -> bool:
     content = read(_CHAT_PREVIEW)
     # Should check nested data.content path (via 'nested' alias variable)
     if "nested" not in content or ".content" not in content:
@@ -335,8 +360,10 @@ def main():
         ("audit doc B-class retains chat-responses-tokens", check_18_audit_doc_b_class),
         ("ChatResultPreview has getTextBlockText helper", check_19_has_get_text_block_helper),
         ("ChatResultPreview supports output_text type block", check_20_supports_output_text_type_block),
-        ("ChatResultPreview supports bare content block", check_21_supports_bare_content_block),
-        ("ChatResultPreview supports nested data.content", check_22_supports_nested_data_content),
+        ("ChatResultPreview supports reasoning_text type block", check_21_supports_reasoning_text_type_block),
+        ("ChatResultPreview supports thinking type block", check_22_supports_thinking_type_block),
+        ("ChatResultPreview supports bare content block", check_23_supports_bare_content_block),
+        ("ChatResultPreview supports nested data.content", check_24_supports_nested_data_content),
     ]
 
     all_passed = True

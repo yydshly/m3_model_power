@@ -7,7 +7,8 @@ type ChatProtocol = 'openai' | 'anthropic' | 'responses' | 'unknown'
 
 function getTextBlockText(block: { type?: string; text?: string } | null | undefined): string | null {
   if (!block?.text) return null
-  if (!block.type || block.type === 'text' || block.type === 'output_text') {
+  // 'thinking' / 'reasoning_text' are MiniMax internal reasoning blocks — still user-facing text
+  if (!block.type || block.type === 'text' || block.type === 'output_text' || block.type === 'thinking' || block.type === 'reasoning_text') {
     return block.text
   }
   return null
@@ -17,11 +18,11 @@ function detectProtocol(data: unknown): ChatProtocol {
   if (!data || typeof data !== 'object') return 'unknown'
   const d = data as Record<string, unknown>
 
-  // Anthropic Messages: content array with a text-like block
+  // Anthropic Messages: content array with a text-like block (text, thinking, etc.)
   if (Array.isArray(d.content)) {
     const first = (d as { content?: Array<{ type?: string; text?: string }> }).content?.[0]
-    // type === 'text' OR has text but no type (bare block) → anthropic
-    if (first?.text && (!first.type || first.type === 'text')) return 'anthropic'
+    // Accept text, bare block, or internal reasoning blocks (thinking) as anthropic
+    if (first?.text && (!first.type || first.type === 'text' || first.type === 'thinking')) return 'anthropic'
   }
 
   // Also check nested data.content (proxy wrapper)
