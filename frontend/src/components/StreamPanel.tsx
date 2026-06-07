@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { streamInvoke, type Capability, type Model } from '../api'
+import { quotaLabel } from '../domain/workbenchLabels'
 
 /**
  * 通用流式调用面板。
@@ -65,7 +66,7 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.quota_eligible ? '✓配额 ' : '$另计费 '}{m.label} · {m.tier}
+                {quotaLabel(m.quota_eligible)} {m.label} · {m.tier}
               </option>
             ))}
           </select>

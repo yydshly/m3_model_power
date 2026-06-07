@@ -28,6 +28,10 @@ def main():
             'tier': m.get('tier'),
             'cost_level': m.get('cost_level'),
             'quota_eligible': m.get('quota_eligible'),
+            'official_current': m.get('official_current'),
+            'enabled': m.get('enabled'),
+            'live_available': m.get('live_available'),
+            'family': m.get('family'),
         }
 
     # 1. 检查 Anthropic 协议
@@ -76,11 +80,11 @@ def main():
             if actual_ctx != expected_ctx:
                 errors.append(f"[CONTEXT] {model_id}: expected {expected_ctx}, got {actual_ctx}")
 
-    # 6. 检查 highspeed cost_level
+    # 6. 检查 highspeed cost_level（仅限 chat family；视频 highspeed 不适用 quota 规则）
     for model_id, info in model_info.items():
-        if info.get('tier') == 'highspeed':
+        if info.get('family') == 'chat' and info.get('tier') == 'highspeed':
             if info.get('cost_level') != 'quota':
-                errors.append(f"[COST] {model_id}: highspeed tier should have cost_level=quota, got {info.get('cost_level')}")
+                errors.append(f"[COST] {model_id}: chat highspeed tier should have cost_level=quota, got {info.get('cost_level')}")
 
     # 7. 检查 profile 中没有合并模型字符串
     with open('backend/app/minimax_core/profiles/capability_profiles.json', 'r', encoding='utf-8') as f:
@@ -95,7 +99,7 @@ def main():
                 errors.append(f"[PROFILE] [{family}] merged model string: '{model_id}'")
             if note.get('source') == 'historical_compat' and model_id in model_info:
                 info = model_info[model_id]
-                if info.get('official_current') and info.get('enabled'):
+                if info.get('official_current') is True and info.get('enabled') is True:
                     errors.append(f"[PROFILE] [{family}] {model_id}: source=historical_compat but official_current=true, enabled=true")
 
     if errors:

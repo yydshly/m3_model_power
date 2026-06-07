@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
+import { quotaLabel } from '../domain/workbenchLabels'
 
 export function InvokePanel({
   cap,
@@ -157,8 +158,7 @@ export function InvokePanel({
           >
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.quota_eligible ? '极速额度 ' : '标准计量 '}
-                {m.label} · {m.tier}
+                {quotaLabel(m.quota_eligible)} {m.label} · {m.tier}
                 {m.context ? ` · ${(m.context / 1000).toFixed(0)}k` : ''}
               </option>
             ))}

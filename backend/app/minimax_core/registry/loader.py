@@ -52,7 +52,15 @@ def load_categories() -> list[dict[str, Any]]:
 def load_model_specs() -> list[ModelSpec]:
     """加载并转换为 ModelSpec 列表。"""
     data = load_yaml_configs()
-    return [ModelSpec.model_validate(m) for m in data["models"]]
+    specs = []
+    for raw in data["models"]:
+        # 对 chat family + cost_level=quota 的模型，自动推导 quota_eligible
+        if "quota_eligible" not in raw:
+            raw["quota_eligible"] = (
+                raw.get("family") == "chat" and raw.get("cost_level") == "quota"
+            )
+        specs.append(ModelSpec.model_validate(raw))
+    return specs
 
 
 def load_capability_specs() -> list[CapabilitySpec]:

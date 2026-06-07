@@ -59,18 +59,14 @@ def main():
             if not bp.get('requires_explicit_confirmation'):
                 warnings.append(f"[CAP] {cap_id}: billing_category=quota_sensitive but requires_explicit_confirmation is not True")
 
-    # 4. 检查 highspeed 模型的 cost_level
+    # 4. 检查 chat highspeed 模型的 cost_level（视频 highspeed 不适用 quota 规则）
     for model_id, model in model_info.items():
-        if model.get('tier') == 'highspeed':
+        if model.get('family') == 'chat' and model.get('tier') == 'highspeed':
             if model.get('cost_level') != 'quota':
-                errors.append(f"[MODEL] {model_id}: tier=highspeed but cost_level={model.get('cost_level')}, expected quota")
+                errors.append(f"[MODEL] {model_id}: chat highspeed tier must have cost_level=quota, got {model.get('cost_level')}")
 
-    # 5. 检查 quota_eligible 与 cost_level 一致性
-    for model_id, model in model_info.items():
-        cl = model.get('cost_level')
-        qe = model.get('quota_eligible')
-        if cl == 'quota' and not qe:
-            warnings.append(f"[MODEL] {model_id}: cost_level=quota but quota_eligible is not True")
+    # 5. quota_eligible 由 loader.py 在运行时推导（family=chat + cost_level=quota → quota_eligible=true）
+    # YAML 中缺少 quota_eligible 不代表错误，运行时 loader 会自动补全
 
     if errors:
         print(f"[FAILED] {len(errors)} errors:")

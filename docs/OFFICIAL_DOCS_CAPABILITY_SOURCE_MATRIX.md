@@ -89,6 +89,74 @@
 | issues | - |
 | fix_suggestion | - |
 
+| capability_id | models-openai-list |
+|----------------|--------------------|
+| local_endpoint | /api/invoke/models-openai-list |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/models/openai/list-models |
+| official_support | GET /v1/models returns all chat/video/speech model IDs |
+| models_yaml_config | N/A (metadata only) |
+| capabilities_yaml_config | billing_category: normal_token_plan_test, consumes_token_plan_quota: false |
+| runner_status | Supported |
+| riskgate_rules | No special rules |
+| scope_policy | in_scope |
+| material_required | No |
+| extra_cost | No |
+| explicit_confirm | No |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | models-openai-retrieve |
+|--------------------|------------------------|
+| local_endpoint | /api/invoke/models-openai-retrieve |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/models/openai/retrieve-model |
+| official_support | GET /v1/models/{model} returns per-model details |
+| models_yaml_config | N/A (metadata only) |
+| capabilities_yaml_config | billing_category: normal_token_plan_test, consumes_token_plan_quota: false |
+| runner_status | Supported |
+| riskgate_rules | No special rules |
+| scope_policy | in_scope |
+| material_required | No |
+| extra_cost | No |
+| explicit_confirm | No |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | models-anthropic-list |
+|--------------------|------------------------|
+| local_endpoint | /api/invoke/models-anthropic-list |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/models/anthropic/list-models |
+| official_support | GET /anthropic/v1/models returns all chat model IDs |
+| models_yaml_config | N/A (metadata only) |
+| capabilities_yaml_config | billing_category: normal_token_plan_test, consumes_token_plan_quota: false |
+| runner_status | Supported |
+| riskgate_rules | No special rules |
+| scope_policy | in_scope |
+| material_required | No |
+| extra_cost | No |
+| explicit_confirm | No |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | models-anthropic-retrieve |
+|--------------------------|---------------------------|
+| local_endpoint | /api/invoke/models-anthropic-retrieve |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/models/anthropic/retrieve-model |
+| official_support | GET /anthropic/v1/models/{model} returns per-model details |
+| models_yaml_config | N/A (metadata only) |
+| capabilities_yaml_config | billing_category: normal_token_plan_test, consumes_token_plan_quota: false |
+| runner_status | Supported |
+| riskgate_rules | No special rules |
+| scope_policy | in_scope |
+| material_required | No |
+| extra_cost | No |
+| explicit_confirm | No |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
 ## Speech / Voice Capabilities
 
 | capability_id | tts-sync |
@@ -142,19 +210,70 @@
 | issues | - |
 | fix_suggestion | - |
 
-| capability_id | voice-clone |
-|---------------|-------------|
-| local_endpoint | /api/invoke/voice-clone |
-| official_doc_url | https://platform.minimaxi.com/docs/api-reference/voice-clone |
-| official_support | Requires uploaded audio sample |
+| capability_id | voice-clone-upload-audio |
+|---------------|--------------------------|
+| local_endpoint | /api/invoke/voice-clone-upload-audio |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/voice-cloning-uploadcloneaudio |
+| official_support | Upload reference audio for voice cloning |
 | models_yaml_config | N/A |
-| capabilities_yaml_config | billing_category: paid_confirm_required |
+| capabilities_yaml_config | billing_category: paid_confirm_required, requires_uploaded_asset: true |
 | runner_status | Supported |
 | riskgate_rules | confirm_asset_source |
-| scope_policy | in_scope |
+| scope_policy | warning_only |
 | material_required | Yes (audio) |
 | extra_cost | Yes |
 | explicit_confirm | Yes |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | voice-clone-upload-prompt |
+|-------------------------|---------------------------|
+| local_endpoint | /api/invoke/voice-clone-upload-prompt |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/voice-cloning-uploadprompt |
+| official_support | Upload aligned prompt text for voice cloning |
+| models_yaml_config | N/A |
+| capabilities_yaml_config | billing_category: paid_confirm_required, requires_uploaded_asset: true |
+| runner_status | Supported |
+| riskgate_rules | confirm_asset_source |
+| scope_policy | warning_only |
+| material_required | Yes (text) |
+| extra_cost | Yes |
+| explicit_confirm | Yes |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | voice-clone-do |
+|----------------|-----------------|
+| local_endpoint | /api/invoke/voice-clone-do |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/voice-cloning-clone |
+| official_support | Trigger voice cloning with file_id |
+| models_yaml_config | N/A |
+| capabilities_yaml_config | billing_category: paid_confirm_required, cost_level: high, requires_certification: true |
+| runner_status | Supported |
+| riskgate_rules | confirm_asset_source, confirm_certification |
+| scope_policy | warning_only |
+| material_required | Yes (file_id from upload steps) |
+| extra_cost | Yes |
+| explicit_confirm | Yes |
+| alignment_status | aligned |
+| issues | - |
+| fix_suggestion | - |
+
+| capability_id | voice-list |
+|---------------|------------|
+| local_endpoint | /api/invoke/voice-list |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/voice-management-get |
+| official_support | List system/cloned/designed voices |
+| models_yaml_config | N/A |
+| capabilities_yaml_config | billing_category: normal_token_plan_test |
+| runner_status | Supported |
+| riskgate_rules | No special rules |
+| scope_policy | in_scope |
+| material_required | No |
+| extra_cost | No |
+| explicit_confirm | No |
 | alignment_status | aligned |
 | issues | - |
 | fix_suggestion | - |
@@ -246,6 +365,23 @@
 | explicit_confirm | Yes |
 | alignment_status | aligned |
 | issues | Marked as warning_only, not default execution |
+| fix_suggestion | - |
+
+| capability_id | video-i2v |
+|---------------|----------|
+| local_endpoint | /api/invoke/video-i2v |
+| official_doc_url | https://platform.minimaxi.com/docs/api-reference/video-generation |
+| official_support | Image-to-video |
+| models_yaml_config | MiniMax-Hailuo-02, MiniMax-Hailuo-2.0 |
+| capabilities_yaml_config | billing_category: high_cost_confirm_required |
+| runner_status | Not supported |
+| riskgate_rules | confirm_high_cost |
+| scope_policy | out_of_scope |
+| material_required | Yes (image) |
+| extra_cost | Yes |
+| explicit_confirm | Yes |
+| alignment_status | aligned |
+| issues | - |
 | fix_suggestion | - |
 
 | capability_id | video-s2v |

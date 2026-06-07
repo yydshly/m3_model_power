@@ -525,7 +525,7 @@ models:
     output_modalities: [video]
     protocols: [native]
     capabilities: [video-t2v, video-i2v, video-s2v]
-    cost_level: quota
+    cost_level: high
     discovery_method: capability_probe
     discovery_status: unknown
     discovery_note: Not returned by /v1/models; verify via video-t2v endpoint.

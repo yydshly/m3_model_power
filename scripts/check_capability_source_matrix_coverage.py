@@ -1,29 +1,55 @@
 #!/usr/bin/env python3
-"""检查 capability source matrix 覆盖率。"""
-import os
-import re
-import sys
+"""检查 capability source matrix 覆盖率。
 
-def extract_table_rows(content):
-    """提取 markdown 表格中的数据行，跳过表头和分隔符。"""
-    lines = content.split('\n')
-    in_table = False
-    rows = []
-    for line in lines:
-        if line.startswith('|'):
-            # 跳过表头行（包含 | capability_id | 这样的）
-            if 'capability_id' in line.lower() or '----' in line:
-                in_table = True
-                continue
-            if in_table and '|-' in line:
-                continue
-            if in_table:
-                rows.append(line)
-    return rows
+读取 backend/config/capabilities.yaml 中的全部 capability id，
+与 docs/OFFICIAL_DOCS_CAPABILITY_SOURCE_MATRIX.md 中的覆盖情况进行对比，
+缺失项直接失败，不允许只 warning。
+"""
+import os
+import sys
+import yaml
+
+
+def extract_capability_ids(content):
+    """从 matrix 文件中提取 capability_id。
+
+    matrix 格式是非标准的：capability_id 作为表头列名，
+    实际 ID 值在 capability_id 列下单独成行，形如：
+      | capability_id | chat-openai |
+
+    跳过 ## Schema 章节（它是说明性表格，不是真实 capability 条目）。
+    """
+    ids = []
+    in_schema = False
+    for line in content.split('\n'):
+        stripped = line.strip()
+        if stripped == '## Schema':
+            in_schema = True
+            continue
+        if stripped.startswith('## '):
+            in_schema = False
+            continue
+        if in_schema:
+            continue
+        if not stripped.startswith('|'):
+            continue
+        parts = [p.strip() for p in stripped.split('|')]
+        # 格式: | capability_id | <id> |
+        if len(parts) >= 3 and parts[1] == 'capability_id' and parts[2].strip():
+            ids.append(parts[2].strip())
+    return ids
+
 
 def main():
     errors = []
-    warnings = []
+
+    caps_yaml_path = 'backend/config/capabilities.yaml'
+    if not os.path.exists(caps_yaml_path):
+        errors.append(f"Capabilities file not found: {caps_yaml_path}")
+        print("[FAILED]")
+        for e in errors:
+            print(f"  - {e}")
+        return 1
 
     matrix_path = 'docs/OFFICIAL_DOCS_CAPABILITY_SOURCE_MATRIX.md'
     if not os.path.exists(matrix_path):
@@ -33,46 +59,44 @@ def main():
             print(f"  - {e}")
         return 1
 
+    # 1. 读取 capabilities.yaml 获取全部 capability id
+    with open(caps_yaml_path, 'r', encoding='utf-8') as f:
+        caps_doc = yaml.safe_load(f)
+
+    configured_caps = {cap['id'] for cap in caps_doc.get('capabilities', [])}
+    configured_total = len(configured_caps)
+
+    # 2. 读取 matrix 获取覆盖的 capability id
     with open(matrix_path, 'r', encoding='utf-8') as f:
         matrix_content = f.read()
 
-    # 提取数据行
-    rows = extract_table_rows(matrix_content)
+    cap_ids_in_matrix = set(extract_capability_ids(matrix_content))
+    matrix_covered = len(cap_ids_in_matrix)
 
-    # 从数据行提取 capability_id（第一列）
-    cap_ids_in_matrix = set()
-    for row in rows:
-        parts = [p.strip() for p in row.split('|')]
-        if len(parts) >= 3 and parts[1].strip():
-            cap_ids_in_matrix.add(parts[1].strip())
+    # 3. 计算差异
+    missing_ids = configured_caps - cap_ids_in_matrix
+    extra_ids = cap_ids_in_matrix - configured_caps
 
-    # 检查 matrix 中有但实际不存在的 capability（表头残留等）
-    known_caps = {
-        'chat-openai', 'chat-anthropic', 'chat-responses-create', 'chat-responses-tokens',
-        'tts-sync', 'tts-async', 'tts-ws', 'voice-clone', 'voice-design', 'voice-delete',
-        'image-t2i', 'image-i2i',
-        'video-t2v', 'video-s2v', 'video-i2v', 'video-query', 'video-download',
-        'music-gen', 'music-cover-prep', 'lyrics-gen',
-        'file-upload', 'file-list', 'file-retrieve', 'file-content', 'file-delete',
-        'speech-t2a', 'speech-t2a-async', 'speech-t2a-ws',
-    }
+    if missing_ids:
+        errors.append(f"Missing in matrix ({len(missing_ids)}): {sorted(missing_ids)}")
+    if extra_ids:
+        errors.append(f"Extra in matrix but not in capabilities.yaml ({len(extra_ids)}): {sorted(extra_ids)}")
 
-    extra_in_matrix = cap_ids_in_matrix - known_caps
-    if extra_in_matrix:
-        warnings.append(f"Extra entries in matrix (may be headers): {extra_in_matrix}")
+    # 输出统计
+    print(f"configured_total: {configured_total}")
+    print(f"matrix_covered:   {matrix_covered}")
+    print(f"missing_ids:     {sorted(missing_ids)}")
+    print(f"extra_ids:       {sorted(extra_ids)}")
 
     if errors:
-        print(f"[FAILED] {len(errors)} errors:")
+        print(f"\n[FAILED] {len(errors)} error(s):")
         for e in errors:
             print(f"  - {e}")
         return 1
     else:
-        print(f"[PASSED] Matrix coverage check passed ({len(cap_ids_in_matrix)} capabilities found)")
-        if warnings:
-            print(f"\n[WARNINGS] {len(warnings)}:")
-            for w in warnings:
-                print(f"  - {w}")
+        print("\n[PASSED] Matrix coverage check passed — all capabilities documented")
         return 0
+
 
 if __name__ == '__main__':
     sys.exit(main())
