@@ -20,6 +20,10 @@ Checks:
 16. chat.py 三类 handler 强制非流式
 17. audit 文档 A 类包含 chat-anthropic / chat-responses-create
 18. audit 文档 B 类保留 chat-responses-tokens
+19. ChatResultPreview has getTextBlockText helper
+20. ChatResultPreview supports output_text type block
+21. ChatResultPreview supports content block without type
+22. ChatResultPreview supports nested data.content
 """
 from __future__ import annotations
 
@@ -261,6 +265,50 @@ def check_18_audit_doc_b_class() -> bool:
     return True
 
 
+def check_19_has_get_text_block_helper() -> bool:
+    content = read(_CHAT_PREVIEW)
+    if "getTextBlockText" not in content:
+        print("FAIL: ChatResultPreview missing getTextBlockText helper function")
+        return False
+    print("PASS: ChatResultPreview has getTextBlockText helper")
+    return True
+
+
+def check_20_supports_output_text_type_block() -> bool:
+    content = read(_CHAT_PREVIEW)
+    # Should handle output type block (type === 'output_text')
+    if "'output_text'" not in content and '"output_text"' not in content:
+        print("FAIL: ChatResultPreview does not handle output_text type block")
+        return False
+    # Also check the helper function handles output_text type
+    if "type === 'output_text'" not in content and 'type === "output_text"' not in content:
+        print("FAIL: getTextBlockText does not handle output_text type")
+        return False
+    print("PASS: ChatResultPreview supports output_text type block")
+    return True
+
+
+def check_21_supports_bare_content_block() -> bool:
+    content = read(_CHAT_PREVIEW)
+    # Should handle content blocks without type (bare block)
+    if "(!first.type || first.type === 'text')" not in content and \
+       '(!first.type || first.type === "text")' not in content:
+        print("FAIL: ChatResultPreview does not handle bare content block (no type)")
+        return False
+    print("PASS: ChatResultPreview supports bare content block without type")
+    return True
+
+
+def check_22_supports_nested_data_content() -> bool:
+    content = read(_CHAT_PREVIEW)
+    # Should check nested data.content path (via 'nested' alias variable)
+    if "nested" not in content or ".content" not in content:
+        print("FAIL: ChatResultPreview does not support nested data.content extraction")
+        return False
+    print("PASS: ChatResultPreview supports nested data.content extraction")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Chat Protocol Runner Closure checks (P1-3)")
@@ -285,6 +333,10 @@ def main():
         ("chat.py enforces non-streaming", check_16_handlers_non_streaming),
         ("audit doc A-class has both", check_17_audit_doc_a_class),
         ("audit doc B-class retains chat-responses-tokens", check_18_audit_doc_b_class),
+        ("ChatResultPreview has getTextBlockText helper", check_19_has_get_text_block_helper),
+        ("ChatResultPreview supports output_text type block", check_20_supports_output_text_type_block),
+        ("ChatResultPreview supports bare content block", check_21_supports_bare_content_block),
+        ("ChatResultPreview supports nested data.content", check_22_supports_nested_data_content),
     ]
 
     all_passed = True

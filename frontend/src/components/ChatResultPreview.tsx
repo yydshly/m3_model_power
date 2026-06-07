@@ -5,16 +5,36 @@ import { JsonView } from './JsonView'
 
 type ChatProtocol = 'openai' | 'anthropic' | 'responses' | 'unknown'
 
+function getTextBlockText(block: { type?: string; text?: string } | null | undefined): string | null {
+  if (!block?.text) return null
+  if (!block.type || block.type === 'text' || block.type === 'output_text') {
+    return block.text
+  }
+  return null
+}
+
 function detectProtocol(data: unknown): ChatProtocol {
   if (!data || typeof data !== 'object') return 'unknown'
   const d = data as Record<string, unknown>
-  // Anthropic Messages: has content array with text blocks
-  if (Array.isArray(d.content) && (d as { content?: Array<{ type?: string; text?: string }> }).content?.[0]?.type === 'text') return 'anthropic'
+
+  // Anthropic Messages: content array with a text-like block
+  if (Array.isArray(d.content)) {
+    const first = (d as { content?: Array<{ type?: string; text?: string }> }).content?.[0]
+    // type === 'text' OR has text but no type (bare block) → anthropic
+    if (first?.text && (!first.type || first.type === 'text')) return 'anthropic'
+  }
+
+  // Also check nested data.content (proxy wrapper)
+  const nested = (d as { data?: { content?: Array<{ type?: string; text?: string }> } }).data
+  if (nested?.content?.[0]?.text) return 'anthropic'
+
   // Responses API: has output_text or output array
   if ('output_text' in d) return 'responses'
   if (Array.isArray(d.output)) return 'responses'
+
   // OpenAI Chat: has choices array
   if (Array.isArray(d.choices)) return 'openai'
+
   return 'unknown'
 }
 
@@ -34,12 +54,13 @@ function extractChatText(data: unknown): string | null {
   if (Array.isArray(d.content)) {
     const content = d.content as Array<{ type?: string; text?: string }>
     for (const c of content) {
-      if (c.type === 'text' && c.text) return c.text
+      const text = getTextBlockText(c)
+      if (text) return text
     }
   }
   // Also check nested data.content (some proxy wrappers)
   const nested = (d as { data?: { content?: Array<{ type?: string; text?: string }> } }).data
-  if (nested?.content?.[0]?.type === 'text') {
+  if (nested?.content?.[0]?.text) {
     return nested.content[0].text ?? null
   }
 
@@ -48,11 +69,14 @@ function extractChatText(data: unknown): string | null {
     return d.output_text
   }
   if (Array.isArray(d.output)) {
-    const output = d.output as Array<{ content?: Array<{ type?: string; text?: string }> }>
+    const output = d.output as Array<{ content?: Array<{ type?: string; text?: string }>; text?: string; type?: string }>
     for (const o of output) {
+      // output_text type block
+      if (o.text && (!o.type || o.type === 'output_text')) return o.text
       if (Array.isArray(o.content)) {
         for (const c of o.content) {
-          if (c.type === 'text' && c.text) return c.text
+          const text = getTextBlockText(c)
+          if (text) return text
         }
       }
     }
