@@ -19,6 +19,33 @@ const TOKEN_PLAN_STATUS_LABEL: Record<string, { text: string; className: string 
   unavailable_or_unknown: { text: '不可用/未知', className: 'bg-red-100 text-red-700' },
 }
 
+const SOURCE_BADGE: Record<string, { text: string; className: string }> = {
+  official_docs: { text: '官方文档', className: 'bg-violet-100 text-violet-700' },
+  token_plan_verified: { text: '已验收', className: 'bg-emerald-100 text-emerald-700' },
+  local_config: { text: '本地配置', className: 'bg-slate-100 text-slate-600' },
+  historical_compat: { text: '历史兼容', className: 'bg-gray-100 text-gray-600' },
+  risk_warning: { text: '风险提示', className: 'bg-orange-100 text-orange-700' },
+}
+
+const RECOMMENDATION_BADGE: Record<string, { text: string; className: string }> = {
+  official_primary: { text: '官方主推', className: 'bg-violet-600 text-white' },
+  official_current: { text: '官方当前', className: 'bg-indigo-500 text-white' },
+  verified_stable: { text: '已验收稳定', className: 'bg-emerald-600 text-white' },
+  low_latency: { text: '低延迟', className: 'bg-cyan-600 text-white' },
+  high_quality: { text: '高质量', className: 'bg-blue-600 text-white' },
+  quota_friendly: { text: 'Token Plan 高频', className: 'bg-teal-600 text-white' },
+  compatible: { text: '兼容', className: 'bg-slate-500 text-white' },
+  guarded: { text: '需确认', className: 'bg-amber-500 text-white' },
+  free_tier: { text: '免费档', className: 'bg-gray-400 text-white' },
+  not_default: { text: '不默认执行', className: 'bg-orange-500 text-white' },
+  not_applicable: { text: '不适用', className: 'bg-gray-300 text-gray-700' },
+}
+
+const VERIFIED_STATUS_BADGE: Record<string, { text: string; className: string }> = {
+  verified_in_this_project: { text: '已验收', className: 'bg-emerald-100 text-emerald-700' },
+  not_verified_in_this_project: { text: '未验收', className: 'bg-amber-100 text-amber-700' },
+}
+
 function StatusBadge({ value, map }: { value: string; map: Record<string, { text: string; className: string }> }) {
   const entry = map[value] ?? { text: value, className: 'bg-slate-100 text-slate-600' }
   return <span className={`text-[10px] px-1.5 py-0.5 rounded ${entry.className}`}>{entry.text}</span>
@@ -107,16 +134,45 @@ export default function CapabilityProfilesPage() {
                 {/* Models */}
                 {p.model_notes.length > 0 && (
                   <div>
-                    <h3 className="text-xs font-medium text-slate-500 mb-2">支持模型</h3>
-                    <div className="space-y-2">
+                    <h3 className="text-xs font-medium text-slate-500 mb-2">模型与推荐依据</h3>
+                    <div className="space-y-3">
                       {p.model_notes.map((m) => (
-                        <div key={m.model} className="text-xs bg-slate-50 rounded px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-slate-700">{m.model}</span>
-                            <span className="text-slate-500">{m.label}</span>
+                        <div key={m.model} className="bg-slate-50 rounded-lg px-3 py-2.5">
+                          {/* model + label */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-slate-800 font-semibold text-sm">{m.model}</span>
+                            <span className="text-slate-600 text-sm">{m.label}</span>
                           </div>
-                          {m.features && <div className="text-slate-500 mt-0.5">{m.features}</div>}
-                          {m.protocols && <div className="text-slate-400 mt-0.5">协议: {m.protocols}</div>}
+                          {/* badges row */}
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <StatusBadge value={m.source} map={SOURCE_BADGE} />
+                            <StatusBadge value={m.recommendation_level} map={RECOMMENDATION_BADGE} />
+                            {m.verified_status && (
+                              <StatusBadge value={m.verified_status} map={VERIFIED_STATUS_BADGE} />
+                            )}
+                          </div>
+                          {/* best_for */}
+                          {m.best_for && m.best_for.length > 0 && (
+                            <div className="mt-2">
+                              <span className="text-[10px] text-emerald-600 font-medium">适合：</span>
+                              <span className="text-[10px] text-slate-600">
+                                {m.best_for.join(' / ')}
+                              </span>
+                            </div>
+                          )}
+                          {/* not_best_for */}
+                          {m.not_best_for && m.not_best_for.length > 0 && (
+                            <div className="mt-0.5">
+                              <span className="text-[10px] text-orange-600 font-medium">不适合：</span>
+                              <span className="text-[10px] text-slate-500">
+                                {m.not_best_for.join(' / ')}
+                              </span>
+                            </div>
+                          )}
+                          {/* notes */}
+                          {m.notes && (
+                            <div className="mt-1 text-[10px] text-slate-400 italic">{m.notes}</div>
+                          )}
                         </div>
                       ))}
                     </div>

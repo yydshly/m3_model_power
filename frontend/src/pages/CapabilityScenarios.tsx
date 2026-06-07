@@ -101,7 +101,7 @@ export default function CapabilityScenariosPage() {
               {/* Recommended Models */}
               {s.recommended_models.length > 0 && (
                 <div>
-                  <h3 className="text-xs font-medium text-slate-500 mb-1">推荐模型</h3>
+                  <h3 className="text-xs font-medium text-slate-500 mb-1">模型建议</h3>
                   <div className="space-y-1">
                     {s.recommended_models.map((m) => (
                       <div key={m.model} className="text-xs bg-slate-50 px-2 py-1 rounded">

@@ -332,10 +332,24 @@ export type CapabilityProfile = {
   model_notes: Array<{
     model: string
     label: string
-    context?: string
-    modalities?: string
-    protocols?: string
-    features?: string
+    source: 'official_docs' | 'token_plan_verified' | 'local_config' | 'historical_compat' | 'risk_warning'
+    recommendation_level:
+      | 'official_primary'
+      | 'official_current'
+      | 'verified_stable'
+      | 'low_latency'
+      | 'high_quality'
+      | 'quota_friendly'
+      | 'compatible'
+      | 'guarded'
+      | 'free_tier'
+      | 'not_default'
+      | 'not_applicable'
+    token_plan_status?: string
+    verified_status?: string
+    best_for: string[]
+    not_best_for?: string[]
+    notes: string
   }>
   capability_modes: Array<{
     capability_id: string
