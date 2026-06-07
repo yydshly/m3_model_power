@@ -66,7 +66,7 @@ models:
     context: 204800
     input_modalities: [text]
     output_modalities: [text]
-    protocols: [openai]
+    protocols: [openai, anthropic]
     supports_tools: true
     supports_thinking: true
     thinking_can_disable: false
@@ -108,7 +108,7 @@ models:
     context: 204800
     input_modalities: [text]
     output_modalities: [text]
-    protocols: [openai]
+    protocols: [openai, anthropic]
     supports_tools: true
     supports_thinking: true
     thinking_can_disable: false
@@ -150,7 +150,7 @@ models:
     context: 204800
     input_modalities: [text]
     output_modalities: [text]
-    protocols: [openai]
+    protocols: [openai, anthropic]
     supports_tools: true
     supports_thinking: true
     thinking_can_disable: false
@@ -192,7 +192,7 @@ models:
     context: 204800
     input_modalities: [text]
     output_modalities: [text]
-    protocols: [openai]
+    protocols: [openai, anthropic]
     supports_tools: true
     supports_thinking: true
     thinking_can_disable: false
@@ -525,7 +525,7 @@ models:
     output_modalities: [video]
     protocols: [native]
     capabilities: [video-t2v, video-i2v, video-s2v]
-    cost_level: medium
+    cost_level: high
     discovery_method: capability_probe
     discovery_status: unknown
     discovery_note: Not returned by /v1/models; verify via video-t2v endpoint.

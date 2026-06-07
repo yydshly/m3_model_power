@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { streamInvoke, type Capability, type Model } from '../api'
+import { quotaLabel } from '../domain/workbenchLabels'
 
 type Msg = { role: 'system' | 'user' | 'assistant'; content: string }
 
@@ -124,7 +125,7 @@ export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] })
         <select value={model} onChange={(e) => setModel(e.target.value)} className="border border-slate-300 rounded px-2 py-1 text-sm bg-white">
           {models.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.quota_eligible ? '✓配额 ' : '$另计费 '}{m.label}
+              {quotaLabel(m.quota_eligible)} {m.label}
             </option>
           ))}
         </select>

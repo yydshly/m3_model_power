@@ -1,0 +1,198 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-06-08",
+  "sources": {
+    "text_anthropic": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/text-anthropic-api",
+      "supported_models": [
+        "MiniMax-M3",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.1",
+        "MiniMax-M2.1-highspeed",
+        "MiniMax-M2"
+      ],
+      "notes": [
+        "M3 supports text/image/video/tool/thinking content blocks.",
+        "M2.x supports text and tool-related content blocks, not image/video."
+      ]
+    },
+    "text_openai": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/text-openai-api",
+      "supported_models": [
+        "MiniMax-M3",
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed",
+        "MiniMax-M2.1",
+        "MiniMax-M2.1-highspeed",
+        "MiniMax-M2"
+      ],
+      "notes": [
+        "OpenAI SDK supports the same 8 MiniMax text models.",
+        "Multimodal input is supported in MiniMax-M3."
+      ]
+    },
+    "responses_create": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/responses-create",
+      "documented_example_models": ["MiniMax-M3"],
+      "notes": [
+        "Docs example uses MiniMax-M3.",
+        "Do not assume all chat models support Responses unless official docs or live probes verify it."
+      ]
+    },
+    "speech_t2a": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/speech-t2a",
+      "supported_models": [
+        "speech-02-hd",
+        "speech-02-turbo",
+        "speech-2.6-hd",
+        "speech-2.6-turbo",
+        "speech-2.8-hd",
+        "speech-2.8-turbo"
+      ],
+      "notes": [
+        "T2A (Text-to-Audio) models for speech synthesis."
+      ]
+    },
+    "voice_clone": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/voice-clone",
+      "notes": [
+        "Voice clone requires uploaded audio sample.",
+        "May have additional cost implications."
+      ]
+    },
+    "image_generation": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/image-generation",
+      "supported_models": ["image-01", "image-01-live", "image-01-krea"],
+      "notes": [
+        "Image generation models for text-to-image."
+      ]
+    },
+    "video_generation": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/video-generation",
+      "supported_models": ["video-01"],
+      "notes": [
+        "Video generation typically out of scope for standard Token Plan.",
+        "Often marked as warning_only or out_of_scope."
+      ]
+    },
+    "lyrics_generation": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/lyrics-generation",
+      "notes": [
+        "Lyrics generation for music context."
+      ]
+    },
+    "music_generation": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/music-generation",
+      "notes": [
+        "Full music generation capability.",
+        "Typically quota_sensitive with requires_explicit_confirmation."
+      ]
+    },
+    "music_cover": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/music-cover",
+      "notes": [
+        "Music cover generation from reference audio.",
+        "Requires uploaded audio asset."
+      ]
+    },
+    "file_upload": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/file-upload",
+      "notes": [
+        "File upload for subsequent capability use.",
+        "Must confirm asset source and authorization."
+      ]
+    },
+    "file_retrieve": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/file-retrieve",
+      "notes": [
+        "Retrieve file content by file_id."
+      ]
+    },
+    "file_delete": {
+      "url": "https://platform.minimaxi.com/docs/api-reference/file-delete",
+      "notes": [
+        "Delete uploaded file.",
+        "Destructive operation."
+      ]
+    }
+  },
+  "model_capabilities": {
+    "MiniMax-M3": {
+      "protocols": ["openai", "anthropic", "responses"],
+      "input_modalities": ["text", "image", "video"],
+      "supports_thinking": true,
+      "thinking_can_disable": true,
+      "supports_tools": true,
+      "context": 1000000,
+      "tier": "flagship"
+    },
+    "MiniMax-M2.7": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "standard"
+    },
+    "MiniMax-M2.7-highspeed": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "highspeed"
+    },
+    "MiniMax-M2.5": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "standard"
+    },
+    "MiniMax-M2.5-highspeed": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "highspeed"
+    },
+    "MiniMax-M2.1": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "standard"
+    },
+    "MiniMax-M2.1-highspeed": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "highspeed"
+    },
+    "MiniMax-M2": {
+      "protocols": ["openai", "anthropic"],
+      "input_modalities": ["text"],
+      "supports_thinking": true,
+      "thinking_can_disable": false,
+      "supports_tools": true,
+      "context": 204800,
+      "tier": "standard"
+    }
+  }
+}
