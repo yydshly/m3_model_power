@@ -78,26 +78,30 @@ function findStringField(data: unknown, fieldNames: string[], depth = 0): string
   return ''
 }
 
-function findStringArrayField(data: unknown, fieldName: string, depth = 0): string[] {
+function findArrayField(data: unknown, fieldName: string, depth = 0): unknown[] {
   if (depth > MAX_DEPTH || data == null) return []
   if (typeof data !== 'object') return []
 
   const d = data as Record<string, unknown>
 
   if (Array.isArray(d[fieldName])) {
-    const arr = d[fieldName] as unknown[]
-    return arr.filter(item => typeof item === 'string' && item) as string[]
+    return d[fieldName] as unknown[]
   }
 
   // Recurse into common containers
   for (const key of ['data', 'result', 'output', 'response', 'body']) {
     if (d[key] != null && typeof d[key] === 'object') {
-      const found = findStringArrayField(d[key], fieldName, depth + 1)
+      const found = findArrayField(d[key], fieldName, depth + 1)
       if (found.length) return found
     }
   }
 
   return []
+}
+
+function findStringArrayField(data: unknown, fieldName: string, depth = 0): string[] {
+  const arr = findArrayField(data, fieldName, depth)
+  return arr.filter(item => typeof item === 'string' && item) as string[]
 }
 
 function extractTextResult(data: unknown): string {
@@ -125,32 +129,34 @@ function extractImageUrl(data: unknown): string {
 }
 
 function extractVoiceIds(data: unknown): Array<{ voice_id: string; name?: string }> {
-  const d = data as Record<string, unknown>
-  const voices = d.voices as Array<Record<string, unknown>> | undefined
-  if (Array.isArray(voices)) {
-    return voices
+  // Try multiple voice array field names and container paths
+  const voiceArrays = [
+    findArrayField(data, 'voices'),
+    findArrayField(data, 'voice_list'),
+    findArrayField(data, 'items'),
+  ]
+
+  for (const arr of voiceArrays) {
+    if (!arr.length) continue
+    const parsed = arr
       .slice(0, 20)
-      .map(v => ({
-        voice_id: String(v.voice_id ?? ''),
-        name: v.name ? String(v.name) : undefined,
-      }))
-      .filter(v => v.voice_id)
-  }
-  // Recursive search for voice arrays
-  const voiceItems = findStringArrayField(data, 'voices', 0)
-  if (voiceItems.length) {
-    // voiceItems contains raw objects or strings; parse what we can
-    return voiceItems
-      .slice(0, 20)
-      .map(item => {
+      .map((item) => {
+        if (typeof item === 'string') return { voice_id: item }
         if (typeof item === 'object' && item !== null) {
           const v = item as Record<string, unknown>
-          return { voice_id: String(v.voice_id ?? ''), name: v.name ? String(v.name) : undefined }
+          // voice_id can be at top level or nested under voice object
+          const id = v.voice_id ?? v.voiceId ?? v.id
+          if (id) {
+            return { voice_id: String(id), name: v.name ? String(v.name) : undefined }
+          }
         }
-        return { voice_id: String(item), name: undefined }
+        return null
       })
-      .filter(v => v.voice_id)
+      .filter(Boolean) as Array<{ voice_id: string; name?: string }>
+
+    if (parsed.length) return parsed
   }
+
   return []
 }
 
