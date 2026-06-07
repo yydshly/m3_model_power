@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   getVerificationIndex,
   getVerificationSummary,
@@ -403,6 +404,16 @@ export default function TestConsole() {
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
+
+  // Support ?capability=xxx URL param to auto-select a capability
+  const [searchParams] = useSearchParams()
+  const urlCapId = searchParams.get('capability')
+
+  useEffect(() => {
+    if (urlCapId && registry?.capabilities.some((c) => c.id === urlCapId)) {
+      setSelectedCapId(urlCapId)
+    }
+  }, [urlCapId, registry])
 
   const refreshHistory = () => {
     getTestConsoleHistory(50)

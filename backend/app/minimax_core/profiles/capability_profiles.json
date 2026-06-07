@@ -1,0 +1,472 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "chat": {
+      "family": "chat",
+      "label": "对话能力",
+      "user_summary": "通过 OpenAI / Anthropic / MiniMax Responses 三套协议与大模型对话，支持长上下文、工具调用、思考模式。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["chat-openai", "chat-anthropic", "chat-responses-create", "chat-responses-tokens"],
+      "direct_testable_capabilities": ["chat-openai", "chat-anthropic", "chat-responses-create", "chat-responses-tokens"],
+      "guarded_capabilities": [],
+      "not_default_executable": [],
+      "model_notes": [
+        {
+          "model": "MiniMax-M3",
+          "label": "旗舰多模态模型",
+          "context": "1M",
+          "modalities": "text+image+video",
+          "protocols": "OpenAI / Anthropic / Responses",
+          "features": "长上下文、多模态输入、tools 调用、thinking 思考模式"
+        },
+        {
+          "model": "MiniMax-M2.7",
+          "label": "标准档",
+          "context": "204800",
+          "modalities": "text",
+          "protocols": "OpenAI / Anthropic",
+          "features": "高性价比标准档"
+        },
+        {
+          "model": "MiniMax-M2.7 Highspeed",
+          "label": "极速档（Quota）",
+          "context": "204800",
+          "modalities": "text",
+          "protocols": "OpenAI / Anthropic",
+          "features": "走 TokenPlanPlus 共享配额，适合高频场景"
+        },
+        {
+          "model": "MiniMax-M2.5 / M2.5 Highspeed",
+          "label": "标准/极速档",
+          "context": "204800",
+          "modalities": "text",
+          "protocols": "OpenAI / Anthropic",
+          "features": "M2.5 Highspeed 走共享配额"
+        },
+        {
+          "model": "MiniMax-M2.1 / M2.1 Highspeed",
+          "label": "标准/极速档",
+          "context": "204800",
+          "modalities": "text",
+          "protocols": "OpenAI / Anthropic",
+          "features": "M2.1 Highspeed 走共享配额"
+        },
+        {
+          "model": "MiniMax-M2",
+          "label": "标准档",
+          "context": "204800",
+          "modalities": "text",
+          "protocols": "OpenAI",
+          "features": "基础标准档"
+        }
+      ],
+      "capability_modes": [
+        {
+          "capability_id": "chat-openai",
+          "protocol": "OpenAI",
+          "description": "通过 OpenAI 兼容协议调用",
+          "streaming": true
+        },
+        {
+          "capability_id": "chat-anthropic",
+          "protocol": "Anthropic",
+          "description": "通过 Anthropic 兼容协议调用",
+          "streaming": true
+        },
+        {
+          "capability_id": "chat-responses-create",
+          "protocol": "MiniMax Responses",
+          "description": "通过 MiniMax Responses API 调用",
+          "streaming": true
+        },
+        {
+          "capability_id": "chat-responses-tokens",
+          "protocol": "Token 估算",
+          "description": "估算 token 消耗，不产生真实调用",
+          "streaming": false
+        }
+      ],
+      "key_parameters": [
+        {"name": "model", "description": "选择模型，如 MiniMax-M3 / M2.7-highspeed"},
+        {"name": "messages", "description": "对话历史消息列表"},
+        {"name": "max_tokens", "description": "最大输出 token 数"},
+        {"name": "temperature", "description": "采样温度，影响随机性"},
+        {"name": "stream", "description": "是否流式返回"},
+        {"name": "tools", "description": "工具调用配置（部分模型支持）"},
+        {"name": "thinking", "description": "是否启用思考模式（仅 M3）"}
+      ],
+      "outputs": ["对话文本", "思考过程（thinking_block）", "工具调用（tool_calls）", "Token 消耗统计（usage）"],
+      "recommended_scenarios": ["chat_model_comparison", "agent_api_integration"],
+      "recommended_workflows": ["chat_model_comparison"],
+      "risk_notes": [
+        "Highspeed 模型走 Token Plan 共享配额，不额外计费",
+        "标准档模型按实际 token 计费",
+        "chat-responses-tokens 仅做估算，不产生真实费用"
+      ],
+      "product_usage": [
+        "构建 AI 助手 / 问答系统",
+        "接入 Claude Code / Cursor 等 IDE",
+        "企业知识库问答",
+        "多模态内容分析（配合图片理解）"
+      ]
+    },
+    "voice": {
+      "family": "voice",
+      "label": "语音能力",
+      "user_summary": "输入文本，选择音色和模型，生成语音音频。支持同步合成、流式合成、异步长文本合成。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["voice-list", "tts-sync", "tts-async", "tts-ws"],
+      "direct_testable_capabilities": ["voice-list", "tts-sync"],
+      "guarded_capabilities": ["tts-async"],
+      "not_default_executable": ["voice-clone-upload-audio", "voice-clone-upload-prompt", "voice-clone-do", "voice-design", "voice-delete"],
+      "model_notes": [
+        {
+          "model": "speech-02-turbo",
+          "label": "02 系列低延迟版",
+          "features": "适合快速生成，低延迟优先"
+        },
+        {
+          "model": "speech-02-hd",
+          "label": "02 系列高质量版",
+          "features": "音质优先，推荐主力音色"
+        },
+        {
+          "model": "speech-2.6-turbo",
+          "label": "2.6 系列低延迟版",
+          "features": "新一代性价比平衡"
+        },
+        {
+          "model": "speech-2.6-hd",
+          "label": "2.6 系列高质量版",
+          "features": "更高质量的新一代音色"
+        },
+        {
+          "model": "speech-2.8-turbo",
+          "label": "2.8 系列低延迟版",
+          "features": "最新代，最低延迟"
+        },
+        {
+          "model": "speech-2.8-hd",
+          "label": "2.8 系列高质量版",
+          "features": "最新代，最高音质"
+        }
+      ],
+      "capability_modes": [
+        {
+          "capability_id": "voice-list",
+          "mode": "查询音色",
+          "description": "查询当前 Token Plan 可用的音色列表",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "tts-sync",
+          "mode": "同步 TTS",
+          "description": "短文本同步合成，适合快速生成（<= 300 字）",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "tts-async",
+          "mode": "异步 TTS",
+          "description": "长文本异步合成，> 1000 字需确认 quota",
+          "risk_level": "guarded"
+        },
+        {
+          "capability_id": "tts-ws",
+          "mode": "流式 TTS",
+          "description": "WebSocket 流式合成，实时返回音频流",
+          "risk_level": "safe"
+        }
+      ],
+      "key_parameters": [
+        {"name": "text", "description": "待合成文本，tts-async > 1000 字需确认"},
+        {"name": "voice_id", "description": "音色 ID，从 voice-list 查询获取"},
+        {"name": "model", "description": "语音模型，如 speech-02-hd / speech-02-turbo"},
+        {"name": "speed", "description": "语速，默认 1.0"},
+        {"name": "emotion", "description": "情绪，部分音色支持"},
+        {"name": "format", "description": "输出格式，如 mp3 / wav"},
+        {"name": "sample_rate", "description": "采样率，如 16000 / 24000"},
+        {"name": "bitrate", "description": "比特率，影响音质和大小"}
+      ],
+      "outputs": ["MP3 / WAV 音频二进制", "task_id（异步模式，用于轮询）"],
+      "recommended_scenarios": ["short_video_voiceover", "emotion_dialog_voice"],
+      "recommended_workflows": ["voice_generation"],
+      "risk_notes": [
+        "tts-sync 默认允许，tts-async 长文本需 confirm_quota",
+        "tts-async > 5000 字硬阻断，无法绕过",
+        "音色克隆和设计可能触发额外付费（9.9 元/音色）",
+        "voice-clone / voice-design / voice-delete 不默认执行"
+      ],
+      "product_usage": [
+        "短视频旁白配音",
+        "语音助手 / NPC 播报",
+        "有声内容生成",
+        "多语言配音",
+        "情感语音定制"
+      ]
+    },
+    "vision": {
+      "family": "vision",
+      "label": "视觉能力",
+      "user_summary": "输入描述词生成图片，或上传参考图进行风格变化。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["image-t2i", "image-i2i"],
+      "direct_testable_capabilities": ["image-t2i"],
+      "guarded_capabilities": ["image-i2i"],
+      "not_default_executable": [],
+      "model_notes": [
+        {
+          "model": "image-01",
+          "label": "主力文生图/图生图模型",
+          "features": "支持多种画风，文生图和图生图主力模型"
+        },
+        {
+          "model": "image-01-live",
+          "label": "Live 画风版",
+          "features": "更多画风设置，支持实时感/动态感画风"
+        }
+      ],
+      "capability_modes": [
+        {
+          "capability_id": "image-t2i",
+          "mode": "文生图",
+          "description": "输入文本描述，生成图片",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "image-i2i",
+          "mode": "图生图",
+          "description": "上传参考图，生成风格变化后的图片，需确认素材来源",
+          "risk_level": "guarded"
+        }
+      ],
+      "key_parameters": [
+        {"name": "prompt", "description": "文本描述，描述越详细效果越好"},
+        {"name": "model", "description": "图像模型，如 image-01 / image-01-live"},
+        {"name": "img_url", "description": "参考图 URL，仅 image-i2i 需要"},
+        {"name": "style", "description": "画风，仅 image-01-live 支持"},
+        {"name": "aspect_ratio", "description": "图片比例，如 16:9 / 1:1 / 9:16"},
+        {"name": "size", "description": "图片尺寸，如 1024x1024"},
+        {"name": "reference_strength", "description": "参考强度（image-i2i），影响与参考图的相似度"},
+        {"name": "confirm_asset_source", "description": "素材来源确认（image-i2i 必需）"}
+      ],
+      "outputs": ["生成的图片 URL（可能有过期时间）", "状态码 base_resp"],
+      "recommended_scenarios": ["image_cover_generation", "image_reference_variation"],
+      "recommended_workflows": ["image_creation"],
+      "risk_notes": [
+        "image-i2i 需要参考图，需确认素材来源（用户自有图片）",
+        "生成图片 URL 可能有过期时间，需要及时使用",
+        "image-i2i 需 confirm_asset_source"
+      ],
+      "product_usage": [
+        "内容配图自动化",
+        "UGC 图片生成",
+        "设计灵感生成",
+        "品牌视觉素材",
+        "漫画/插画创作"
+      ]
+    },
+    "music": {
+      "family": "music",
+      "label": "音乐能力",
+      "user_summary": "输入主题生成歌词，选择风格生成音乐。翻唱需要参考音频，涉及版权和成本风险。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["lyrics-gen", "music-gen"],
+      "direct_testable_capabilities": ["lyrics-gen", "music-gen"],
+      "guarded_capabilities": [],
+      "not_default_executable": ["music-cover-prep"],
+      "model_notes": [
+        {
+          "model": "music-2.6",
+          "label": "音乐生成主力模型",
+          "features": "歌词+风格 → 音乐文件"
+        },
+        {
+          "model": "music-cover",
+          "label": "翻唱生成模型",
+          "features": "需要参考音频，涉及版权风险，不默认执行"
+        },
+        {
+          "model": "music-2.6-free / music-cover-free",
+          "label": "Free tier 变体",
+          "features": "免费档变体，不在 Token Plan 默认覆盖范围"
+        }
+      ],
+      "capability_modes": [
+        {
+          "capability_id": "lyrics-gen",
+          "mode": "歌词生成",
+          "description": "输入主题，生成歌词草稿",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "music-gen",
+          "mode": "音乐生成",
+          "description": "输入歌词+风格，生成音乐文件",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "music-cover-prep",
+          "mode": "翻唱预处理",
+          "description": "上传参考音频进行翻唱，涉及版权和成本风险",
+          "risk_level": "blocked"
+        }
+      ],
+      "key_parameters": [
+        {"name": "theme", "description": "歌词主题（lyrics-gen）"},
+        {"name": "prompt", "description": "描述（lyrics-gen）"},
+        {"name": "lyrics", "description": "歌词内容（music-gen）"},
+        {"name": "style", "description": "音乐风格（music-gen）"},
+        {"name": "title", "description": "歌曲标题（music-gen）"},
+        {"name": "model", "description": "音乐模型"},
+        {"name": "reference_audio", "description": "参考音频（music-cover，不默认执行）"}
+      ],
+      "outputs": ["歌词文本（lyrics-gen）", "音乐文件 URL（music-gen）", "task_id（异步任务）"],
+      "recommended_scenarios": ["emotion_mv_music"],
+      "recommended_workflows": ["music_creation"],
+      "risk_notes": [
+        "music-gen 属于中等成本，medium 级别验收已通过",
+        "music-cover 涉及参考音频版权，需显式确认，不默认执行",
+        "lyrics-gen 是纯文本能力，无额外风险"
+      ],
+      "product_usage": [
+        "音乐创作工具",
+        "UGC 音乐平台",
+        "短视频配乐",
+        "品牌音乐定制"
+      ]
+    },
+    "assets": {
+      "family": "assets",
+      "label": "文件 / 资产能力",
+      "user_summary": "上传和管理文件，读取文件内容和元数据。删除操作是破坏性的，不默认执行。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["file-upload", "file-list", "file-retrieve", "file-content"],
+      "direct_testable_capabilities": ["file-list", "file-retrieve", "file-content"],
+      "guarded_capabilities": ["file-upload"],
+      "not_default_executable": ["file-delete"],
+      "model_notes": [],
+      "capability_modes": [
+        {
+          "capability_id": "file-upload",
+          "mode": "上传文件",
+          "description": "上传文件获取 file_id，需确认素材来源",
+          "risk_level": "guarded"
+        },
+        {
+          "capability_id": "file-list",
+          "mode": "文件列表",
+          "description": "查询已上传文件列表",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "file-retrieve",
+          "mode": "文件详情",
+          "description": "查询文件元数据（filename / mime_type / size）",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "file-content",
+          "mode": "文件内容",
+          "description": "读取文件内容或摘要",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "file-delete",
+          "mode": "删除文件",
+          "description": "删除已上传文件，破坏性操作，不默认执行",
+          "risk_level": "blocked"
+        }
+      ],
+      "key_parameters": [
+        {"name": "file", "description": "上传文件（multipart），仅 file-upload"},
+        {"name": "file_id", "description": "文件唯一标识，file-retrieve / file-content"},
+        {"name": "purpose", "description": "文件用途，如 batch_processing"},
+        {"name": "confirm_asset_source", "description": "素材来源确认（file-upload）"}
+      ],
+      "outputs": ["file_id（上传后）", "文件列表", "文件元数据", "文件内容摘要"],
+      "recommended_scenarios": ["file_knowledge_entry"],
+      "recommended_workflows": ["file_knowledge"],
+      "risk_notes": [
+        "file-upload 需要确认素材来源（用户自有文件）",
+        "file-delete 是破坏性操作，需要 confirm_destructive，不默认执行",
+        "上传文件可能消耗存储额度"
+      ],
+      "product_usage": [
+        "知识库文件管理",
+        "图片素材上传（配合 image-i2i 参考图）",
+        "音频素材上传（配合 music-cover 参考音频）",
+        "文档分析入口"
+      ]
+    },
+    "models": {
+      "family": "models",
+      "label": "模型发现能力",
+      "user_summary": "查询 OpenAI / Anthropic 两套协议可见的模型列表，用于模型选择和差异对比。",
+      "token_plan_status": "available_direct",
+      "api_status": "implemented_verified",
+      "verified_capabilities": ["models-openai-list", "models-openai-retrieve", "models-anthropic-list", "models-anthropic-retrieve"],
+      "direct_testable_capabilities": ["models-openai-list", "models-openai-retrieve", "models-anthropic-list", "models-anthropic-retrieve"],
+      "guarded_capabilities": [],
+      "not_default_executable": [],
+      "model_notes": [
+        {
+          "model": "OpenAI Models",
+          "label": "OpenAI 协议模型",
+          "description": "/v1/models 主要返回 chat 模型"
+        },
+        {
+          "model": "Anthropic Models",
+          "label": "Anthropic 协议模型",
+          "description": "/v1/models 主要返回 chat 模型"
+        }
+      ],
+      "capability_modes": [
+        {
+          "capability_id": "models-openai-list",
+          "mode": "OpenAI 模型列表",
+          "description": "查询 OpenAI 兼容协议可见的模型",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "models-openai-retrieve",
+          "mode": "OpenAI 单模型详情",
+          "description": "查询指定 OpenAI 模型详情",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "models-anthropic-list",
+          "mode": "Anthropic 模型列表",
+          "description": "查询 Anthropic 兼容协议可见的模型",
+          "risk_level": "safe"
+        },
+        {
+          "capability_id": "models-anthropic-retrieve",
+          "mode": "Anthropic 单模型详情",
+          "description": "查询指定 Anthropic 模型详情",
+          "risk_level": "safe"
+        }
+      ],
+      "key_parameters": [
+        {"name": "无", "description": "GET 请求，无需参数"}
+      ],
+      "outputs": ["模型列表（id / object / ...）", "单个模型详情"],
+      "recommended_scenarios": ["chat_model_comparison"],
+      "recommended_workflows": ["chat_model_comparison"],
+      "risk_notes": [
+        "仅做列表查询，不产生真实调用费用",
+        "/v1/models 主要返回 chat 模型，speech/image/video/music 等 native 模型不一定出现",
+        "需要通过对应 capability endpoint 验证 native 模型可用性"
+      ],
+      "product_usage": [
+        "统一模型选择 UI",
+        "模型对比工具",
+        "Token Plan 权益核对"
+      ]
+    }
+  }
+}

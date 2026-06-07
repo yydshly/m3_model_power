@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from . import capabilities  # noqa: F401 —— 触发 handler 注册
 from .config import settings
 from .minimax.client import MiniMaxError
-from .routers import descriptions, health, history, invoke, registry, risk_check, stream, upload, verification, ws
+from .routers import descriptions, health, history, invoke, profiles, registry, risk_check, scenarios, stream, upload, verification, workflows, ws
 
 app = FastAPI(title="MiniMax Workbench", version="0.2.0")
 
@@ -41,6 +41,9 @@ app.include_router(verification.router, prefix="/api")
 app.include_router(ws.router, prefix="/api")
 app.include_router(history.router, prefix="/api")
 app.include_router(descriptions.router, prefix="/api")
+app.include_router(profiles.router, prefix="/api")
+app.include_router(workflows.router, prefix="/api")
+app.include_router(scenarios.router, prefix="/api")
 
 
 @app.get("/")

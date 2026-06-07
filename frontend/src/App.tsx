@@ -1,5 +1,8 @@
 import { NavLink, Route, Routes } from 'react-router-dom'
 import CapabilityPage from './pages/Capability'
+import CapabilityProfilesPage from './pages/CapabilityProfiles'
+import CapabilityScenariosPage from './pages/CapabilityScenarios'
+import CapabilityWorkflowsPage from './pages/CapabilityWorkflows'
 import CategoryPage from './pages/Category'
 import ModelsPage from './pages/Models'
 import Overview from './pages/Overview'
@@ -31,7 +34,10 @@ function Shell() {
             />
           ))}
           <NavItem to="/models-all" emoji="🧬" label="所有模型" />
-          <NavItem to="/test-console" emoji="🧪" label="测试控制台" />
+          <NavItem to="/capability-profiles" emoji="🧭" label="能力画像" />
+          <NavItem to="/capability-scenarios" emoji="🎯" label="场景推荐" />
+          <NavItem to="/capability-workflows" emoji="🔁" label="流程体验" />
+          <NavItem to="/test-console" emoji="🧪" label="高级测试" />
         </nav>
         <div className="p-3 border-t border-slate-200 text-xs text-slate-500">
           {error ? (
@@ -51,6 +57,9 @@ function Shell() {
           <Route path="/cap/:id" element={<CapabilityPage />} />
           <Route path="/models-all" element={<ModelsPage />} />
           <Route path="/test-console" element={<TestConsole />} />
+          <Route path="/capability-profiles" element={<CapabilityProfilesPage />} />
+          <Route path="/capability-scenarios" element={<CapabilityScenariosPage />} />
+          <Route path="/capability-workflows" element={<CapabilityWorkflowsPage />} />
         </Routes>
       </main>
     </div>
