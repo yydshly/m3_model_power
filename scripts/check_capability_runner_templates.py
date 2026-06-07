@@ -7,7 +7,7 @@ from pathlib import Path
 _root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_root))
 
-from backend.app.minimax_core.runner import load_runner_templates, is_runner_supported
+from backend.app.minimax_core.runner import load_runner_templates, is_runner_supported, _SUPPORTED_CAPABILITIES
 from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
@@ -42,6 +42,12 @@ if "templates" not in templates_data:
     sys.exit(1)
 
 templates = templates_data["templates"]
+
+# ── 2c. Every runner-supported capability must have a template ────────────────
+# This catches the critical bug: capability in _SUPPORTED_CAPABILITIES but missing template.
+_runner_supported_missing_template = [cap for cap in sorted(_SUPPORTED_CAPABILITIES) if cap not in templates]
+if _runner_supported_missing_template:
+    errors.append(f"Runner-supported but template missing: {sorted(_runner_supported_missing_template)}")
 
 # ── 2b. Load registry ─────────────────────────────────────────────────────────
 reg = get_capability_registry()

@@ -24,6 +24,10 @@ _ROOT = Path(__file__).resolve().parent.parent
 _TEMPLATE_PATH = _ROOT / "backend" / "app" / "minimax_core" / "runner" / "capability_runner_templates.json"
 _FRONTEND_DIR = _ROOT / "frontend" / "src"
 
+# ── Import actual runner supported set from backend ─────────────────────
+sys.path.insert(0, str(_ROOT / "backend"))
+from app.minimax_core.runner import _SUPPORTED_CAPABILITIES
+
 # ── Load runner templates ────────────────────────────────────────────────
 
 def load_templates() -> dict:
@@ -37,21 +41,22 @@ def load_templates() -> dict:
 # ── Check 1: All runner-supported capabilities have templates ────────────
 
 def check_templates_exist(templates: dict) -> bool:
-    """Each RUNNER_SUPPORTED_CAPABILITY should have a template entry."""
-    # Hardcoded list matching frontend/src/navigation/capabilityLinks.ts
-    RUNNER_SUPPORTED = {
-        "lyrics-gen", "music-gen", "voice-list", "tts-sync",
-        "image-t2i", "image-i2i", "chat-openai",
-    }
+    """Each _SUPPORTED_CAPABILITY must have a template entry.
 
+    This catches the critical bug: capability marked as runner-supported
+    but missing from capability_runner_templates.json.
+    """
     all_ok = True
-    for cap in sorted(RUNNER_SUPPORTED):
+    missing = []
+    for cap in sorted(_SUPPORTED_CAPABILITIES):
         if cap not in templates:
-            print(f"FAIL: '{cap}' is RUNNER_SUPPORTED but has no template entry")
+            missing.append(cap)
             all_ok = False
 
-    if all_ok:
-        print(f"PASS: All {len(RUNNER_SUPPORTED)} RUNNER_SUPPORTED capabilities have templates")
+    if missing:
+        print(f"FAIL: Runner-supported capabilities missing templates: {sorted(missing)}")
+    else:
+        print(f"PASS: All {len(_SUPPORTED_CAPABILITIES)} runner-supported capabilities have templates")
     return all_ok
 
 
