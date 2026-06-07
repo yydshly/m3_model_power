@@ -6,11 +6,15 @@ import AssetResultPreview from '../components/AssetResultPreview'
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type FormField = {
-  type: 'input' | 'textarea' | 'select'
+  type: 'input' | 'textarea' | 'select' | 'number' | 'slider'
   label: string
   default: string
   placeholder?: string
   max_chars?: number
+  value_type?: 'string' | 'number' | 'boolean'
+  min?: number
+  max?: number
+  step?: number
   options?: Array<{ value: string; label: string }>
 }
 
@@ -20,6 +24,17 @@ type FormSchema = Record<string, FormField>
 
 function isOk(result: InvokeResult): result is { ok: true; data: unknown } {
   return 'ok' in result && result.ok === true
+}
+
+// ── Business error detection ───────────────────────────────────────────────────
+
+function extractBusinessError(data: unknown): string | null {
+  const d = data as Record<string, unknown>
+  const base = d?.base_resp as Record<string, unknown> | undefined
+  if (base && typeof base.status_code === 'number' && base.status_code !== 0) {
+    return `${base.status_code}: ${(base.status_msg as string) ?? 'MiniMax business error'}`
+  }
+  return null
 }
 
 // ── Risk level badge ─────────────────────────────────────────────────────────
@@ -63,6 +78,96 @@ function RunButton({ state, label, onClick, disabled }: { state: RunState; label
   )
 }
 
+// ── Type-aware value extraction ────────────────────────────────────────────────
+
+function getFieldValue(key: string, schema: FormSchema, values: Record<string, string>): unknown {
+  const field = schema[key]
+  const raw = values[key] ?? field?.default ?? ''
+
+  if (field?.value_type === 'number' || field?.type === 'number' || field?.type === 'slider') {
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : raw
+  }
+
+  if (field?.value_type === 'boolean') {
+    return raw === 'true'
+  }
+
+  return raw
+}
+
+// ── Type-aware payload builder ─────────────────────────────────────────────────
+
+function buildPayload(
+  template: Record<string, unknown>,
+  values: Record<string, string>,
+  schema: FormSchema,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+
+  for (const [key, val] of Object.entries(template)) {
+    if (typeof val === 'string') {
+      // Case A: entire string is a single placeholder → apply type conversion
+      const exact = val.match(/^\{(\w+)\}$/)
+      if (exact) {
+        result[key] = getFieldValue(exact[1], schema, values)
+      } else {
+        // Case B: mixed string with placeholders → keep as string
+        result[key] = val.replace(/\{(\w+)\}/g, (_, k) => {
+          const v = getFieldValue(k, schema, values)
+          return typeof v === 'string' ? v : String(v)
+        })
+      }
+    } else if (Array.isArray(val)) {
+      result[key] = val.map((item) => {
+        if (typeof item === 'string') {
+          const exact = item.match(/^\{(\w+)\}$/)
+          if (exact) return getFieldValue(exact[1], schema, values)
+          return item.replace(/\{(\w+)\}/g, (_, k) => {
+            const v = getFieldValue(k, schema, values)
+            return typeof v === 'string' ? v : String(v)
+          })
+        }
+        if (typeof item === 'object' && item !== null) {
+          const copy: Record<string, unknown> = {}
+          for (const [mk, mv] of Object.entries(item as Record<string, unknown>)) {
+            if (typeof mv === 'string') {
+              const exact = mv.match(/^\{(\w+)\}$/)
+              if (exact) copy[mk] = getFieldValue(exact[1], schema, values)
+              else copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => {
+                const v = getFieldValue(k, schema, values)
+                return typeof v === 'string' ? v : String(v)
+              })
+            } else {
+              copy[mk] = mv
+            }
+          }
+          return copy
+        }
+        return item
+      })
+    } else if (typeof val === 'object' && val !== null) {
+      const copy: Record<string, unknown> = {}
+      for (const [mk, mv] of Object.entries(val as Record<string, unknown>)) {
+        if (typeof mv === 'string') {
+          const exact = mv.match(/^\{(\w+)\}$/)
+          if (exact) copy[mk] = getFieldValue(exact[1], schema, values)
+          else copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => {
+            const v = getFieldValue(k, schema, values)
+            return typeof v === 'string' ? v : String(v)
+          })
+        } else {
+          copy[mk] = mv
+        }
+      }
+      result[key] = copy
+    } else {
+      result[key] = val
+    }
+  }
+  return result
+}
+
 // ── Form renderer ─────────────────────────────────────────────────────────────
 
 function RunnerForm({
@@ -100,6 +205,32 @@ function RunnerForm({
               ))}
             </select>
           )}
+          {field.type === 'number' && (
+            <input
+              type="number"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
+              value={values[key] ?? field.default}
+              placeholder={field.placeholder}
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              onChange={(e) => onChange(key, e.target.value)}
+            />
+          )}
+          {field.type === 'slider' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                className="flex-1"
+                value={values[key] ?? field.default}
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                onChange={(e) => onChange(key, e.target.value)}
+              />
+              <span className="text-xs text-slate-500 w-10 text-right">{values[key] ?? field.default}</span>
+            </div>
+          )}
           {field.type === 'input' && (
             <input
               type="text"
@@ -120,43 +251,101 @@ function RunnerForm({
   )
 }
 
-// ── Payload builder ───────────────────────────────────────────────────────────
+// ── Result banner by result_type ───────────────────────────────────────────────
 
-function buildPayload(template: Record<string, unknown>, values: Record<string, string>): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  for (const [key, val] of Object.entries(template)) {
-    if (typeof val === 'string') {
-      result[key] = val.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '')
-    } else if (Array.isArray(val)) {
-      result[key] = val.map((item) => {
-        if (typeof item === 'string') return item.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '')
-        if (typeof item === 'object' && item !== null) {
-          const copy: Record<string, unknown> = {}
-          for (const [mk, mv] of Object.entries(item)) {
-            if (typeof mv === 'string') copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '')
-            else copy[mk] = mv
-          }
-          return copy
-        }
-        return item
-      })
-    } else if (typeof val === 'object' && val !== null) {
-      const copy: Record<string, unknown> = {}
-      for (const [mk, mv] of Object.entries(val)) {
-        if (typeof mv === 'string') copy[mk] = mv.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '')
-        else copy[mk] = mv
-      }
-      result[key] = copy
-    } else {
-      result[key] = val
-    }
+function ResultBanner({ resultType, data }: { resultType: string; data: unknown }) {
+  const d = data as Record<string, unknown>
+
+  if (resultType === 'audio') {
+    const audioUrl = d.audio_url as string | undefined
+    return (
+      <div className="mb-3 p-3 rounded bg-sky-50 border border-sky-200 text-xs text-sky-700">
+        <strong>🎧 音频结果</strong>
+        {audioUrl && <div className="mt-1 text-slate-600">可直接播放，或右键另存为下载。</div>}
+      </div>
+    )
   }
-  return result
+
+  if (resultType === 'image') {
+    const imageUrl = d.image_url as string | undefined
+    return (
+      <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200 text-xs text-violet-700">
+        <strong>🖼 图片结果</strong>
+        {imageUrl && (
+          <div className="mt-1">
+            <button
+              onClick={() => navigator.clipboard.writeText(imageUrl)}
+              className="text-sky-600 hover:underline"
+            >
+              复制图片 URL
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (resultType === 'voice_list') {
+    return (
+      <div className="mb-3 p-3 rounded bg-amber-50 border border-amber-200 text-xs text-amber-700">
+        <strong>🎙 音色列表</strong>
+        <div className="mt-1">复制 voice_id 后，前往语音合成使用。</div>
+      </div>
+    )
+  }
+
+  if (resultType === 'text') {
+    return (
+      <div className="mb-3 p-3 rounded bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
+        <strong>📝 文本结果</strong>
+      </div>
+    )
+  }
+
+  if (resultType === 'chat') {
+    return (
+      <div className="mb-3 p-3 rounded bg-blue-50 border border-blue-200 text-xs text-blue-700">
+        <strong>💬 模型回复</strong>
+      </div>
+    )
+  }
+
+  return null
+}
+
+// ── Voice list copy helper ─────────────────────────────────────────────────────
+
+function VoiceListHint({ data }: { data: unknown }) {
+  const d = data as Record<string, unknown>
+  const voices = d.voices as Array<Record<string, unknown>> | undefined
+  if (!voices || !Array.isArray(voices)) return null
+
+  return (
+    <div className="mt-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-slate-600 font-medium">voice_id 复制</span>
+        <span className="text-[10px] text-slate-400">点击直接复制</span>
+      </div>
+      <div className="space-y-1 max-h-40 overflow-y-auto">
+        {voices.slice(0, 20).map((v, i) => (
+          <div key={i} className="flex items-center gap-2 bg-slate-50 rounded px-2 py-1">
+            <button
+              onClick={() => navigator.clipboard.writeText(String(v.voice_id ?? ''))}
+              className="text-xs font-mono text-sky-600 hover:text-sky-800 hover:underline"
+            >
+              {String(v.voice_id ?? '')}
+            </button>
+            <span className="text-[10px] text-slate-400 truncate flex-1">{String(v.name ?? '')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ── Result renderer ───────────────────────────────────────────────────────────
 
-function InvokeResultView({ result }: { result: InvokeResult }) {
+function InvokeResultView({ result, resultType }: { result: InvokeResult; resultType: string }) {
   if (!isOk(result)) {
     return (
       <div className="mt-3 p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
@@ -170,9 +359,18 @@ function InvokeResultView({ result }: { result: InvokeResult }) {
       </div>
     )
   }
+
+  const bizErr = extractBusinessError(result.data)
   return (
     <div className="mt-4">
+      <ResultBanner resultType={resultType} data={result.data} />
       <AssetResultPreview data={result.data} />
+      {resultType === 'voice_list' && <VoiceListHint data={result.data} />}
+      {bizErr && (
+        <div className="mt-2 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
+          <strong>业务错误：</strong>{bizErr}
+        </div>
+      )}
     </div>
   )
 }
@@ -201,12 +399,13 @@ function CapabilityCard({
 
   const isTtsSync = template.capability_id === 'tts-sync'
   const voiceIdEmpty = isTtsSync && !values['voice_id']?.trim()
+  const resultType = template.result_type ?? 'text'
 
   const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
 
   const handleRun = async () => {
     if (isTtsSync && voiceIdEmpty) return
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values)
+    const payload = buildPayload(template.payload_template as Record<string, unknown>, values, schema)
     setRunState('checking')
     setResult(null)
     setRiskResult(null)
@@ -217,6 +416,18 @@ function CapabilityCard({
       if (!risk.allowed) { setRunState('error'); return }
       setRunState('running')
       const res = await invoke(template.capability_id, payload, {})
+
+      // Business error check: HTTP 200 but base_resp.status_code != 0
+      if (isOk(res)) {
+        const bizErr = extractBusinessError(res.data)
+        if (bizErr) {
+          setErrorMessage(bizErr)
+          setResult(res)
+          setRunState('error')
+          return
+        }
+      }
+
       setResult(res)
       setRunState('done')
     } catch (e: any) {
@@ -265,6 +476,12 @@ function CapabilityCard({
           </div>
         )}
 
+        {resultType === 'image' && (
+          <div className="mb-3 p-2 rounded bg-violet-50 border border-violet-100 text-xs text-violet-600">
+            💡 此能力会消耗 Token Plan 额度，请确认后再执行。
+          </div>
+        )}
+
         {Object.keys(schema).length > 0 && (
           <div className="mb-4">
             <RunnerForm schema={schema} values={values} onChange={handleChange} />
@@ -301,7 +518,7 @@ function CapabilityCard({
             )}
           </div>
         )}
-        {result && <InvokeResultView result={result} />}
+        {result && <InvokeResultView result={result} resultType={resultType} />}
 
         {template.next_steps.length > 0 && runState === 'done' && (
           <div className="mt-4 pt-3 border-t border-slate-100">

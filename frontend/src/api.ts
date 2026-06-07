@@ -459,12 +459,17 @@ export type RunnerTemplate = {
   description: string
   suitable_for: string[]
   risk_level: string
+  result_type: 'text' | 'audio' | 'image' | 'voice_list' | 'chat'
   form_schema: Record<string, {
-    type: 'input' | 'textarea' | 'select'
+    type: 'input' | 'textarea' | 'select' | 'number' | 'slider'
     label: string
     default: string
     placeholder?: string
     max_chars?: number
+    value_type?: 'string' | 'number' | 'boolean'
+    min?: number
+    max?: number
+    step?: number
     options?: Array<{ value: string; label: string }>
   }>
   payload_template: Record<string, unknown>

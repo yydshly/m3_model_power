@@ -13,7 +13,9 @@ from backend.app.minimax_core.registry.loader import get_capability_registry
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
 EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai"}
-VALID_FIELD_TYPES = {"input", "textarea", "select"}
+VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider"}
+VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat"}
+VALID_VALUE_TYPES = {"string", "number", "boolean"}
 
 errors: list[str] = []
 warnings: list[str] = []
@@ -57,7 +59,7 @@ if set(templates.keys()) != EXPECTED_CAPABILITIES:
 # ── 4. Per-template validation ────────────────────────────────────────────────
 REQUIRED_TEMPLATE_FIELDS = [
     "capability_id", "label", "description", "suitable_for",
-    "risk_level", "form_schema", "payload_template", "next_steps"
+    "risk_level", "result_type", "form_schema", "payload_template", "next_steps"
 ]
 
 REQUIRED_FORM_FIELD_FIELDS = ["type", "label", "default"]
@@ -87,6 +89,11 @@ for cap_id, template in templates.items():
         if not isinstance(template["suitable_for"], list):
             errors.append(f"'{cap_id}': 'suitable_for' must be a list")
 
+    # 4e. result_type must be valid
+    result_type = template.get("result_type", "")
+    if result_type not in VALID_RESULT_TYPES:
+        errors.append(f"'{cap_id}': result_type '{result_type}' not in {VALID_RESULT_TYPES}")
+
     # 4e. form_schema fields validation
     form_schema = template.get("form_schema", {})
     if not isinstance(form_schema, dict):
@@ -104,6 +111,19 @@ for cap_id, template in templates.items():
             field_type = field_def.get("type", "")
             if field_type not in VALID_FIELD_TYPES:
                 errors.append(f"'{cap_id}'.form_schema.{field_key}: type '{field_type}' not in {VALID_FIELD_TYPES}")
+
+            # value_type validation
+            value_type = field_def.get("value_type", "")
+            if value_type and value_type not in VALID_VALUE_TYPES:
+                errors.append(f"'{cap_id}'.form_schema.{field_key}: value_type '{value_type}' not in {VALID_VALUE_TYPES}")
+
+            # number / slider must be convertible to number
+            if field_type in ("number", "slider"):
+                default_str = str(field_def.get("default", ""))
+                try:
+                    float(default_str)
+                except ValueError:
+                    errors.append(f"'{cap_id}'.form_schema.{field_key}: default '{default_str}' is not a valid number")
 
             if field_type == "select":
                 opts = field_def.get("options", [])

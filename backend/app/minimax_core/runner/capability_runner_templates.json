@@ -7,6 +7,7 @@
       "description": "根据主题、风格、情绪生成结构化歌词，可继续用于 music-gen。",
       "suitable_for": ["情绪 MV", "AI 歌曲草稿", "短视频 BGM", "音乐灵感"],
       "risk_level": "safe",
+      "result_type": "text",
       "form_schema": {
         "theme": {
           "type": "input",
@@ -24,7 +25,13 @@
           "type": "select",
           "label": "语言",
           "default": "中文",
-          "options": ["中文", "英文", "日文", "韩文", "其他"]
+          "options": [
+            {"value": "中文", "label": "中文"},
+            {"value": "英文", "label": "英文"},
+            {"value": "日文", "label": "日文"},
+            {"value": "韩文", "label": "韩文"},
+            {"value": "其他", "label": "其他"}
+          ]
         }
       },
       "payload_template": {
@@ -47,6 +54,7 @@
       "description": "输入文本，选择模型和音色，生成可播放音频。",
       "suitable_for": ["短视频旁白", "语音助手", "情绪对话", "有声书片段"],
       "risk_level": "safe",
+      "result_type": "audio",
       "form_schema": {
         "text": {
           "type": "textarea",
@@ -73,10 +81,14 @@
           "placeholder": "先在「音色列表」查询可用 voice_id"
         },
         "speed": {
-          "type": "input",
+          "type": "number",
           "label": "语速",
           "default": "1.0",
-          "placeholder": "范围 0.5~2.0"
+          "placeholder": "范围 0.5~2.0",
+          "value_type": "number",
+          "min": 0.5,
+          "max": 2.0,
+          "step": 0.1
         }
       },
       "payload_template": {
@@ -95,6 +107,7 @@
       "description": "查询当前可用 voice_id，用于 TTS 语音合成。",
       "suitable_for": ["查询可用音色", "选择 TTS 音色"],
       "risk_level": "safe",
+      "result_type": "voice_list",
       "form_schema": {},
       "payload_template": {},
       "next_steps": [
@@ -112,6 +125,7 @@
       "description": "输入 prompt，选择图片模型，生成图片。",
       "suitable_for": ["封面", "海报", "情绪 MV 分镜", "产品配图", "设计灵感"],
       "risk_level": "safe",
+      "result_type": "image",
       "form_schema": {
         "prompt": {
           "type": "textarea",
@@ -160,6 +174,7 @@
       "description": "使用 OpenAI 兼容协议测试 MiniMax 对话模型。",
       "suitable_for": ["问答", "对话测试", "SDK 接入验证"],
       "risk_level": "safe",
+      "result_type": "chat",
       "form_schema": {
         "model": {
           "type": "select",
