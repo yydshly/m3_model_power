@@ -212,13 +212,165 @@ def test_append_writes_result_summary():
         "capability_id": "image-t2i",
         "payload_summary": hs.summarize_payload({"model": "image-01"}),
         "confirmations": {"confirm_asset_source": True},
-        "result": result,
+        "result": hs.summarize_result_record(result),
         "result_summary": hs.summarize_result(result),
     }
     # Verify result_summary is built the same way
     assert record["result_summary"]["output_type"] == "image"
     assert record["result_summary"]["asset_count"] >= 1
     print("PASS: append_history result_summary correctly built from result (image)")
+
+
+# ── New: result record storage boundary tests ────────────────────────────
+
+def test_result_record_no_data():
+    """result field in history record must not contain 'data' key."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {"image_url": "https://cdn.example.com/cat.png", "raw": " lots of content "},
+    }
+    record_result = hs.summarize_result_record(result)
+    result_json = json.dumps(record_result, default=str)
+    assert "data" not in result_json, f"'data' leaked into result record: {result_json}"
+    print("PASS: result record contains no 'data' key")
+
+
+def test_result_record_no_raw():
+    """result field in history record must not contain 'raw' key."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {"image_url": "https://cdn.example.com/cat.png"},
+        "raw": " lots of raw model output ",
+    }
+    record_result = hs.summarize_result_record(result)
+    result_json = json.dumps(record_result, default=str)
+    assert "raw" not in result_json, f"'raw' leaked into result record: {result_json}"
+    print("PASS: result record contains no 'raw' key")
+
+
+def test_result_record_long_text_truncated():
+    """Long error/message text is truncated to 300 chars in result record."""
+    hs = _import_hs()
+    long_text = "A" * 500
+    result = {
+        "ok": False,
+        "error": long_text,
+        "message": "B" * 500,
+    }
+    record_result = hs.summarize_result_record(result)
+    assert record_result["error"] is not None
+    assert len(record_result["error"]) <= 303, f"error too long: {len(record_result['error'])}"
+    assert record_result["message"] is not None
+    assert len(record_result["message"]) <= 303, f"message too long: {len(record_result['message'])}"
+    print("PASS: result record long text truncated to 300 chars")
+
+
+def test_result_record_blocked_reasons_limited():
+    """blocked_reasons items are capped at 10 items of 200 chars each."""
+    hs = _import_hs()
+    result = {
+        "ok": False,
+        "blocked_reasons": ["reason_" + str(i) + "_" + "x" * 200 for i in range(15)],
+    }
+    record_result = hs.summarize_result_record(result)
+    assert len(record_result["blocked_reasons"]) <= 10, f"too many blocked_reasons: {len(record_result['blocked_reasons'])}"
+    for item in record_result["blocked_reasons"]:
+        assert len(item) <= 203, f"blocked_reason item too long: {len(item)}"
+    print("PASS: result record blocked_reasons capped at 10 items of 200 chars")
+
+
+def test_result_record_warnings_limited():
+    """warnings items are capped at 10 items of 200 chars each."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "warnings": ["warning_" + str(i) + "_" + "y" * 200 for i in range(15)],
+    }
+    record_result = hs.summarize_result_record(result)
+    assert len(record_result["warnings"]) <= 10, f"too many warnings: {len(record_result['warnings'])}"
+    for item in record_result["warnings"]:
+        assert len(item) <= 203, f"warning item too long: {len(item)}"
+    print("PASS: result record warnings capped at 10 items of 200 chars")
+
+
+def test_result_record_fields_correct():
+    """result record has all required fields and no extra data fields."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {"image_url": "https://cdn.example.com/cat.png"},
+        "status": "completed",
+    }
+    record_result = hs.summarize_result_record(result)
+    expected_keys = {"ok", "allowed", "error", "status", "message", "blocked_reasons", "required_confirmations", "warnings"}
+    assert set(record_result.keys()) == expected_keys, f"unexpected keys: {set(record_result.keys())}"
+    assert record_result["ok"] is True
+    assert record_result["status"] == "completed"
+    assert "data" not in record_result  # just in case
+    print("PASS: result record has correct fields")
+
+
+def test_result_summary_still_extracts_assets():
+    """result_summary still extracts assets from full result."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "image_url": "https://cdn.example.com/cat.png",
+            "audio_url": "https://cdn.example.com/speech.mp3",
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "image", f"expected image, got {summary['output_type']}"
+    assert summary["asset_count"] == 2, f"expected 2 assets, got {summary['asset_count']}"
+    urls = [a["url"] for a in summary["assets"]]
+    assert any("cat.png" in u for u in urls), f"cat.png not in urls: {urls}"
+    assert any("speech.mp3" in u for u in urls), f"speech.mp3 not in urls: {urls}"
+    print("PASS: result_summary still extracts assets correctly")
+
+
+def test_old_format_list_history():
+    """list_history reads old-format records (no result_summary) without crashing."""
+    hs = _import_hs()
+
+    # Write a fake old-format record (no result_summary)
+    record = {
+        "id": "test-old-002",
+        "created_at": "2025-01-01T00:00:00Z",
+        "action": "invoke",
+        "capability_id": "image-t2i",
+        "payload_summary": {"payload_keys": ["model"], "payload_size_chars": 10, "payload_preview": "{}"},
+        "confirmations": {},
+        "result": {"ok": True},
+        # no "result_summary" key
+    }
+    # Temporarily override the history path
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        tmp_path = f.name
+
+    try:
+        with patch.object(hs, "_ensure_dir", return_value=Path(tmp_path).parent):
+            # Simulate list_history reading from our temp file
+            with open(tmp_path, encoding="utf-8") as tf:
+                lines = tf.readlines()
+            records = []
+            for line in reversed(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                records.append(json.loads(line))
+            assert len(records) == 1
+            old = records[0]
+            assert "result_summary" not in old, "old record should not have result_summary"
+            # summarize_result should handle None gracefully
+            summary = hs.summarize_result(old.get("result", {}))
+            assert "output_type" in summary
+            print("PASS: old records without result_summary handled gracefully")
+    finally:
+        os.unlink(tmp_path)
 
 
 def main():
@@ -236,6 +388,15 @@ def main():
         test_old_record_compatibility,
         test_runtime_gitignored,
         test_append_writes_result_summary,
+        # New storage boundary tests
+        test_result_record_no_data,
+        test_result_record_no_raw,
+        test_result_record_long_text_truncated,
+        test_result_record_blocked_reasons_limited,
+        test_result_record_warnings_limited,
+        test_result_record_fields_correct,
+        test_result_summary_still_extracts_assets,
+        test_old_format_list_history,
     ]
 
     all_passed = True

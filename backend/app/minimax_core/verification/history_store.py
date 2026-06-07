@@ -115,6 +115,124 @@ _TEXT_PREVIEW_MAX = 300
 _ASSETS_MAX = 10
 _SUMMARIZE_DEPTH = 4
 
+# ── result record summarization (for history.jsonl result field) ─────────
+
+_RESULT_RECORD_MAX_ERROR = 300
+_RESULT_RECORD_LIST_MAX = 10
+_RESULT_RECORD_ITEM_MAX = 200
+
+
+def _safe_list(items: list, max_items: int, max_item_len: int) -> list:
+    """Truncate a list to max_items, each item to max_item_len chars."""
+    return [
+        str(item)[:max_item_len] + ("…" if len(str(item)) > max_item_len else "")
+        for item in items[:max_items]
+    ]
+
+
+def summarize_result_record(result: Any) -> dict:
+    """Extract a compact status record for storage in history.jsonl 'result' field.
+
+    Output is a small dict with only status fields — no data, raw, base_resp,
+    or model output. Designed to prevent history.jsonl bloat.
+
+    Output fields:
+      - ok: bool | None
+      - allowed: None (always)
+      - error: str | None (max 300 chars)
+      - status: str | None
+      - message: str | None (max 300 chars)
+      - blocked_reasons: list[str] (max 10 items, each max 200 chars)
+      - required_confirmations: list[str] (max 10 items, each max 200 chars)
+      - warnings: list[str] (max 10 items, each max 200 chars)
+    """
+    if result is None:
+        return {
+            "ok": None,
+            "allowed": None,
+            "error": None,
+            "status": None,
+            "message": None,
+            "blocked_reasons": [],
+            "required_confirmations": [],
+            "warnings": [],
+        }
+
+    if not isinstance(result, dict):
+        return {
+            "ok": None,
+            "allowed": None,
+            "error": str(result)[:_RESULT_RECORD_MAX_ERROR] if len(str(result)) > _RESULT_RECORD_MAX_ERROR else str(result),
+            "status": None,
+            "message": None,
+            "blocked_reasons": [],
+            "required_confirmations": [],
+            "warnings": [],
+        }
+
+    ok_val = result.get("ok", result.get("allowed"))
+
+    # error
+    error_val = result.get("error")
+    if error_val:
+        error_str = str(error_val)
+        if len(error_str) > _RESULT_RECORD_MAX_ERROR:
+            error_str = error_str[:_RESULT_RECORD_MAX_ERROR] + "…"
+    else:
+        error_str = None
+
+    # message
+    message_val = result.get("message")
+    if message_val:
+        msg_str = str(message_val)
+        if len(msg_str) > _RESULT_RECORD_MAX_ERROR:
+            msg_str = msg_str[:_RESULT_RECORD_MAX_ERROR] + "…"
+    else:
+        msg_str = None
+
+    # status
+    status_val = result.get("status")
+    if status_val:
+        status_val = str(status_val)[:_RESULT_RECORD_MAX_ERROR]
+
+    # blocked_reasons
+    blocked_reasons = []
+    if "blocked_reasons" in result and isinstance(result["blocked_reasons"], list):
+        blocked_reasons = _safe_list(
+            result["blocked_reasons"],
+            _RESULT_RECORD_LIST_MAX,
+            _RESULT_RECORD_ITEM_MAX,
+        )
+
+    # required_confirmations
+    required_confirmations = []
+    if "required_confirmations" in result and isinstance(result["required_confirmations"], list):
+        required_confirmations = _safe_list(
+            result["required_confirmations"],
+            _RESULT_RECORD_LIST_MAX,
+            _RESULT_RECORD_ITEM_MAX,
+        )
+
+    # warnings
+    warnings = []
+    if "warnings" in result and isinstance(result["warnings"], list):
+        warnings = _safe_list(
+            result["warnings"],
+            _RESULT_RECORD_LIST_MAX,
+            _RESULT_RECORD_ITEM_MAX,
+        )
+
+    return {
+        "ok": bool(ok_val) if ok_val is not None else None,
+        "allowed": None,
+        "error": error_str,
+        "status": status_val,
+        "message": msg_str,
+        "blocked_reasons": blocked_reasons,
+        "required_confirmations": required_confirmations,
+        "warnings": warnings,
+    }
+
 
 def _url_ext(url: str) -> str | None:
     """Return lowercased file extension from URL path, without query/fragment."""
@@ -329,7 +447,7 @@ def append_history(
             "capability_id": capability_id,
             "payload_summary": summarize_payload(payload),
             "confirmations": confirmations or {},
-            "result": result,
+            "result": summarize_result_record(result),
             "result_summary": summarize_result(result),
         }
         path = _ensure_dir().joinpath("history.jsonl")
