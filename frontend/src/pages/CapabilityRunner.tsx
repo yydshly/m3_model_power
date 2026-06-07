@@ -4,6 +4,7 @@ import { invoke, riskCheck, uploadCapability, getRunnerTemplates, type InvokeRes
 import AssetResultPreview from '../components/AssetResultPreview'
 import FileResultPreview from '../components/FileResultPreview'
 import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
+import ChatResultPreview from '../components/ChatResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -693,11 +694,8 @@ function ResultBanner({ resultType, data, template, values }: { resultType: stri
     )
   }
   if (resultType === 'chat') {
-    return (
-      <div className="mb-3 p-3 rounded bg-blue-50 border border-blue-200 text-xs text-blue-700">
-        <strong>💬 模型回复</strong>
-      </div>
-    )
+    // ChatResultPreview is rendered by InvokeResultView instead
+    return null
   }
   if (resultType === 'file_upload' || resultType === 'file_list' || resultType === 'file_detail' || resultType === 'file_content') {
     // FileResultPreview handles all file result types
@@ -967,9 +965,17 @@ function InvokeResultView({
         </div>
       )}
 
-      <div className="mt-3">
-        <AssetResultPreview {...assetPreviewProps} />
-      </div>
+      {resultType === 'chat' && (
+        <div className="mt-3">
+          <ChatResultPreview data={result.data} />
+        </div>
+      )}
+
+      {resultType !== 'chat' && (
+        <div className="mt-3">
+          <AssetResultPreview {...assetPreviewProps} />
+        </div>
+      )}
     </div>
   )
 }
@@ -1011,6 +1017,18 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
     }
     if (values['mode'] === 'query') {
       if (!values['task_id']?.trim()) return '请填写 task_id'
+    }
+  }
+  // Chat capabilities: validate prompt and model
+  if (['chat-openai', 'chat-anthropic', 'chat-responses-create'].includes(template.capability_id)) {
+    if (!values['prompt']?.trim()) return '请填写问题'
+    if (!values['model']?.trim()) return '请选择模型'
+    // Validate max_tokens / max_output_tokens range
+    const maxKey = template.capability_id === 'chat-responses-create' ? 'max_output_tokens' : 'max_tokens'
+    const raw = values[maxKey]
+    if (raw) {
+      const n = Number(raw)
+      if (isNaN(n) || n < 1 || n > 4096) return `${maxKey} 必须在 1~4096 之间`
     }
   }
   return null
@@ -1140,6 +1158,8 @@ function CapabilityCard({
     'tts-async': '提交/查询',
     'image-t2i': '生成图片',
     'chat-openai': '发送',
+    'chat-anthropic': '发送',
+    'chat-responses-create': '发送',
     'music-gen': '生成音乐',
     'image-i2i': '生成图片',
     'file-upload': '上传文件',
@@ -1330,6 +1350,8 @@ const CAPABILITY_EMOJI: Record<string, string> = {
   'tts-async': '🎙️',
   'image-t2i': '🖼️',
   'chat-openai': '💬',
+  'chat-anthropic': '💬',
+  'chat-responses-create': '💬',
   'music-gen': '🎶',
   'image-i2i': '🖼️',
   'file-upload': '📄',
@@ -1345,6 +1367,8 @@ const CAPABILITY_FAMILY: Record<string, string> = {
   'tts-async': 'voice',
   'image-t2i': 'vision',
   'chat-openai': 'chat',
+  'chat-anthropic': 'chat',
+  'chat-responses-create': 'chat',
   'music-gen': 'music',
   'image-i2i': 'vision',
   'file-upload': 'files',
@@ -1360,6 +1384,8 @@ const CAPABILITY_LABEL: Record<string, string> = {
   'tts-async': '异步语音合成',
   'image-t2i': '图片生成',
   'chat-openai': '文本对话',
+  'chat-anthropic': 'Anthropic 对话',
+  'chat-responses-create': 'Responses 对话',
   'music-gen': '音乐生成',
   'image-i2i': '图生图',
   'file-upload': '文件上传',

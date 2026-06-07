@@ -304,6 +304,94 @@
       },
       "next_steps": []
     },
+    "chat-anthropic": {
+      "capability_id": "chat-anthropic",
+      "label": "Anthropic 兼容对话",
+      "description": "使用 Anthropic Messages 兼容协议测试 MiniMax 对话模型。",
+      "suitable_for": ["Claude SDK 兼容验证", "Messages 协议测试", "对话问答"],
+      "risk_level": "safe",
+      "result_type": "chat",
+      "form_schema": {
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "MiniMax-M2.7-highspeed",
+          "options": [
+            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推"},
+            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed Token Plan 高频"},
+            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"}
+          ]
+        },
+        "prompt": {
+          "type": "textarea",
+          "label": "问题",
+          "default": "请用一句话介绍 MiniMax 的 Anthropic 兼容协议。",
+          "placeholder": "输入你想问的问题",
+          "max_chars": 4000
+        },
+        "max_tokens": {
+          "type": "number",
+          "label": "max_tokens",
+          "default": "1024",
+          "value_type": "number",
+          "min": 1,
+          "max": 4096,
+          "step": 1
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "max_tokens": "{max_tokens}",
+        "messages": [
+          {"role": "user", "content": "{prompt}"}
+        ],
+        "stream": false
+      },
+      "next_steps": []
+    },
+    "chat-responses-create": {
+      "capability_id": "chat-responses-create",
+      "label": "Responses 对话",
+      "description": "使用 OpenAI Responses 兼容协议测试 MiniMax 响应生成。",
+      "suitable_for": ["Responses API 接入验证", "OpenAI SDK 兼容验证", "文本生成"],
+      "risk_level": "safe",
+      "result_type": "chat",
+      "form_schema": {
+        "model": {
+          "type": "select",
+          "label": "模型",
+          "default": "MiniMax-M2.7-highspeed",
+          "options": [
+            {"value": "MiniMax-M3", "label": "MiniMax-M3 官方主推"},
+            {"value": "MiniMax-M2.7-highspeed", "label": "MiniMax-M2.7-highspeed Token Plan 高频"},
+            {"value": "MiniMax-M2.7", "label": "MiniMax-M2.7 标准档"}
+          ]
+        },
+        "prompt": {
+          "type": "textarea",
+          "label": "问题",
+          "default": "请用一句话介绍 MiniMax 的 Responses 兼容协议。",
+          "placeholder": "输入你想生成的内容",
+          "max_chars": 4000
+        },
+        "max_output_tokens": {
+          "type": "number",
+          "label": "max_output_tokens",
+          "default": "1024",
+          "value_type": "number",
+          "min": 1,
+          "max": 4096,
+          "step": 1
+        }
+      },
+      "payload_template": {
+        "model": "{model}",
+        "input": "{prompt}",
+        "max_output_tokens": "{max_output_tokens}",
+        "stream": false
+      },
+      "next_steps": []
+    },
     "music-gen": {
       "capability_id": "music-gen",
       "label": "音乐生成",
