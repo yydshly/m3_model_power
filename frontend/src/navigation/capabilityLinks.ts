@@ -3,7 +3,7 @@
 
 import type { Model } from '../api'
 
-// Capabilities directly supported by the guided Runner experience.
+// Capabilities directly supported by the guided Runner experience (A-class).
 export const RUNNER_SUPPORTED_CAPABILITIES = new Set([
   'lyrics-gen',
   'music-gen',
@@ -12,6 +12,11 @@ export const RUNNER_SUPPORTED_CAPABILITIES = new Set([
   'image-t2i',
   'image-i2i',
   'chat-openai',
+  // file chain (P1-1)
+  'file-upload',
+  'file-list',
+  'file-retrieve',
+  'file-content',
 ])
 
 // Capabilities that require quota confirmation before execution.
@@ -49,20 +54,16 @@ export const ADVANCED_TEST_CAPABILITIES = new Set([
   'chat-anthropic',
   'chat-responses-create',
   'chat-responses-tokens',
-  'file-list',
-  'file-retrieve',
-  'file-content',
   'models-openai-list',
   'models-openai-retrieve',
   'models-anthropic-list',
   'models-anthropic-retrieve',
 ])
 
-// C-class capabilities: in_scope, Runner not productized, require special UI (WS / async / multipart).
+// C-class capabilities: in_scope, Runner not productized, require special UI (WS / async).
 export const RUNNER_NOT_PRODUCTIZED_CAPABILITIES = new Set([
   'tts-ws',
   'tts-async',
-  'file-upload',
 ])
 
 // Map model family → default Runner capability.

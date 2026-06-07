@@ -636,6 +636,28 @@ def check_video_download_is_high_risk() -> bool:
     return _check_high_risk_capability('video-download')
 
 
+def check_file_list_is_runner_supported() -> bool:
+    """34. file-list is A-class (RUNNER_SUPPORTED)."""
+    cap_links = read(_CAP_LINKS)
+    items = _parse_set_from_ts(cap_links, 'RUNNER_SUPPORTED_CAPABILITIES')
+    if 'file-list' not in items:
+        print("FAIL: file-list not in RUNNER_SUPPORTED_CAPABILITIES")
+        return False
+    print("PASS: file-list is in RUNNER_SUPPORTED_CAPABILITIES (A-class)")
+    return True
+
+
+def check_file_upload_is_runner_supported() -> bool:
+    """35. file-upload is A-class (RUNNER_SUPPORTED)."""
+    cap_links = read(_CAP_LINKS)
+    items = _parse_set_from_ts(cap_links, 'RUNNER_SUPPORTED_CAPABILITIES')
+    if 'file-upload' not in items:
+        print("FAIL: file-upload not in RUNNER_SUPPORTED_CAPABILITIES")
+        return False
+    print("PASS: file-upload is in RUNNER_SUPPORTED_CAPABILITIES (A-class)")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Workbench Capability Closure checks")
@@ -662,9 +684,9 @@ def main():
         ("ADVANCED_TEST_CAPABILITIES set exists", check_advanced_test_capabilities_exist),
         ("RUNNER_NOT_PRODUCTIZED_CAPABILITIES set exists", check_runner_not_productized_capabilities_exist),
         ("chat-anthropic is ADVANCED_TEST (label: 高级测试可用)", check_chat_anthropic_is_advanced_test),
-        ("file-list is ADVANCED_TEST (label: 高级测试可用)", check_file_list_is_advanced_test),
+        ("file-list is A-class (RUNNER_SUPPORTED)", check_file_list_is_runner_supported),
         ("tts-async is RUNNER_NOT_PRODUCTIZED (label: Runner 未产品化)", check_tts_async_is_runner_not_productized),
-        ("file-upload is RUNNER_NOT_PRODUCTIZED (label: Runner 未产品化)", check_file_upload_is_runner_not_productized),
+        ("file-upload is A-class (RUNNER_SUPPORTED)", check_file_upload_is_runner_supported),
         ("file-delete is NOT ADVANCED_TEST (D类: 风险能力)", check_file_delete_not_advanced_test),
         ("voice-delete is NOT ADVANCED_TEST (D类: 风险能力)", check_voice_delete_not_advanced_test),
         ("music-gen shows 需额度确认", check_music_gen_shows_需额度确认),

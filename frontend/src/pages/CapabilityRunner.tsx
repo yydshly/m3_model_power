@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
+import FileResultPreview from '../components/FileResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type FormField = {
-  type: 'input' | 'textarea' | 'select' | 'number' | 'slider' | 'checkbox'
+  type: 'input' | 'textarea' | 'select' | 'number' | 'slider' | 'checkbox' | 'file'
   label: string
   default: string
   placeholder?: string
@@ -367,10 +368,14 @@ function RunnerForm({
   schema,
   values,
   onChange,
+  files,
+  onFileChange,
 }: {
   schema: FormSchema
   values: Record<string, string>
   onChange: (key: string, val: string) => void
+  files?: Record<string, File | null>
+  onFileChange?: (key: string, file: File | null) => void
 }) {
   return (
     <div className="space-y-3">
@@ -444,7 +449,26 @@ function RunnerForm({
               onChange={(e) => onChange(key, e.target.value)}
             />
           )}
-          {field.max_chars && field.type !== 'checkbox' && (
+          {field.type === 'file' && (
+            <div>
+              <input
+                type="file"
+                accept=".txt,.md,.json,.csv"
+                className="text-xs text-slate-600 file:mr-3 file:mb-1 file:px-3 file:py-1 file:rounded file:border-0 file:text-xs file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null
+                  onFileChange?.(key, file)
+                }}
+              />
+              {files?.[key] && (
+                <div className="mt-1 text-xs text-slate-500">
+                  已选择：{files[key]!.name}（{(files[key]!.size / 1024).toFixed(1)} KB）
+                </div>
+              )}
+              <div className="mt-1 text-[10px] text-slate-400">{field.placeholder}</div>
+            </div>
+          )}
+          {field.max_chars && field.type !== 'checkbox' && field.type !== 'file' && (
             <div className="text-[10px] text-slate-400 mt-0.5">
               {(values[key] ?? field.default).length} / {field.max_chars}
             </div>
@@ -674,6 +698,10 @@ function ResultBanner({ resultType, data, template, values }: { resultType: stri
       </div>
     )
   }
+  if (resultType === 'file_upload' || resultType === 'file_list' || resultType === 'file_detail' || resultType === 'file_content') {
+    // FileResultPreview handles all file result types
+    return null
+  }
   return null
 }
 
@@ -890,6 +918,40 @@ function InvokeResultView({
         </div>
       )}
 
+      {/* File chain: file-upload / file-list → file-retrieve / file-content */}
+      {(resultType === 'file_upload' || resultType === 'file_list') && (
+        <div className="mt-3">
+          <FileResultPreview
+            data={result.data}
+            resultType={resultType}
+            onChain={(capId, handoffVals) => onChain(capId, handoffVals)}
+            nextSteps={template.next_steps}
+          />
+        </div>
+      )}
+
+      {/* file-retrieve / file-content: show FileResultPreview but no chain */}
+      {resultType === 'file_detail' && (
+        <div className="mt-3">
+          <FileResultPreview
+            data={result.data}
+            resultType={resultType}
+            onChain={(capId, handoffVals) => onChain(capId, handoffVals)}
+            nextSteps={template.next_steps}
+          />
+        </div>
+      )}
+      {resultType === 'file_content' && (
+        <div className="mt-3">
+          <FileResultPreview
+            data={result.data}
+            resultType={resultType}
+            onChain={() => {}}
+            nextSteps={[]}
+          />
+        </div>
+      )}
+
       <div className="mt-3">
         <AssetResultPreview {...assetPreviewProps} />
       </div>
@@ -907,7 +969,7 @@ function getDefaultValues(schema: FormSchema): Record<string, string> {
 
 // ── Execution guard logic ─────────────────────────────────────────────────────
 
-function getExecutionDisabled(template: RunnerTemplate, values: Record<string, string>): string | null {
+function getExecutionDisabled(template: RunnerTemplate, values: Record<string, string>, files: Record<string, File | null>): string | null {
   if (template.capability_id === 'tts-sync' && !values['voice_id']?.trim()) {
     return '请先填写 voice_id（可从音色列表获取）'
   }
@@ -918,6 +980,12 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
   if (template.capability_id === 'image-i2i') {
     if (!values['img_url']?.trim()) return '请填写参考图片 URL'
     if (values['confirm_asset_source'] !== 'true') return '请勾选「确认图片来源合法」后才能执行'
+  }
+  if (template.capability_id === 'file-upload') {
+    if (!files['file']) return '请选择要上传的文件'
+    const file = files['file']!
+    if (file.size > 1024 * 1024) return '文件大小不得超过 1MB'
+    if (values['confirm_asset_source'] !== 'true') return '请勾选「确认文件来源合法」后才能执行'
   }
   return null
 }
@@ -940,15 +1008,18 @@ function CapabilityCard({
   const schema = template.form_schema as FormSchema
   const defaults = getDefaultValues(schema)
   const [values, setValues] = useState<Record<string, string>>(() => ({ ...defaults, ...(initialValues ?? {}) }))
+  const [files, setFiles] = useState<Record<string, File | null>>({})
   const [runState, setRunState] = useState<RunState>('idle')
   const [result, setResult] = useState<InvokeResult | null>(null)
   const [riskResult, setRiskResult] = useState<RiskCheckResult | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const resultType = template.result_type ?? 'text'
-  const disabledReason = getExecutionDisabled(template, values)
+  const disabledReason = getExecutionDisabled(template, values, files)
 
   const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
+
+  const handleFileChange = (key: string, file: File | null) => setFiles((f) => ({ ...f, [key]: file }))
 
   const handleClearHandoffField = (key: string) => {
     handleChange(key, template.form_schema[key]?.default ?? '')
@@ -960,18 +1031,50 @@ function CapabilityCard({
   // Show handoff banner if any fields came from handoff
   const activeHandoffKeys = (handoffKeys ?? []).filter(k => values[k]?.trim())
   const confirmKey = template.capability_id === 'music-gen'
-    ? 'confirm_quota' : template.capability_id === 'image-i2i'
+    ? 'confirm_quota' : template.capability_id === 'image-i2i' || template.capability_id === 'file-upload'
     ? 'confirm_asset_source' : null
   const confirmChecked = confirmKey ? values[confirmKey] === 'true' : null
 
   const handleRun = async () => {
     if (disabledReason) return
-    const payload = buildPayload(template.payload_template as Record<string, unknown>, values, schema)
     setRunState('checking')
     setResult(null)
     setRiskResult(null)
     setErrorMessage(null)
+
     try {
+      // file-upload uses multipart upload path
+      if (template.capability_id === 'file-upload') {
+        const file = files['file']
+        if (!file) { setRunState('error'); setErrorMessage('请选择文件'); return }
+        if (file.size > 1024 * 1024) { setRunState('error'); setErrorMessage('文件大小不得超过 1MB'); return }
+        if (values['confirm_asset_source'] !== 'true') { setRunState('error'); setErrorMessage('请勾选确认文件来源合法'); return }
+
+        // risk-check payload without file binary
+        const riskPayload = {
+          filename: file.name,
+          size: file.size,
+          mime_type: file.type || 'application/octet-stream',
+          purpose: values['purpose'] || 'retrieval',
+          confirm_asset_source: true,
+        }
+        const risk = await riskCheck(template.capability_id, riskPayload, {})
+        setRiskResult(risk)
+        if (!risk.allowed) { setRunState('error'); return }
+
+        setRunState('running')
+        const res = await uploadCapability(template.capability_id, file, values['purpose'])
+        if (isOk(res)) {
+          const bizErr = extractBusinessError(res.data)
+          if (bizErr) { setErrorMessage(bizErr); setResult(res); setRunState('error'); return }
+        }
+        setResult(res)
+        setRunState('done')
+        return
+      }
+
+      // Standard JSON invoke for all other capabilities
+      const payload = buildPayload(template.payload_template as Record<string, unknown>, values, schema)
       const risk = await riskCheck(template.capability_id, payload, {})
       setRiskResult(risk)
       if (!risk.allowed) { setRunState('error'); return }
@@ -1011,6 +1114,10 @@ function CapabilityCard({
     'chat-openai': '发送',
     'music-gen': '生成音乐',
     'image-i2i': '生成图片',
+    'file-upload': '上传文件',
+    'file-list': '查询列表',
+    'file-retrieve': '查询详情',
+    'file-content': '读取内容',
   }
 
   return (
@@ -1076,6 +1183,14 @@ function CapabilityCard({
           </div>
         )}
 
+        {template.capability_id === 'file-upload' && runState !== 'done' && (
+          <div className={`mb-3 p-2 rounded border text-xs ${confirmChecked ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-orange-50 border-orange-100 text-orange-600'}`}>
+            {confirmChecked
+              ? '✓ 已确认，文件来源合法，可执行'
+              : '⚠ 上传文件请确保来源合法且不包含敏感信息，勾选确认后方可执行'}
+          </div>
+        )}
+
         {Object.keys(schema).length > 0 && (
           <div className="mb-4">
             {template.capability_id === 'image-i2i' && (
@@ -1091,7 +1206,13 @@ function CapabilityCard({
                 </button>
               </div>
             )}
-            <RunnerForm schema={schema} values={values} onChange={handleChange} />
+            <RunnerForm
+              schema={schema}
+              values={values}
+              onChange={handleChange}
+              files={files}
+              onFileChange={handleFileChange}
+            />
           </div>
         )}
 
@@ -1166,6 +1287,10 @@ const CAPABILITY_EMOJI: Record<string, string> = {
   'chat-openai': '💬',
   'music-gen': '🎶',
   'image-i2i': '🖼️',
+  'file-upload': '📄',
+  'file-list': '📄',
+  'file-retrieve': '📄',
+  'file-content': '📄',
 }
 
 const CAPABILITY_FAMILY: Record<string, string> = {
@@ -1176,6 +1301,10 @@ const CAPABILITY_FAMILY: Record<string, string> = {
   'chat-openai': 'chat',
   'music-gen': 'music',
   'image-i2i': 'vision',
+  'file-upload': 'files',
+  'file-list': 'files',
+  'file-retrieve': 'files',
+  'file-content': 'files',
 }
 
 const CAPABILITY_LABEL: Record<string, string> = {
@@ -1186,6 +1315,10 @@ const CAPABILITY_LABEL: Record<string, string> = {
   'chat-openai': '文本对话',
   'music-gen': '音乐生成',
   'image-i2i': '图生图',
+  'file-upload': '文件上传',
+  'file-list': '文件列表',
+  'file-retrieve': '文件详情',
+  'file-content': '文件内容',
 }
 
 function CapabilitySelector({ onSelect, capabilities }: { onSelect: (id: string) => void; capabilities: string[] }) {

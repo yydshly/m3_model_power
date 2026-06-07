@@ -312,6 +312,148 @@
         "confirm_asset_source": "{confirm_asset_source}"
       },
       "next_steps": []
+    },
+    "file-upload": {
+      "capability_id": "file-upload",
+      "label": "文件上传",
+      "description": "上传安全小文件，获取 file_id，可用于后续查询详情或读取内容。",
+      "suitable_for": ["安全小文件存储", "知识库录入", "检索与内容读取"],
+      "risk_level": "guarded",
+      "result_type": "file_upload",
+      "form_schema": {
+        "file": {
+          "type": "file",
+          "label": "选择文件",
+          "default": "",
+          "placeholder": "支持 .txt / .md / .json / .csv 等安全小文件（最大 1MB）"
+        },
+        "purpose": {
+          "type": "select",
+          "label": "用途",
+          "default": "retrieval",
+          "options": [
+            {"value": "retrieval", "label": "retrieval / 检索与内容读取"}
+          ]
+        },
+        "confirm_asset_source": {
+          "type": "checkbox",
+          "label": "我确认上传文件来源合法且不包含敏感信息",
+          "default": "false",
+          "value_type": "boolean"
+        }
+      },
+      "payload_template": {},
+      "next_steps": [
+        {
+          "capability_id": "file-retrieve",
+          "label": "查询文件详情",
+          "note": "获取 file_id 后查询文件元信息",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "file_id": "$result.file_id"
+          }
+        },
+        {
+          "capability_id": "file-content",
+          "label": "读取文件内容",
+          "note": "获取 file_id 后读取文本内容",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "file_id": "$result.file_id"
+          }
+        }
+      ]
+    },
+    "file-list": {
+      "capability_id": "file-list",
+      "label": "查询文件列表",
+      "description": "查询当前已上传的文件列表，获取 file_id 后可查询详情或读取内容。",
+      "suitable_for": ["查看已上传文件", "选择文件进入后续链路"],
+      "risk_level": "safe",
+      "result_type": "file_list",
+      "form_schema": {
+        "purpose": {
+          "type": "select",
+          "label": "文件用途",
+          "default": "retrieval",
+          "options": [
+            {"value": "retrieval", "label": "retrieval / 检索与内容读取"},
+            {"value": "all", "label": "全部"}
+          ]
+        }
+      },
+      "payload_template": {},
+      "next_steps": [
+        {
+          "capability_id": "file-retrieve",
+          "label": "查询文件详情",
+          "note": "选择文件后查询详情",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "file_id": "$result.file_id"
+          }
+        },
+        {
+          "capability_id": "file-content",
+          "label": "读取文件内容",
+          "note": "选择文件后读取内容",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "file_id": "$result.file_id"
+          }
+        }
+      ]
+    },
+    "file-retrieve": {
+      "capability_id": "file-retrieve",
+      "label": "查询文件详情",
+      "description": "通过 file_id 查询文件元信息（filename、size、mime_type、创建时间等）。",
+      "suitable_for": ["查看文件元信息", "确认文件是否上传成功"],
+      "risk_level": "safe",
+      "result_type": "file_detail",
+      "form_schema": {
+        "file_id": {
+          "type": "input",
+          "label": "file_id",
+          "default": "",
+          "placeholder": "上传后获得的 file_id"
+        }
+      },
+      "payload_template": {},
+      "next_steps": [
+        {
+          "capability_id": "file-content",
+          "label": "读取文件内容",
+          "note": "获取内容用于预览或处理",
+          "blocked": false,
+          "guarded": false,
+          "handoff": {
+            "file_id": "$result.file_id"
+          }
+        }
+      ]
+    },
+    "file-content": {
+      "capability_id": "file-content",
+      "label": "读取文件内容",
+      "description": "通过 file_id 读取文件文本内容（纯文本或 JSON 格式最多 3000 字预览）。",
+      "suitable_for": ["预览文件内容", "验证上传内容是否正确"],
+      "risk_level": "safe",
+      "result_type": "file_content",
+      "form_schema": {
+        "file_id": {
+          "type": "input",
+          "label": "file_id",
+          "default": "",
+          "placeholder": "上传后获得的 file_id"
+        }
+      },
+      "payload_template": {},
+      "next_steps": []
     }
   }
 }

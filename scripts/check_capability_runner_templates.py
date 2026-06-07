@@ -12,9 +12,9 @@ from backend.app.minimax_core.registry.loader import get_capability_registry
 
 TEMPLATES_FILE = _root / "backend/app/minimax_core/runner/capability_runner_templates.json"
 
-EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai", "music-gen", "image-i2i"}
-VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider", "checkbox"}
-VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat"}
+EXPECTED_CAPABILITIES = {"lyrics-gen", "tts-sync", "voice-list", "image-t2i", "chat-openai", "music-gen", "image-i2i", "file-upload", "file-list", "file-retrieve", "file-content"}
+VALID_FIELD_TYPES = {"input", "textarea", "select", "number", "slider", "checkbox", "file"}
+VALID_RESULT_TYPES = {"text", "audio", "image", "voice_list", "chat", "file_upload", "file_list", "file_detail", "file_content"}
 VALID_VALUE_TYPES = {"string", "number", "boolean"}
 
 errors: list[str] = []
@@ -167,12 +167,15 @@ for cap_id, template in templates.items():
         errors.append(f"'{cap_id}': missing 'payload_template'")
 
     # 4h. Confirm fields for guarded/quota_sensitive risk levels
+    # Note: file-upload uses multipart/FormData, confirm is passed as form field, not JSON payload_template.
+    # Skip the payload_template confirm check for multipart capabilities.
+    multipart_caps = {"file-upload"}
     risk_level = template.get("risk_level", "")
     payload_tpl = template.get("payload_template", {})
     if risk_level == "quota_sensitive" and isinstance(payload_tpl, dict):
         if "confirm_quota" not in payload_tpl:
             errors.append(f"'{cap_id}': risk_level='quota_sensitive' but payload_template missing 'confirm_quota'")
-    if risk_level == "guarded" and isinstance(payload_tpl, dict):
+    if risk_level == "guarded" and isinstance(payload_tpl, dict) and cap_id not in multipart_caps:
         if "confirm_asset_source" not in payload_tpl:
             errors.append(f"'{cap_id}': risk_level='guarded' but payload_template missing 'confirm_asset_source'")
 

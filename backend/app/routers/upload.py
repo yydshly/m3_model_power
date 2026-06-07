@@ -8,6 +8,11 @@
     voice-clone-upload-prompt   → /v1/files/upload          purpose=prompt_audio
     music-cover-prep            → /v1/music_cover/preprocess（按官方 multipart 协议）
 - 仍走 minimax.client 的鉴权，但不能用 JSON 客户端，故内联 httpx 调用
+
+安全约束（P1-5）：
+- file-upload 必须确认素材来源（confirm_asset_source form 字段）
+- 文件大小上限 1MB，超限拒绝
+- 不把文件二进制内容写入 history（只写摘要：filename/size/mime_type/purpose）
 """
 from typing import Any
 
@@ -20,6 +25,8 @@ from ..minimax.client import MiniMaxError
 from ..registry import get_registry
 
 router = APIRouter(prefix="/upload", tags=["upload"])
+
+MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
 
 # capability id → (上游路径, 默认 purpose)
 UPLOAD_MAP = {
@@ -50,6 +57,7 @@ async def upload(
     cap_id: str,
     file: UploadFile = File(...),
     purpose: str | None = Form(default=None),
+    confirm_asset_source: bool | None = Form(default=None),
 ) -> Any:
     reg = get_registry()
     cap = next((c for c in reg.capabilities if c.id == cap_id), None)
@@ -59,12 +67,26 @@ async def upload(
         raise HTTPException(400, f"capability {cap_id} 不是 multipart 上传类型")
     if cap_id not in UPLOAD_MAP:
         raise HTTPException(501, f"上传路由未配置：{cap_id}")
+
+    content = await file.read()
+
+    # P1-5 safety: file-upload requires explicit confirm_asset_source and size check
+    if cap_id == "file-upload":
+        if confirm_asset_source is not True:
+            raise HTTPException(400, "file-upload requires confirm_asset_source=true in form data")
+        if len(content) == 0:
+            raise HTTPException(400, "上传文件不能为空")
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(400, f"文件大小不得超过 {MAX_FILE_SIZE_BYTES // (1024*1024)} MB")
+    else:
+        if len(content) == 0:
+            raise HTTPException(400, "上传文件不能为空")
+
     path, default_purpose = UPLOAD_MAP[cap_id]
     real_purpose = purpose or default_purpose or (cap.example.get("purpose") if cap.example else None)
 
-    content = await file.read()
     files = {"file": (file.filename or "upload.bin", content, file.content_type or "application/octet-stream")}
-    data = {}
+    data: dict[str, Any] = {}
     if real_purpose:
         data["purpose"] = real_purpose
 

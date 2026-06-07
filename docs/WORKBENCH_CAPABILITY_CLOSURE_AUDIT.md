@@ -82,15 +82,16 @@
 
 | capability_id | Runner? | TestConsole? | scope | result_type | 当前 UX 状态 | 分类 |
 |--------------|---------|-------------|-------|-------------|-------------|------|
-| `file-upload` | ❌ | ✅ | in_scope | json | ⚠️ Runner 无表单（文件上传 UI 复杂）；TestConsole 可用；workflow `file_knowledge` 有 step 定义 | **C** |
-| `file-list` | ❌ | ✅ | in_scope | json | ⚠️ 纯查询，TestConsole 可用；无专用结果卡片（只显示 JSON） | **B** |
-| `file-retrieve` | ❌ | ✅ | in_scope | json | ⚠️ 同上；workflow `file_knowledge` 有 step 定义 | **B** |
-| `file-content` | ❌ | ✅ | in_scope | binary | ⚠️ 二进制内容拉取，TestConsole 可用；无专用结果展示（直接下载） | **B** |
+| `file-upload` | ✅ | ✅ | in_scope | file_upload | ✅ 已闭环：FileResultPreview + multipart 上传 + confirm_asset_source + next_steps → file-retrieve/content | **A** |
+| `file-list` | ✅ | ✅ | in_scope | file_list | ✅ 已闭环：FileResultPreview 表格 + next_steps → file-retrieve/content | **A** |
+| `file-retrieve` | ✅ | ✅ | in_scope | file_detail | ✅ 已闭环：FileResultPreview 元信息 + next_step → file-content | **A** |
+| `file-content` | ✅ | ✅ | in_scope | file_content | ✅ 已闭环：FileResultPreview 文本预览（最多 3000 字）+ JSON 格式化 | **A** |
 | `file-delete` | ❌ | ✅ | warning_only | json | ⚠️ destructive，warning_only，TestConsole 可用 | **D** |
 
-**B/C 类说明**：文件类能力均未进入 Runner，原因是：
-1. `file-upload` 需要 multipart 文件上传 UI，当前 Runner 表单系统未支持
-2. `file-list` / `file-retrieve` / `file-content` 结果为纯 JSON，无可视化资产，适合 TestConsole 不适合 Runner
+**A 类说明**：文件链路已完整闭环：
+- `file-upload` → `file-retrieve` / `file-content`：通过 next_steps handoff 传递 `file_id`
+- `file-list` → `file-retrieve` / `file-content`：表格内按钮直接触发 handoff
+- 上传安全约束：1MB 限制 + confirm_asset_source 确认
 
 ### 2.6 模型（models）
 
@@ -107,34 +108,35 @@
 
 ## 3. A/B/C/D 分类汇总
 
-### A 类：已闭环可体验（7 个）
+### A 类：已闭环可体验（11 个）
 
 ```
 ✅ lyrics-gen       music-gen       voice-list
 ✅ tts-sync         image-t2i      image-i2i
 ✅ chat-openai
+✅ file-upload     file-list      file-retrieve
+✅ file-content
 ```
 
 特征：Runner 支持 + 表单完整 + 结果可视化展示 + next_steps 链路完整
 
-### B 类：已验收未产品化（10 个）
+### B 类：已验收未产品化（6 个）
 
 ```
 chat-anthropic       chat-responses-create   chat-responses-tokens
-file-list            file-retrieve           file-content
 models-openai-list  models-openai-retrieve
 models-anthropic-list  models-anthropic-retrieve
 ```
 
 特征：`in_scope` + 仅 TestConsole 可用 + 结果只显示 JSON
 
-### C 类：仅高级测试（3 个）
+### C 类：仅高级测试（2 个）
 
 ```
-tts-ws              tts-async           file-upload
+tts-ws              tts-async
 ```
 
-特征：`in_scope` + 需要特殊 UI（WebSocket 事件流、异步任务状态机、文件上传 multipart）
+特征：`in_scope` + 需要特殊 UI（WebSocket 事件流、异步任务状态机）
 
 ### D 类：风险 / 不默认执行（12 个）
 
@@ -152,7 +154,7 @@ file-delete
 
 ## 4. 已闭环能力清单
 
-### 4.1 Runner 支持的 7 个能力
+### 4.1 Runner 支持的 11 个能力
 
 | capability_id | result_type | 关键状态 |
 |--------------|-------------|---------|
@@ -163,6 +165,10 @@ file-delete
 | `music-gen` | audio | ✅ AudioBanner 任务卡片（task）+ skipAudioTaskCard |
 | `image-t2i` | image | ✅ ResultBanner 单图 + next_steps → image-i2i |
 | `image-i2i` | image | ✅ ImageComparePreview 对比（参考图 vs 生成图）+ skipPrimaryKinds |
+| `file-upload` | file_upload | ✅ FileResultPreview + multipart 上传 + confirm_asset_source + next_steps → file-retrieve/content |
+| `file-list` | file_list | ✅ FileResultPreview 表格 + next_steps → file-retrieve/content |
+| `file-retrieve` | file_detail | ✅ FileResultPreview 元信息 + next_step → file-content |
+| `file-content` | file_content | ✅ FileResultPreview 文本预览（最多 3000 字） |
 
 ### 4.2 跨能力链路
 
@@ -170,6 +176,9 @@ file-delete
 voice-list   → tts-sync       (音色选择 → 语音合成)       ✅ 双向 next_steps
 lyrics-gen   → music-gen      (歌词 → 音乐生成)            ✅ 双向 next_steps
 image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 next_steps
+file-upload  → file-retrieve  → file-content              ✅ 链式 next_steps
+file-upload  → file-content                            ✅ 链式 next_steps
+file-list    → file-retrieve  / file-content             ✅ 表格内按钮 next_steps
 ```
 
 ---
@@ -183,8 +192,6 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 | `chat-responses-tokens` | 纯计数，结果价值有限 | P2：考虑移除或标记为"仅调试" |
 | `tts-ws` | WebSocket 事件流 UI 复杂，Runner 无状态管理 | P2：保留 TestConsole |
 | `tts-async` | 异步任务状态机未实现（无轮询 / 无 task_id 管理） | P1：实现 tts-async-start → query 链路 |
-| `file-upload` | multipart 文件上传 UI 未支持 | P1：补 file-upload Runner 表单 |
-| `file-list` / `file-retrieve` / `file-content` | 纯 JSON 结果无可视化，file_id 闭环需要 file-upload | P1：补 FileResultPreview；先实现 file-upload |
 | `models-*` 全 4 个 | 纯 JSON 无资产，需专用模型卡片 | P2：补 ModelListPreview 表格卡片 |
 | `voice-clone-*` 全 4 个 | warning_only，需要认证 + 素材授权 | P2：保留 TestConsole + 风险提示 |
 | `voice-delete` | destructive，warning_only | P2：保留 TestConsole + 风险提示 |
@@ -255,11 +262,11 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 
 相关集合：
 
-- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, image-t2i, image-i2i, chat-openai）
+- `RUNNER_SUPPORTED_CAPABILITIES`：A 类（lyrics-gen, music-gen, voice-list, tts-sync, image-t2i, image-i2i, chat-openai, file-upload, file-list, file-retrieve, file-content）
 - `QUOTA_SENSITIVE_CAPABILITIES`：A 类需额度（music-gen）
 - `ASSET_GUARDED_CAPABILITIES`：A 类需图片来源（image-i2i）
-- `ADVANCED_TEST_CAPABILITIES`：B 类（chat-anthropic, chat-responses-create, chat-responses-tokens, file-list, file-retrieve, file-content, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
-- `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws, tts-async, file-upload）
+- `ADVANCED_TEST_CAPABILITIES`：B 类（chat-anthropic, chat-responses-create, chat-responses-tokens, models-openai-list, models-openai-retrieve, models-anthropic-list, models-anthropic-retrieve）
+- `RUNNER_NOT_PRODUCTIZED_CAPABILITIES`：C 类（tts-ws, tts-async）
 - `HIGH_RISK_CAPABILITIES`：D 类，包含以下子类：
   - video（out_of_scope）：video-t2v, video-i2v, video-s2v, video-query, video-download
   - voice clone/design（warning_only）：voice-clone-upload-audio, voice-clone-upload-prompt, voice-clone-do, voice-design, voice-delete
@@ -273,10 +280,7 @@ image-t2i    → image-i2i      (文生图 → 图生图)            ✅ 双向 
 | P1-1 | `tts-async` | 实现 `tts-async-start` Runner（提交任务）+ `tts-async-query`（轮询状态），形成 `tts-sync → tts-async` 升级链路 |
 | P1-2 | `chat-anthropic` 结果展示 | 补 Anthropic 专用结果渲染器（识别 `content[].type === "text"` 等结构），进入 TestConsole 或独立页面 |
 | P1-3 | `chat-responses-create` | 同上，补 Responses API 结果渲染器 |
-| P1-4 | `file-upload` | 补 Runner multipart 文件上传表单（drag & drop），结果展示 `file_id` 后进入 `file-retrieve` / `file-content` 链路 |
-| P1-5 | `file-list / file-retrieve` | 补 FileResultPreview（表格展示 file_id / filename / mime_type / size），`file_knowledge` workflow 可完整闭环 |
-| P1-6 | `file-content` | 补文本内容预览卡片（直接显示 .txt / .md / .json 内容，不只是 JSON） |
-| P1-7 | `models-openai-list / anthropic-list` | 补 ModelListPreview（模型卡片表格，含 model_id / context_window / capabilities），形成 `list → retrieve` 链路 |
+| P1-4 | `models-openai-list / anthropic-list` | 补 ModelListPreview（模型卡片表格，含 model_id / context_window / capabilities），形成 `list → retrieve` 链路 |
 
 ### P2（优化体验）
 
