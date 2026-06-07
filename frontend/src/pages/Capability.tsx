@@ -493,7 +493,8 @@ export default function CapabilityPage() {
         </section>
       ) : models.length > 0 ? (
         <section className="mt-6">
-          <div className="text-xs text-slate-500 mb-2">适用模型（来自 models.yaml）</div>
+          <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
+          <div className="text-[10px] text-slate-400 mb-2">这里只显示当前 capability 可用模型，不代表 Token Plan 全量模型。</div>
           <div className="flex flex-wrap gap-2">
             {models.map((m) => (
               <span key={m.id} className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-xs">

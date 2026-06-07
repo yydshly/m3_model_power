@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "scenarios": {
+    "short_video_voiceover": {
+      "id": "short_video_voiceover",
+      "label": "短视频旁白",
+      "summary": "输入文本，选择音色和模型，生成可播放的语音旁白音频。可直接用于短视频配音。",
+      "recommended_for": ["短视频创作者", "内容创作者", "自媒体运营", "需要配音的自媒体人"],
+      "capability_family": "voice",
+      "workflow_id": "voice_generation",
+      "capabilities": ["voice-list", "tts-sync"],
+      "recommended_models": [
+        {"model": "speech-2.8-turbo", "reason": "官方当前最新，低延迟，适合快速生成短视频旁白"},
+        {"model": "speech-2.8-hd", "reason": "官方当前最新，高质量，适合正式内容旁白；支持语气词标签效果"},
+        {"model": "speech-02-hd", "reason": "已验收稳定版，Token Plan 长期兼容，高质量"},
+        {"model": "speech-02-turbo", "reason": "已验收稳定版，Token Plan 长期兼容，低延迟"}
+      ],
+      "risk_level": "safe",
+      "expected_output": "MP3 / WAV 音频文件，可直接用于短视频旁白",
+      "default_inputs": {
+        "text": "这是一段测试旁白内容，你可以替换成任何想要合成的文本。",
+        "speed": 1.0,
+        "model": "speech-2.8-hd"
+      },
+      "cta": "立即体验语音旁白"
+    },
+    "emotion_dialog_voice": {
+      "id": "emotion_dialog_voice",
+      "label": "情绪对话语音",
+      "summary": "选择支持情绪的音色，生成带有情绪色彩的语音。适合游戏 NPC、语音助手、有声书等场景。",
+      "recommended_for": ["游戏开发者", "语音助手产品经理", "有声书创作者", "内容创作者"],
+      "capability_family": "voice",
+      "workflow_id": "voice_generation",
+      "capabilities": ["voice-list", "tts-sync"],
+      "recommended_models": [
+        {"model": "speech-2.8-hd", "reason": "官方当前最新，支持多种情绪和语气词标签"},
+        {"model": "speech-2.6-hd", "reason": "支持 fluent/whisper 情绪（2.8 不支持 whisper）；适合需要低语/流畅风格的场景"},
+        {"model": "speech-02-hd", "reason": "已验收稳定版，情绪音色经过充分测试"}
+      ],
+      "risk_level": "safe",
+      "expected_output": "带情绪色彩的语音音频文件",
+      "default_inputs": {
+        "text": "你好呀！今天心情真好！",
+        "model": "speech-2.8-hd",
+        "speed": 1.0
+      },
+      "cta": "体验情绪对话"
+    },
+    "emotion_mv_music": {
+      "id": "emotion_mv_music",
+      "label": "情绪 MV 音乐",
+      "summary": "输入主题生成歌词，选择风格生成音乐，生成 AI 歌曲草稿。适合音乐爱好者、MCN、UGC 音乐平台。",
+      "recommended_for": ["音乐爱好者", "MCN", "UGC 音乐平台", "AI 音乐创作者"],
+      "capability_family": "music",
+      "workflow_id": "music_creation",
+      "capabilities": ["lyrics-gen", "music-gen"],
+      "recommended_models": [
+        {"model": "music-2.6", "reason": "官方推荐，Token Plan 和付费用户可用，RPM 较高，适合正式内容生成"}
+      ],
+      "risk_level": "medium",
+      "expected_output": "歌词文本 + 音乐文件 URL",
+      "default_inputs": {
+        "theme": "温暖的春日记忆",
+        "style": "流行",
+        "model": "music-2.6"
+      },
+      "cta": "创作 AI 音乐"
+    },
+    "image_cover_generation": {
+      "id": "image_cover_generation",
+      "label": "封面 / 海报图生成",
+      "summary": "输入描述词，选择图像模型和画风，生成封面图或海报。支持多种风格，适合内容配图和设计灵感。",
+      "recommended_for": ["内容创作者", "设计师", "市场营销", "自媒体运营"],
+      "capability_family": "vision",
+      "workflow_id": "image_creation",
+      "capabilities": ["image-t2i"],
+      "recommended_models": [
+        {"model": "image-01", "reason": "官方主力模型，支持精确尺寸控制和 21:9 超宽比例，适合封面/海报"},
+        {"model": "image-01-live", "reason": "官方当前，支持画风设置（漫画/元气/中世纪/水彩），适合需要风格化的设计"}
+      ],
+      "risk_level": "safe",
+      "expected_output": "图片 URL，可下载或直接使用（注意有效期 24 小时）",
+      "default_inputs": {
+        "prompt": "科技感封面图，蓝色调，简洁风格",
+        "model": "image-01",
+        "aspect_ratio": "16:9"
+      },
+      "cta": "生成封面图"
+    },
+    "image_reference_variation": {
+      "id": "image_reference_variation",
+      "label": "图生图参考变化",
+      "summary": "上传参考图或使用文生图结果，通过 image-i2i 生成风格变化后的图片。适合设计灵感、风格迁移、漫画创作。",
+      "recommended_for": ["设计师", "插画师", "AI 创作爱好者", "漫画创作者"],
+      "capability_family": "vision",
+      "workflow_id": "image_creation",
+      "capabilities": ["image-t2i", "image-i2i"],
+      "recommended_models": [
+        {"model": "image-01", "reason": "官方主力图生图模型，支持 subject_reference；支持精确尺寸控制"},
+        {"model": "image-01-live", "reason": "官方当前，支持画风设置 + subject_reference，适合风格化参考变化"}
+      ],
+      "risk_level": "medium",
+      "expected_output": "风格变化后的图片 URL",
+      "default_inputs": {
+        "prompt": "变成水彩画风格",
+        "reference_strength": 0.7,
+        "confirm_asset_source": true
+      },
+      "cta": "体验图生图"
+    },
+    "file_knowledge_entry": {
+      "id": "file_knowledge_entry",
+      "label": "文件知识入口",
+      "summary": "上传文本文件，读取内容摘要，作为知识分析入口。适合知识管理、文档分析、内容处理工作流。",
+      "recommended_for": ["知识管理", "文档分析需求", "内容处理", "数据处理工作流"],
+      "capability_family": "assets",
+      "workflow_id": "file_knowledge",
+      "capabilities": ["file-upload", "file-retrieve", "file-content"],
+      "recommended_models": [],
+      "risk_level": "low",
+      "expected_output": "文件元数据 + 内容摘要",
+      "default_inputs": {
+        "purpose": "batch_processing"
+      },
+      "cta": "上传文件体验"
+    },
+    "chat_model_comparison": {
+      "id": "chat_model_comparison",
+      "label": "对话模型对比",
+      "summary": "查询 OpenAI / Anthropic 两套协议模型，对比选择后发起对话。支持 token 消耗估算。适合开发者、AI 爱好者、SDK 接入验证。",
+      "recommended_for": ["开发者", "AI 爱好者", "SDK 集成工程师", "AI 工作流构建者"],
+      "capability_family": "chat",
+      "workflow_id": "chat_model_comparison",
+      "capabilities": ["models-openai-list", "models-anthropic-list", "chat-openai", "chat-anthropic", "chat-responses-tokens"],
+      "recommended_models": [
+        {"model": "MiniMax-M3", "reason": "官方当前旗舰，唯一支持多模态+thinking+tools，适合能力优先场景"},
+        {"model": "MiniMax-M2.7-highspeed", "reason": "Token Plan 高频体验优先，速度快，共享配额"},
+        {"model": "MiniMax-M2.7", "reason": "标准档，适合常规复杂文本任务"},
+        {"model": "MiniMax-M2.5 / M2.1 / M2", "reason": "历史兼容，适合已有项目对接"}
+      ],
+      "risk_level": "safe",
+      "expected_output": "对话文本回复 + token 消耗估算",
+      "default_inputs": {
+        "messages": [{"role": "user", "content": "你好，请介绍一下你自己"}],
+        "model": "MiniMax-M2.7-highspeed",
+        "max_tokens": 1024,
+        "temperature": 0.7
+      },
+      "cta": "开始对话"
+    },
+    "agent_api_integration": {
+      "id": "agent_api_integration",
+      "label": "Agent / SDK 接入",
+      "summary": "通过 OpenAI / Anthropic 兼容协议接入 Claude Code、Cursor 等 IDE，构建 Agent 工作流。支持 tools 调用和 thinking 模式。",
+      "recommended_for": ["开发者", "Agent 构建者", "SDK 集成工程师", "AI 工作流研究者"],
+      "capability_family": "chat",
+      "workflow_id": "chat_model_comparison",
+      "capabilities": ["chat-openai", "chat-anthropic", "chat-responses-create"],
+      "recommended_models": [
+        {"model": "MiniMax-M3", "reason": "官方当前旗舰，唯一支持多模态输入（图片/视频）+ thinking + tools，适合复杂 Agent 工作流"},
+        {"model": "MiniMax-M2.7-highspeed", "reason": "Token Plan 高频调用优先，工具调用兼容性好"}
+      ],
+      "risk_level": "safe",
+      "expected_output": "兼容 OpenAI / Anthropic SDK 的 API 响应",
+      "default_inputs": {
+        "model": "MiniMax-M3",
+        "stream": false,
+        "thinking": true
+      },
+      "cta": "查看接入文档"
+    }
+  }
+}

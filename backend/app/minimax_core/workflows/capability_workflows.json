@@ -1,0 +1,411 @@
+{
+  "schema_version": 1,
+  "workflows": {
+    "voice_generation": {
+      "id": "voice_generation",
+      "label": "语音生成流程",
+      "family": "voice",
+      "summary": "查询可用音色，选择模型和音色，输入文本生成语音旁白。适合短视频配音、语音助手、有声内容。",
+      "steps": [
+        {
+          "step_id": "list_voices",
+          "label": "查询音色列表",
+          "type": "capability",
+          "capability_id": "voice-list",
+          "action": "invoke",
+          "input": "无（GET 请求）",
+          "output": "音色列表，含 voice_id / name / language / gender",
+          "next_usage": "选择合适的 voice_id 填入下一步",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "select_voice",
+          "label": "选择音色和模型",
+          "type": "parameter",
+          "capability_id": "tts-sync",
+          "input": "voice_id（从上一步选择）, model（speech-02-hd / speech-02-turbo 等）",
+          "output": "确认音色 ID 和模型",
+          "next_usage": "填入 tts-sync 的必填参数",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "input_text",
+          "label": "输入合成文本",
+          "type": "parameter",
+          "capability_id": "tts-sync",
+          "input": "text（待合成文本，建议 <= 300 字）",
+          "output": "确认合成文本内容",
+          "next_usage": "tts-sync 的核心输入",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "tts_sync",
+          "label": "同步生成语音",
+          "type": "capability",
+          "capability_id": "tts-sync",
+          "action": "invoke",
+          "input": "model + voice_id + text + speed + format",
+          "output": "MP3/WAV 音频二进制",
+          "next_usage": "跳转到高级测试控制台执行",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "play_audio",
+          "label": "播放音频",
+          "type": "result",
+          "capability_id": "tts-sync",
+          "output": "audio controls 播放生成的音频",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "compare_voices",
+          "label": "切换音色/模型再次测试",
+          "type": "loop",
+          "capability_id": "tts-sync",
+          "output": "对比不同音色和模型的效果差异",
+          "risk_level": "safe"
+        }
+      ],
+      "default_inputs": {
+        "model": "speech-02-hd",
+        "speed": 1.0,
+        "format": "mp3"
+      },
+      "risk_policy": {
+        "allow_direct": ["voice-list", "tts-sync"],
+        "guarded": ["tts-async"],
+        "blocked": ["voice-clone-do", "voice-design", "voice-delete"]
+      },
+      "expected_outputs": ["MP3 / WAV 音频", "base_resp 状态码"],
+      "product_usage": [
+        "短视频旁白",
+        "语音助手 / NPC 播报",
+        "有声书片段",
+        "情绪对话语音"
+      ]
+    },
+    "music_creation": {
+      "id": "music_creation",
+      "label": "音乐创作流程",
+      "family": "music",
+      "summary": "输入主题生成歌词，编辑歌词后选择风格生成音乐。适合 AI 歌曲草稿、情绪 MV、短视频 BGM。",
+      "steps": [
+        {
+          "step_id": "input_theme",
+          "label": "输入歌曲主题",
+          "type": "parameter",
+          "capability_id": "lyrics-gen",
+          "input": "theme / prompt（描述想要的歌曲风格和内容）",
+          "output": "确认歌曲主题方向",
+          "next_usage": "lyrics-gen 的核心输入",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "generate_lyrics",
+          "label": "生成歌词草稿",
+          "type": "capability",
+          "capability_id": "lyrics-gen",
+          "action": "invoke",
+          "input": "theme / prompt",
+          "output": "歌词文本",
+          "next_usage": "可编辑后再进入音乐生成",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "edit_lyrics",
+          "label": "编辑歌词",
+          "type": "parameter",
+          "capability_id": "music-gen",
+          "input": "lyrics（歌词文本，用户可自定义修改）",
+          "output": "确认最终歌词",
+          "next_usage": "music-gen 的核心输入",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "select_style",
+          "label": "选择风格和模型",
+          "type": "parameter",
+          "capability_id": "music-gen",
+          "input": "style（流行/摇滚/民谣等）, model（music-2.6）",
+          "output": "确认生成风格",
+          "next_usage": "music-gen 的参数",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "generate_music",
+          "label": "生成音乐",
+          "type": "capability",
+          "capability_id": "music-gen",
+          "action": "invoke",
+          "input": "lyrics + style + model + title",
+          "output": "音乐文件 URL 或 task_id（异步模式）",
+          "next_usage": "轮询 task_id 获取最终音乐",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "poll_or_preview",
+          "label": "轮询任务状态 / 预览音乐",
+          "type": "result",
+          "capability_id": "music-gen",
+          "output": "音乐文件 URL 或任务进行中状态",
+          "risk_level": "safe"
+        }
+      ],
+      "default_inputs": {
+        "model": "music-2.6",
+        "style": "流行"
+      },
+      "risk_policy": {
+        "allow_direct": ["lyrics-gen", "music-gen"],
+        "guarded": [],
+        "blocked": ["music-cover-prep"]
+      },
+      "expected_outputs": ["歌词文本", "音乐文件 URL", "task_id（异步）"],
+      "product_usage": [
+        "情绪 MV",
+        "AI 歌曲草稿",
+        "短视频 BGM",
+        "音乐创作灵感"
+      ]
+    },
+    "image_creation": {
+      "id": "image_creation",
+      "label": "图片创作流程",
+      "family": "vision",
+      "summary": "输入描述词生成图片，可上传参考图进行风格变化。适合封面图、海报、插画、情绪 MV 分镜。",
+      "steps": [
+        {
+          "step_id": "input_prompt",
+          "label": "输入图片描述",
+          "type": "parameter",
+          "capability_id": "image-t2i",
+          "input": "prompt（文本描述，描述越详细效果越好）",
+          "output": "确认生成内容方向",
+          "next_usage": "image-t2i 的核心输入",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "select_model",
+          "label": "选择图像模型",
+          "type": "parameter",
+          "capability_id": "image-t2i",
+          "input": "model（image-01 / image-01-live）, aspect_ratio / size",
+          "output": "确认模型和尺寸",
+          "next_usage": "image-t2i 的参数",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "image_t2i",
+          "label": "文生图",
+          "type": "capability",
+          "capability_id": "image-t2i",
+          "action": "invoke",
+          "input": "prompt + model + aspect_ratio",
+          "output": "生成的图片 URL",
+          "next_usage": "可预览或作为图生图参考",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "preview_image",
+          "label": "预览生成结果",
+          "type": "result",
+          "capability_id": "image-t2i",
+          "output": "图片预览（img 标签）",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "select_reference",
+          "label": "选择参考图（可选）",
+          "type": "parameter",
+          "capability_id": "image-i2i",
+          "input": "img_url（使用生成图或上传自有图片）",
+          "output": "确认参考图",
+          "next_usage": "image-i2i 的参考输入",
+          "risk_level": "guarded"
+        },
+        {
+          "step_id": "image_i2i",
+          "label": "图生图风格变化",
+          "type": "capability",
+          "capability_id": "image-i2i",
+          "action": "invoke",
+          "input": "prompt + img_url + reference_strength + confirm_asset_source",
+          "output": "风格变化后的图片 URL",
+          "next_usage": "对比原图和生成图",
+          "risk_level": "guarded"
+        }
+      ],
+      "default_inputs": {
+        "model": "image-01",
+        "aspect_ratio": "1:1"
+      },
+      "risk_policy": {
+        "allow_direct": ["image-t2i"],
+        "guarded": ["image-i2i"],
+        "blocked": []
+      },
+      "expected_outputs": ["图片 URL（可能有过期时间）", "base_resp 状态码"],
+      "product_usage": [
+        "封面图 / 海报",
+        "情绪 MV 分镜",
+        "产品配图",
+        "设计灵感",
+        "漫画 / 插画创作"
+      ]
+    },
+    "file_knowledge": {
+      "id": "file_knowledge",
+      "label": "文件知识流程",
+      "family": "assets",
+      "summary": "上传文本文件，读取内容摘要，作为知识分析的入口。适合文档处理、资料分析、知识库构建。",
+      "steps": [
+        {
+          "step_id": "select_file",
+          "label": "选择文本文件",
+          "type": "parameter",
+          "capability_id": "file-upload",
+          "input": "file（txt / md / json 等文本文件，建议 < 1MB）",
+          "output": "确认上传文件",
+          "next_usage": "file-upload 的文件输入",
+          "risk_level": "guarded"
+        },
+        {
+          "step_id": "file_upload",
+          "label": "上传获取 file_id",
+          "type": "capability",
+          "capability_id": "file-upload",
+          "action": "invoke",
+          "input": "file + purpose",
+          "output": "file_id",
+          "next_usage": "用 file_id 查询元数据和内容",
+          "risk_level": "guarded"
+        },
+        {
+          "step_id": "file_retrieve",
+          "label": "查询文件元数据",
+          "type": "capability",
+          "capability_id": "file-retrieve",
+          "action": "invoke",
+          "input": "file_id",
+          "output": "文件元数据（filename / mime_type / size / created_at）",
+          "next_usage": "了解文件基本信息",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "file_content",
+          "label": "读取文件内容",
+          "type": "capability",
+          "capability_id": "file-content",
+          "action": "invoke",
+          "input": "file_id",
+          "output": "文件内容或摘要",
+          "next_usage": "内容分析或知识提取",
+          "risk_level": "safe"
+        }
+      ],
+      "default_inputs": {
+        "purpose": "batch_processing"
+      },
+      "risk_policy": {
+        "allow_direct": ["file-list", "file-retrieve", "file-content"],
+        "guarded": ["file-upload"],
+        "blocked": ["file-delete"]
+      },
+      "expected_outputs": ["file_id", "文件元数据", "文件内容摘要"],
+      "product_usage": [
+        "文档分析入口",
+        "知识库文件处理",
+        "资料整理工作流",
+        "批量文本处理"
+      ]
+    },
+    "chat_model_comparison": {
+      "id": "chat_model_comparison",
+      "label": "对话模型对比流程",
+      "family": "chat",
+      "summary": "查询 OpenAI / Anthropic 两套协议模型，对比选择后发起对话。适合模型选型、SDK 接入验证、AI 工作流。",
+      "steps": [
+        {
+          "step_id": "list_openai_models",
+          "label": "查询 OpenAI 模型列表",
+          "type": "capability",
+          "capability_id": "models-openai-list",
+          "action": "invoke",
+          "input": "无（GET 请求）",
+          "output": "OpenAI 兼容协议模型列表",
+          "next_usage": "了解可用 OpenAI 协议模型",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "list_anthropic_models",
+          "label": "查询 Anthropic 模型列表",
+          "type": "capability",
+          "capability_id": "models-anthropic-list",
+          "action": "invoke",
+          "input": "无（GET 请求）",
+          "output": "Anthropic 兼容协议模型列表",
+          "next_usage": "了解可用 Anthropic 协议模型",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "select_protocol",
+          "label": "选择协议和模型",
+          "type": "parameter",
+          "capability_id": "chat-openai / chat-anthropic / chat-responses-create",
+          "input": "protocol（OpenAI / Anthropic / Responses）, model",
+          "output": "确认调用协议和具体模型",
+          "next_usage": "填入 chat 的必填参数",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "input_message",
+          "label": "输入对话内容",
+          "type": "parameter",
+          "capability_id": "chat-openai / chat-anthropic",
+          "input": "messages（对话历史）",
+          "output": "确认对话内容",
+          "next_usage": "chat 的核心输入",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "chat_invoke",
+          "label": "发起对话",
+          "type": "parameter",
+          "capability_id": "chat-openai / chat-anthropic / chat-responses-create",
+          "input": "model + messages + max_tokens + temperature + stream",
+          "output": "确认对话参数",
+          "next_usage": "填入 chat 的必填参数",
+          "risk_level": "safe"
+        },
+        {
+          "step_id": "token_estimation",
+          "label": "Token 消耗估算",
+          "type": "capability",
+          "capability_id": "chat-responses-tokens",
+          "action": "invoke",
+          "input": "messages（复用上一步对话历史）",
+          "output": "token 消耗估算（不产生真实费用）",
+          "next_usage": "辅助了解成本",
+          "risk_level": "safe"
+        }
+      ],
+      "default_inputs": {
+        "model": "MiniMax-M2.7-highspeed",
+        "max_tokens": 1024,
+        "temperature": 0.7
+      },
+      "risk_policy": {
+        "allow_direct": ["models-openai-list", "models-anthropic-list", "chat-openai", "chat-anthropic", "chat-responses-create", "chat-responses-tokens"],
+        "guarded": [],
+        "blocked": []
+      },
+      "expected_outputs": ["对话文本", "思考过程（thinking_block）", "工具调用（tool_calls）", "token 消耗估算"],
+      "product_usage": [
+        "模型选型对比",
+        "SDK 接入验证",
+        "Claude Code / Cursor 接入",
+        "企业知识库问答"
+      ]
+    }
+  }
+}

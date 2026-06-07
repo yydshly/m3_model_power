@@ -316,3 +316,137 @@ export async function getCapabilityDescriptions(): Promise<CapabilityDescription
   if (!r.ok) throw new Error(`descriptions ${r.status}`)
   return r.json()
 }
+
+// ── Capability Profiles ────────────────────────────────────────────────
+
+export type CapabilityProfile = {
+  family: string
+  label: string
+  user_summary: string
+  token_plan_status: string
+  api_status: string
+  verified_capabilities: string[]
+  direct_testable_capabilities: string[]
+  guarded_capabilities: string[]
+  not_default_executable: string[]
+  model_notes: Array<{
+    model: string
+    label: string
+    source: 'official_docs' | 'token_plan_verified' | 'local_config' | 'historical_compat' | 'risk_warning'
+    recommendation_level:
+      | 'official_primary'
+      | 'official_current'
+      | 'verified_stable'
+      | 'low_latency'
+      | 'high_quality'
+      | 'quota_friendly'
+      | 'compatible'
+      | 'guarded'
+      | 'free_tier'
+      | 'not_default'
+      | 'not_applicable'
+    token_plan_status?: string
+    verified_status?: string
+    best_for: string[]
+    not_best_for?: string[]
+    notes: string
+  }>
+  capability_modes: Array<{
+    capability_id: string
+    mode?: string
+    protocol?: string
+    description: string
+    action?: string
+    risk_level: string
+    streaming?: boolean
+  }>
+  key_parameters: Array<{ name: string; description: string }>
+  outputs: string[]
+  recommended_scenarios: string[]
+  recommended_workflows: string[]
+  risk_notes: string[]
+  product_usage: string[]
+}
+
+export async function getProfiles(): Promise<{ schema_version: number; profiles: Record<string, CapabilityProfile> }> {
+  const r = await fetch('/api/profiles')
+  if (!r.ok) throw new Error(`profiles ${r.status}`)
+  return r.json()
+}
+
+export async function getProfile(family: string): Promise<{ family: string; profile: CapabilityProfile | null }> {
+  const r = await fetch(`/api/profiles/${family}`)
+  if (!r.ok) throw new Error(`profile ${r.status}`)
+  return r.json()
+}
+
+// ── Capability Workflows ────────────────────────────────────────────────
+
+export type WorkflowStep = {
+  step_id: string
+  label: string
+  type: 'capability' | 'parameter' | 'result' | 'loop'
+  capability_id?: string
+  action?: string
+  input: string
+  output: string
+  next_usage?: string
+  risk_level: string
+}
+
+export type CapabilityWorkflow = {
+  id: string
+  label: string
+  family: string
+  summary: string
+  steps: WorkflowStep[]
+  default_inputs: Record<string, unknown>
+  risk_policy: {
+    allow_direct: string[]
+    guarded: string[]
+    blocked: string[]
+  }
+  expected_outputs: string[]
+  product_usage: string[]
+}
+
+export async function getWorkflows(): Promise<{ schema_version: number; workflows: Record<string, CapabilityWorkflow> }> {
+  const r = await fetch('/api/workflows')
+  if (!r.ok) throw new Error(`workflows ${r.status}`)
+  return r.json()
+}
+
+export async function getWorkflow(workflowId: string): Promise<{ id: string; workflow: CapabilityWorkflow | null }> {
+  const r = await fetch(`/api/workflows/${workflowId}`)
+  if (!r.ok) throw new Error(`workflow ${r.status}`)
+  return r.json()
+}
+
+// ── Capability Scenarios ────────────────────────────────────────────────
+
+export type CapabilityScenario = {
+  id: string
+  label: string
+  summary: string
+  recommended_for: string[]
+  capability_family: string
+  workflow_id: string
+  capabilities: string[]
+  recommended_models: Array<{ model: string; reason: string }>
+  risk_level: string
+  expected_output: string
+  default_inputs: Record<string, unknown>
+  cta: string
+}
+
+export async function getScenarios(): Promise<{ schema_version: number; scenarios: Record<string, CapabilityScenario> }> {
+  const r = await fetch('/api/scenarios')
+  if (!r.ok) throw new Error(`scenarios ${r.status}`)
+  return r.json()
+}
+
+export async function getScenario(scenarioId: string): Promise<{ id: string; scenario: CapabilityScenario | null }> {
+  const r = await fetch(`/api/scenarios/${scenarioId}`)
+  if (!r.ok) throw new Error(`scenario ${r.status}`)
+  return r.json()
+}
