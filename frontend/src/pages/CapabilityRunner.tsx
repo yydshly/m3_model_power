@@ -1317,7 +1317,6 @@ function CapabilityCard({
             <div className="flex-1">
               <span className="font-medium">轻量草稿保存</span>
               <span className="text-slate-500 ml-1">（{new Date(sessionDraft.createdAt).toLocaleString('zh-CN')}）</span>
-              <span className="text-slate-500 ml-1">（{new Date(sessionDraft.createdAt).toLocaleString('zh-CN')}）</span>
               {sessionDraft.resultSummary?.textPreview && (
                 <div className="mt-1 text-slate-600 truncate">
                   上次结果：{sessionDraft.resultSummary.textPreview}
