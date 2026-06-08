@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getModelsFor, riskCheck, type RiskCheckResult, type Model } from '../api'
+import { getModelsFor, riskCheck, getCapabilityHistory, getTestConsoleHistory, type RiskCheckResult, type Model, type TestConsoleHistoryItem } from '../api'
 import { buildDemoPayload } from '../domain/demoPayload'
 import { AsyncVideoPanel } from '../components/AsyncVideoPanel'
 import { ChatPanel } from '../components/ChatPanel'
@@ -13,6 +13,7 @@ import { UploadPanel } from '../components/UploadPanel'
 import { useRegistry } from '../store'
 import { getRequiredConfirmations, CONFIRM_LABELS } from '../domain/confirmations'
 import { getDemoReadiness } from '../domain/demoPayload'
+import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 
 type Mode = 'invoke' | 'stream' | 'upload'
 
@@ -25,6 +26,29 @@ export default function CapabilityPage() {
   const [riskCheckResult, setRiskCheckResult] = useState<RiskCheckResult | null>(null)
   const [riskCheckLoading, setRiskCheckLoading] = useState(false)
   const [examplePayload, setExamplePayload] = useState<Record<string, unknown>>({})
+  const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyFallbackUsed, setHistoryFallbackUsed] = useState(false)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  const refreshCapabilityHistory = () => {
+    if (!id) return
+    setHistoryFallbackUsed(false)
+    getCapabilityHistory(id, 50)
+      .then(r => { setHistory(r.items); setHistoryErr(null) })
+      .catch((e: any) => {
+        getTestConsoleHistory(200)
+          .then(r => {
+            const filtered = r.items.filter(item => item.capability_id === id)
+            setHistory(filtered)
+            setHistoryErr(null)
+            setHistoryFallbackUsed(true)
+          })
+          .catch(() => setHistoryErr(e instanceof Error ? e.message : String(e)))
+      })
+  }
+
+  useEffect(() => { refreshCapabilityHistory() }, [id])
 
   useEffect(() => {
     if (id) {
@@ -438,8 +462,14 @@ export default function CapabilityPage() {
                     : 'bg-red-50 border border-red-200 text-red-800'
                 }`}>
                   <div className="font-semibold mb-1">
-                    RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
+                    风险检查：{riskCheckResult.allowed ? '✅ 通过' : '❌ 未通过'}
                   </div>
+                  {riskCheckResult.allowed && (
+                    <div className="text-emerald-700">当前请求已满足风险/额度/素材确认要求</div>
+                  )}
+                  {!riskCheckResult.allowed && (
+                    <div className="text-red-700">暂不能执行真实调用</div>
+                  )}
                   <details className="mt-1 border border-red-200 rounded">
                     <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
                       调试信息
@@ -609,6 +639,7 @@ export default function CapabilityPage() {
               confirmations={confirmations}
               riskCheckResult={riskCheckResult}
               setRiskCheckResult={setRiskCheckResult}
+              onDone={refreshCapabilityHistory}
               />
               </>
             )
@@ -618,6 +649,39 @@ export default function CapabilityPage() {
           {effectiveMode === 'upload' && <UploadPanel cap={cap} />}
         </>
       )}
+
+      {/* Current capability history */}
+      <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+            <p className="text-[10px] text-slate-400">按 capability_id 过滤，不是按模型过滤</p>
+          </div>
+          <button
+            onClick={refreshCapabilityHistory}
+            className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+          >
+            刷新
+          </button>
+        </div>
+
+        {historyFallbackUsed && !historyErr && (
+          <p className="text-xs text-amber-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+            当前能力历史接口不可用，已临时从全局最近调用中过滤展示。
+          </p>
+        )}
+
+        {historyErr && (
+          <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        <InvocationHistoryPanel
+          items={history}
+          expandedId={expandedHistoryId}
+          onToggleExpand={setExpandedHistoryId}
+          emptyMessage="当前能力暂无调用记录"
+        />
+      </section>
     </div>
   )
 }

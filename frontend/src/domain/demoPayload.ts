@@ -16,19 +16,19 @@ const DEMO_PAYLOADS: Record<string, Record<string, unknown>> = {
   'chat-openai': {
     model: 'MiniMax-M2.7-highspeed',
     messages: [{ role: 'user', content: '请用一句话介绍 MiniMax。' }],
-    max_tokens: 256,
+    max_tokens: 512,
     temperature: 0.7,
   },
   'chat-anthropic': {
     model: 'MiniMax-M2.7-highspeed',
     messages: [{ role: 'user', content: '请用一句话介绍 MiniMax。' }],
-    max_tokens: 256,
+    max_tokens: 512,
     stream: false,
   },
   'chat-responses-create': {
     model: 'MiniMax-M3',
     input: '请用一句话介绍 MiniMax。',
-    max_output_tokens: 256,
+    max_output_tokens: 512,
     stream: false,
   },
   'chat-responses-tokens': {

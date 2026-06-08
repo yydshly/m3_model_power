@@ -1123,16 +1123,21 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
     }
   }
   // Chat capabilities: validate prompt and model
-  if (['chat-openai', 'chat-anthropic', 'chat-responses-create'].includes(template.capability_id)) {
-    if (!values['prompt']?.trim()) return '请填写问题'
+  if (['chat-openai', 'chat-anthropic', 'chat-responses-create', 'chat-responses-tokens'].includes(template.capability_id)) {
+    if (!values['prompt']?.trim() && !values['input']?.trim()) return '请填写问题'
     if (!values['model']?.trim()) return '请选择模型'
     // Validate max_tokens / max_output_tokens range
-    const maxKey = template.capability_id === 'chat-responses-create' ? 'max_output_tokens' : 'max_tokens'
+    const maxKey = template.capability_id === 'chat-responses-create' || template.capability_id === 'chat-responses-tokens' ? 'max_output_tokens' : 'max_tokens'
     const raw = values[maxKey]
     if (raw) {
       const n = Number(raw)
       if (isNaN(n) || n < 1 || n > 4096) return `${maxKey} 必须在 1~4096 之间`
     }
+  }
+  // tts-sync: validate model and voice_id
+  if (template.capability_id === 'tts-sync') {
+    if (!values['model']?.trim()) return '请选择语音模型'
+    if (!values['voice_id']?.trim()) return '请先填写 voice_id（可从音色列表获取）'
   }
   return null
 }

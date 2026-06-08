@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
 import { quotaLabel } from '../domain/workbenchLabels'
 import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
+import { validatePayloadForCapability } from '../domain/payloadValidation'
 
 export function InvokePanel({
   cap,
@@ -12,6 +13,7 @@ export function InvokePanel({
   confirmations,
   riskCheckResult,
   setRiskCheckResult,
+  onDone,
 }: {
   cap: Capability
   models: Model[]
@@ -19,6 +21,7 @@ export function InvokePanel({
   confirmations: Record<string, boolean>
   riskCheckResult: RiskCheckResult | null
   setRiskCheckResult: (r: RiskCheckResult | null) => void
+  onDone?: () => void
 }) {
   const required = getRequiredConfirmations(cap)
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
@@ -50,6 +53,29 @@ export function InvokePanel({
     }
   }, [cap.id, defaultPayloadText, lastDefaultPayloadText])
   const [riskCheckLoading, setRiskCheckLoading] = useState(false)
+
+  // ── Model → body.model sync ────────────────────────────────────────────────
+
+  function updateJsonBodyField(body: string, key: string, value: unknown): string {
+    try {
+      const parsed = JSON.parse(body || '{}')
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return body
+      return JSON.stringify({ ...parsed, [key]: value }, null, 2)
+    } catch {
+      return body
+    }
+  }
+
+  // ── Payload validation ─────────────────────────────────────────────────────
+
+  const validationResult = useMemo(() => {
+    try {
+      const parsed = JSON.parse(body)
+      return validatePayloadForCapability(cap.id, parsed)
+    } catch {
+      return { valid: false, issues: [{ field: 'body', message: 'JSON 格式错误', severity: 'error' }] }
+    }
+  }, [cap.id, body])
 
   // tts-async character count display
   const [textValue, setTextValue] = useState('')
@@ -97,7 +123,7 @@ export function InvokePanel({
     }
   })()
 
-  const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
+  const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload) && validationResult.valid
   const invokeDisabled = !canInvoke || loading
   const invokeDisabledReason = requiresModelSelection && !model
     ? '请选择模型'
@@ -105,6 +131,8 @@ export function InvokePanel({
     ? '请先完成执行前确认'
     : requiresExistingTask && !hasTaskIdInPayload
     ? '该能力仅限已有任务，请填写 task_id 或 file_id'
+    : !validationResult.valid
+    ? '参数检查未通过'
     : ''
 
   const submit = async () => {
@@ -123,26 +151,36 @@ export function InvokePanel({
     }
     if (model && !('model' in parsed)) parsed.model = model
     setLoading(true)
-    const r = await invoke(cap.id, parsed, confirmations)
+    let invokeResult: Awaited<ReturnType<typeof invoke>> | null = null
+    try {
+      invokeResult = await invoke(cap.id, parsed, confirmations)
+    } catch (e: any) {
+      setLoading(false)
+      setErr(`调用失败：${e?.message ?? String(e)}`)
+      onDone?.()
+      return
+    }
     setLoading(false)
-    if ('error' in r) {
-      setErr(`[${r.status ?? '-'}]: ${r.message}`)
-      if (r.blocked_reasons?.length) {
+    if ('error' in invokeResult) {
+      setErr(`[${invokeResult.status ?? '-'}]: ${invokeResult.message}`)
+      if (invokeResult.blocked_reasons?.length) {
         setRiskCheckResult({
           allowed: false,
-          blocked_reasons: r.blocked_reasons,
-          required_confirmations: r.required_confirmations ?? [],
-          warnings: r.warnings ?? [],
+          blocked_reasons: invokeResult.blocked_reasons,
+          required_confirmations: invokeResult.required_confirmations ?? [],
+          warnings: invokeResult.warnings ?? [],
         })
       }
+      onDone?.()
     } else {
-      setResult(r.data)
+      setResult(invokeResult.data)
       setRiskCheckResult({
         allowed: true,
         blocked_reasons: [],
         required_confirmations: [],
         warnings: [],
       })
+      onDone?.()
     }
   }
 
@@ -180,7 +218,11 @@ export function InvokePanel({
           <label className="block text-xs text-slate-600 mb-1">模型</label>
           <select
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => {
+              const selected = e.target.value
+              setModel(selected)
+              setBody(prev => updateJsonBodyField(prev, 'model', selected))
+            }}
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white"
           >
             {models.map((m) => (
@@ -269,6 +311,18 @@ export function InvokePanel({
         />
       </div>
 
+      {/* Validation error display */}
+      {!validationResult.valid && (
+        <div className="rounded p-3 text-xs bg-red-50 border border-red-200 text-red-800">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>{issue.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* RiskGate 检查结果 */}
       {riskCheckResult && (
         <div className={`rounded p-3 text-xs ${
@@ -277,10 +331,10 @@ export function InvokePanel({
             : 'bg-red-50 border border-red-200 text-red-800'
         }`}>
           <div className="font-semibold mb-1">
-            RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
+            风险检查：{riskCheckResult.allowed ? '✅ 通过' : '❌ 未通过'}
           </div>
           {riskCheckResult.allowed
-            ? <div className="text-emerald-700">当前请求已满足执行前确认</div>
+            ? <div className="text-emerald-700">当前请求已满足风险/额度/素材确认要求</div>
             : <div className="text-red-700">当前请求会被后端阻断</div>
           }
           {riskCheckResult.blocked_reasons.length > 0 && (
@@ -342,6 +396,9 @@ export function InvokePanel({
 
         {!allConfirmed && (
           <span className="text-xs text-rose-600">请先完成执行前确认</span>
+        )}
+        {allConfirmed && !validationResult.valid && (
+          <span className="text-xs text-rose-600">参数检查未通过，暂不能执行真实调用</span>
         )}
         {allConfirmed && requiresExistingTask && !hasTaskIdInPayload && (
           <span className="text-xs text-blue-600">请填写 task_id 或 file_id</span>

@@ -108,7 +108,7 @@ function Shell() {
             </div>
           )}
           <button onClick={reload} className="mt-2 text-sky-600 hover:underline">
-            重新加载
+            重新加载配置
           </button>
         </div>
       </aside>
