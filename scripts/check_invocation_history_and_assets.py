@@ -241,9 +241,8 @@ def check_capabilityrunner_has_history(errors: list[str], warnings: list[str]) -
     with open(path, 'r', encoding='utf-8') as f:
         content = f.read()
     checks = [
-        ("getTestConsoleHistory", "getTestConsoleHistory API call"),
+        ("getCapabilityHistory", "getCapabilityHistory API call"),
         ("InvocationHistoryPanel", "InvocationHistoryPanel component"),
-        ("capability_id === selected", "capability_id filtering logic"),
     ]
     for pattern, label in checks:
         if pattern not in content:

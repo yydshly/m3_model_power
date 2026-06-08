@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getTestConsoleHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getCapabilityHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
+import UsageCostExplainer from '../components/UsageCostExplainer'
 import FileResultPreview from '../components/FileResultPreview'
 import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
 import ChatResultPreview from '../components/ChatResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
+import { saveRunnerSession, loadRunnerSession, type RunnerSession } from '../domain/runnerSession'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,7 +119,7 @@ function extractTextResult(data: unknown): string {
 // Fields whose value is semantically an image URL — don't require extension check
 const STRONG_IMAGE_URL_FIELDS = new Set([
   'image_url', 'img_url', 'imageUrl', 'imageURL',
-  'file_url', 'download_url', 'image_file',
+  'image_file',
 ])
 
 const IMAGE_EXT_PATTERN = /\.(jpg|jpeg|png|webp|gif)(\?|\#|$)/i
@@ -146,7 +148,7 @@ function extractImageUrl(data: unknown): string {
     if (looksLikeImageUrl(u, 'image')) return u
   }
   // Recursive search in nested structures (only strong image URL fields — no extension check needed)
-  const found = findStringField(data, ['image_url', 'img_url', 'image_file', 'file_url', 'download_url', 'imageUrl', 'imageURL'], 0)
+  const found = findStringField(data, ['image_url', 'img_url', 'image_file', 'imageUrl', 'imageURL'], 0)
   if (found) return found
   // Check arrays
   const images = findStringArrayField(data, 'images', 0)
@@ -161,7 +163,7 @@ function extractImageUrl(data: unknown): string {
     for (const item of arr) {
       if (typeof item === 'object' && item !== null) {
         const itemObj = item as Record<string, unknown>
-        for (const urlKey of ['url', 'image_url', 'img_url', 'file_url', 'download_url']) {
+        for (const urlKey of ['url', 'image_url', 'img_url']) {
           if (typeof itemObj[urlKey] === 'string' && itemObj[urlKey]) {
             const u = itemObj[urlKey] as string
             if (looksLikeImageUrl(u, urlKey)) return u
@@ -356,6 +358,40 @@ function resolveTemplateValue(
   }
 
   return val
+}
+
+function buildResultSummary(
+  data: unknown,
+  resultType: string,
+): RunnerSession['resultSummary'] {
+  if (!data || typeof data !== 'object') return undefined
+  const d = data as Record<string, unknown>
+  const base = d.base_resp as Record<string, unknown> | undefined
+  const ok = !base || (base.status_code as number) === 0
+
+  const summary: RunnerSession['resultSummary'] = { ok }
+
+  if (resultType === 'text' || resultType === 'chat') {
+    const text = extractTextResult(data)
+    if (text) summary.textPreview = text.slice(0, 200)
+  }
+  if (resultType === 'image') {
+    const url = extractImageUrl(data)
+    if (url) summary.imageUrl = url
+  }
+  if (resultType === 'audio') {
+    const audio = extractAudioSource(data)
+    if (audio?.kind === 'url' && audio.src) summary.audioUrl = audio.src
+    if (audio?.kind === 'data_url' && audio.src) summary.audioUrl = audio.src.slice(0, 100)
+  }
+  if (resultType.startsWith('file_')) {
+    const fid = d.file_id
+    if (typeof fid === 'string') summary.fileId = fid
+    if (typeof d.filename === 'string') summary.filename = d.filename
+    if (typeof d.mime_type === 'string') summary.mimeType = d.mime_type
+  }
+
+  return summary
 }
 
 function buildPayload(
@@ -1093,6 +1129,7 @@ function CapabilityCard({
   onBack,
   onChainNavigate,
   onDone,
+  sessionDraft,
 }: {
   template: RunnerTemplate
   initialValues?: Record<string, string>
@@ -1100,6 +1137,7 @@ function CapabilityCard({
   onBack: () => void
   onChainNavigate: (capId: string) => void
   onDone?: () => void
+  sessionDraft?: RunnerSession | null
 }) {
   const schema = template.form_schema as FormSchema
   const defaults = getDefaultValues(schema)
@@ -1113,7 +1151,23 @@ function CapabilityCard({
   const resultType = template.result_type ?? 'text'
   const disabledReason = getExecutionDisabled(template, values, files)
 
-  const handleChange = (key: string, val: string) => setValues((v) => ({ ...v, [key]: val }))
+  const handleChange = (key: string, val: string) => {
+    setValues((v) => ({ ...v, [key]: val }))
+  }
+
+  // Debounced session save when values change
+  const sessionSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (sessionSaveTimer.current) clearTimeout(sessionSaveTimer.current)
+    sessionSaveTimer.current = setTimeout(() => {
+      saveRunnerSession({
+        capabilityId: template.capability_id,
+        createdAt: new Date().toISOString(),
+        inputValues: values,
+      })
+    }, 800)
+    return () => { if (sessionSaveTimer.current) clearTimeout(sessionSaveTimer.current) }
+  }, [values, template.capability_id])
 
   const handleFileChange = (key: string, file: File | null) => setFiles((f) => ({ ...f, [key]: file }))
 
@@ -1168,6 +1222,15 @@ function CapabilityCard({
         setResult(res)
         setRunState('done')
         onDone?.()
+        if (isOk(res)) {
+          saveRunnerSession({
+            capabilityId: template.capability_id,
+            createdAt: new Date().toISOString(),
+            inputValues: values,
+            resultSummary: buildResultSummary(res.data, template.result_type),
+            handoff: {},
+          })
+        }
         return
       }
 
@@ -1193,6 +1256,15 @@ function CapabilityCard({
       setResult(res)
       setRunState('done')
       onDone?.()
+      if (isOk(res)) {
+        saveRunnerSession({
+          capabilityId: template.capability_id,
+          createdAt: new Date().toISOString(),
+          inputValues: values,
+          resultSummary: buildResultSummary(res.data, template.result_type),
+          handoff: {},
+        })
+      }
     } catch (e: any) {
       setErrorMessage(e?.message ?? String(e))
       setRunState('error')
@@ -1233,6 +1305,32 @@ function CapabilityCard({
           </div>
           <RiskBadge level={template.risk_level} />
         </div>
+
+        <UsageCostExplainer
+          billingPolicy={template.billing_policy}
+          costLevel={template.cost_level}
+        />
+
+        {sessionDraft?.inputValues && Object.keys(sessionDraft.inputValues).length > 0 && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-700 flex items-start gap-2">
+            <span>📝</span>
+            <div className="flex-1">
+              <span className="font-medium">轻量草稿保存</span>
+              <span className="text-slate-500 ml-1">（{new Date(sessionDraft.createdAt).toLocaleString('zh-CN')}）</span>
+              {sessionDraft.resultSummary?.textPreview && (
+                <div className="mt-1 text-slate-600 truncate">
+                  上次结果：{sessionDraft.resultSummary.textPreview}
+                </div>
+              )}
+              {sessionDraft.resultSummary?.imageUrl && (
+                <div className="mt-1">
+                  <img src={sessionDraft.resultSummary.imageUrl} alt="上次结果" className="h-12 rounded border border-sky-200" />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {template.suitable_for.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {template.suitable_for.map((s) => (
@@ -1336,6 +1434,36 @@ function CapabilityCard({
               </div>
             )}
 
+            {/* music-gen lyrics helper */}
+            {template.capability_id === 'music-gen' && (
+              <div className="mb-3 p-3 rounded bg-violet-50 border border-violet-200 text-xs text-violet-700 space-y-2">
+                <div className="font-medium">🎵 音乐生成需要歌词</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleChange('lyrics', '夏日晚风吹过田野\n我在旧路口等一场落日\n蝉声慢慢落进云里\n心事也变得安静')}
+                    className="px-2 py-1 rounded border border-violet-300 bg-white text-violet-700 hover:bg-violet-100 text-[10px]"
+                  >
+                    使用示例歌词
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChange('lyrics', '')}
+                    className="px-2 py-1 rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100 text-[10px]"
+                  >
+                    清空歌词
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChainNavigate('lyrics-gen')}
+                    className="px-2 py-1 rounded border border-sky-300 bg-white text-sky-700 hover:bg-sky-100 text-[10px]"
+                  >
+                    去生成歌词 →
+                  </button>
+                </div>
+              </div>
+            )}
+
             <RunnerForm
               schema={schema}
               values={values}
@@ -1434,9 +1562,9 @@ const CAPABILITY_EMOJI: Record<string, string> = {
   'voice-list': '🎙️',
   'tts-async': '🎙️',
   'image-t2i': '🖼️',
-  'chat-openai': '💬',
-  'chat-anthropic': '💬',
-  'chat-responses-create': '💬',
+  'chat-openai': '⚖️',
+  'chat-anthropic': '⚖️',
+  'chat-responses-create': '⚖️',
   'music-gen': '🎶',
   'image-i2i': '🖼️',
   'file-upload': '📄',
@@ -1468,9 +1596,9 @@ const CAPABILITY_LABEL: Record<string, string> = {
   'voice-list': '音色列表',
   'tts-async': '异步语音合成',
   'image-t2i': '图片生成',
-  'chat-openai': '文本对话',
-  'chat-anthropic': 'Anthropic 对话',
-  'chat-responses-create': 'Responses 对话',
+  'chat-openai': 'OpenAI 对比',
+  'chat-anthropic': 'Anthropic 对比',
+  'chat-responses-create': 'Responses 对比',
   'music-gen': '音乐生成',
   'image-i2i': '图生图',
   'file-upload': '文件上传',
@@ -1530,14 +1658,24 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [sessionDraft, setSessionDraft] = useState<RunnerSession | null>(null)
 
-  const refreshHistory = () => {
-    getTestConsoleHistory(50)
+  const refreshHistory = (capId?: string) => {
+    const id = capId ?? selected
+    if (!id) return
+    getCapabilityHistory(id, 50)
       .then(r => { setHistory(r.items); setHistoryErr(null) })
       .catch((e: any) => setHistoryErr(e.message))
   }
 
-  useEffect(() => { refreshHistory() }, [])
+  // Refresh history and load session draft when capability changes
+  useEffect(() => {
+    if (selected) {
+      refreshHistory(selected)
+      const draft = loadRunnerSession(selected)
+      setSessionDraft(draft)
+    }
+  }, [selected])
 
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
@@ -1559,11 +1697,11 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
   const selectedTemplate = selected ? templates[selected] : null
 
-  // Merge: URL params > sessionStorage handoff
+  // Merge: URL params > sessionStorage handoff > session draft
   const selectedId = selected as string
   const storedHandoff = selectedTemplate ? loadHandoff(selectedId) : {}
   const initialValues = selectedTemplate
-    ? { ...storedHandoff, ...queryInitialValues }
+    ? { ...(sessionDraft?.inputValues ?? {}), ...storedHandoff, ...queryInitialValues }
     : {}
 
   // handoffKeys: which fields came from sessionStorage handoff (not URL params)
@@ -1574,11 +1712,6 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
     if (selected) clearHandoff(selectedId)
   }, [selectedId])
 
-  // Filter history to current capability
-  const currentCapabilityHistory = selected
-    ? history.filter(item => item.capability_id === selected)
-    : []
-
   return (
     <div className="p-8 max-w-5xl">
       <div className="mb-6">
@@ -1586,6 +1719,30 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
         <p className="text-sm text-slate-600 mt-1">
           选择一个能力，使用默认输入体验 MiniMax Token Plan 的实际效果；部分能力结果可以继续带入下一步流程。
         </p>
+      </div>
+
+      {/* Path guide banner */}
+      <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3 flex items-start gap-3">
+        <span className="text-base">🗺</span>
+        <div className="space-y-1 text-xs text-slate-600">
+          <div className="font-semibold text-slate-700">能力体验有两个入口：</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex items-start gap-2">
+              <span className="shrink-0 mt-0.5">⚖️</span>
+              <div>
+                <span className="font-medium">模型对比（chat-*）</span>
+                <span className="text-slate-500 ml-1">选模型，看回答差异</span>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="shrink-0 mt-0.5">🧩</span>
+              <div>
+                <span className="font-medium">单项能力</span>
+                <span className="text-slate-500 ml-1">生成、合成、上传、查询</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Workflow/scenario context banner */}
@@ -1624,6 +1781,7 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               onBack={handleBack}
               onChainNavigate={handleSelect}
               onDone={refreshHistory}
+              sessionDraft={sessionDraft}
             />
           ) : (
             <div className="text-sm text-slate-500">
@@ -1637,7 +1795,7 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
                 <button
-                  onClick={refreshHistory}
+                  onClick={() => refreshHistory()}
                   className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
                 >
                   刷新
@@ -1649,7 +1807,7 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               )}
 
               <InvocationHistoryPanel
-                items={currentCapabilityHistory}
+                items={history}
                 expandedId={expandedHistoryId}
                 onToggleExpand={setExpandedHistoryId}
                 emptyMessage="当前能力暂无调用记录"

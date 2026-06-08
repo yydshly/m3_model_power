@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   getVerificationIndex,
@@ -21,6 +21,7 @@ import AssetResultPreview from '../components/AssetResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import { getRequiredConfirmations, allConfirmationsSatisfied, CONFIRM_LABELS } from '../domain/confirmations'
 import { billingLabel, operationRiskLabel } from '../domain/workbenchLabels'
+import { buildDemoPayload } from '../domain/demoPayload'
 
 // ── Scope badge colors ─────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ function InvokePanel({
 
       <div className="flex gap-2">
         <button
-          onClick={() => onPayloadChange(JSON.stringify(cap.example ?? {}, null, 2))}
+          onClick={() => onPayloadChange(JSON.stringify(buildDemoPayload(cap), null, 2))}
           className="px-3 py-1.5 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
         >
           重置为示例 payload
@@ -384,6 +385,7 @@ export default function TestConsole() {
   const [payloads, setPayloads] = useState<Record<string, string>>({})
   const [filterScope, setFilterScope] = useState<string>('all')
   const [filterCat, setFilterCat] = useState<string>('all')
+  const [filterRisk, setFilterRisk] = useState<string>('all')
   const [search, setSearch] = useState<string>('')
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
@@ -392,6 +394,9 @@ export default function TestConsole() {
   const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'>('all')
   const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
+
+  // Ref for scroll-into-view of test panel
+  const panelRef = useRef<HTMLDivElement>(null)
 
   // Support ?capability=xxx URL param to auto-select a capability
   const [searchParams] = useSearchParams()
@@ -443,6 +448,10 @@ export default function TestConsole() {
   const filtered = caps.filter((c) => {
     if (filterScope !== 'all' && c.scope_policy?.current_scope !== filterScope) return false
     if (filterCat !== 'all' && c.category !== filterCat) return false
+    if (filterRisk !== 'all') {
+      const risk = c.operation_policy?.operation_risk ?? 'normal'
+      if (risk !== filterRisk) return false
+    }
     if (search && !c.id.includes(search) && !c.label.includes(search)) return false
     return true
   })
@@ -452,8 +461,9 @@ export default function TestConsole() {
     setPanelType('risk-check')
     setConfirmations({})
     if (payloads[cap.id] === undefined) {
-      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(cap.example ?? {}, null, 2) }))
+      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(buildDemoPayload(cap), null, 2) }))
     }
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
   const openInvoke = (cap: Capability) => {
@@ -461,8 +471,9 @@ export default function TestConsole() {
     setPanelType('invoke')
     setConfirmations({})
     if (payloads[cap.id] === undefined) {
-      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(cap.example ?? {}, null, 2) }))
+      setPayloads(p => ({ ...p, [cap.id]: JSON.stringify(buildDemoPayload(cap), null, 2) }))
     }
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
   const selectedCap = registry?.capabilities.find((c) => c.id === selectedCapId) ?? null
@@ -629,8 +640,8 @@ export default function TestConsole() {
         </div>
       )}
 
-      {/* ── Filter bar ── */}
-      <div className="flex flex-wrap gap-3 items-center">
+      {/* ── Filter bar (sticky) ── */}
+      <div className="sticky top-0 z-10 bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-wrap gap-3 items-center shadow-sm">
         <input
           type="text"
           placeholder="搜索 capability…"
@@ -638,6 +649,16 @@ export default function TestConsole() {
           onChange={(e) => setSearch(e.target.value)}
           className="border border-slate-300 rounded px-3 py-1.5 text-sm w-48"
         />
+        <select
+          value={filterCat}
+          onChange={(e) => setFilterCat(e.target.value)}
+          className="border border-slate-300 rounded px-3 py-1.5 text-sm"
+        >
+          <option value="all">全部分类</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+          ))}
+        </select>
         <select
           value={filterScope}
           onChange={(e) => setFilterScope(e.target.value)}
@@ -654,20 +675,23 @@ export default function TestConsole() {
           })}
         </select>
         <select
-          value={filterCat}
-          onChange={(e) => setFilterCat(e.target.value)}
+          value={filterRisk}
+          onChange={(e) => setFilterRisk(e.target.value)}
           className="border border-slate-300 rounded px-3 py-1.5 text-sm"
         >
-          <option value="all">全部分类</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
-          ))}
+          <option value="all">全部风险</option>
+          <option value="normal">普通</option>
+          <option value="destructive">破坏性</option>
+          <option value="asset_required">素材型</option>
+          <option value="long_running">长时运行</option>
+          <option value="quota_guarded">配额门禁</option>
+          <option value="existing_task_only">仅已有任务</option>
         </select>
         <span className="text-sm text-slate-500 ml-auto">{filtered.length} 个能力</span>
       </div>
 
       {/* ── Capability Table ── */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-[400px] overflow-y-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
@@ -691,7 +715,7 @@ export default function TestConsole() {
               const isImplemented = cap.status === 'implemented'
 
               return (
-                <tr key={cap.id} className={`hover:bg-slate-50 ${selectedCapId === cap.id ? 'bg-sky-50' : ''}`}>
+                <tr key={cap.id} className={`hover:bg-slate-50 ${selectedCapId === cap.id ? 'bg-sky-100 ring-2 ring-sky-300' : ''}`}>
                   <td className="px-4 py-2.5 font-mono text-xs text-slate-800">{cap.id}</td>
                   <td className="px-4 py-2.5 text-slate-800">{cap.label}</td>
                   <td className="px-4 py-2.5 text-slate-600">{registry?.categories.find(c => c.id === cap.category)?.label ?? cap.category}</td>
@@ -743,7 +767,13 @@ export default function TestConsole() {
 
       {/* ── Inline Action Panel ── */}
       {selectedCap && panelType !== 'none' && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+        <div ref={panelRef} className="animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <span className="text-sm font-semibold text-slate-800">
+              测试 {selectedCap.id}
+            </span>
+            <span className="text-xs text-slate-400">（{panelType === 'risk-check' ? '安全检查' : '真实调用'}）</span>
+          </div>
           {panelType === 'risk-check' && (
             <RiskCheckPanel
               cap={selectedCap}
