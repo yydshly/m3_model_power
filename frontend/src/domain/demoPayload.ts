@@ -89,7 +89,16 @@ const DEMO_PAYLOADS: Record<string, Record<string, unknown>> = {
     // file must be provided by user, cannot have a default
   },
   'models-openai-list': {},
+  'models-openai-retrieve': {
+    model: 'MiniMax-M2.7-highspeed',
+  },
   'models-anthropic-list': {},
+  'models-anthropic-retrieve': {
+    model: 'MiniMax-M2.7-highspeed',
+  },
+  'file-delete': {
+    file_id: '替换为实际的 file_id',
+  },
 }
 
 // Capabilities that require model selection
@@ -231,4 +240,81 @@ function resolveTemplateValue(
   }
 
   return val
+}
+
+// ── Demo Readiness ─────────────────────────────────────────────────────────────
+
+export type DemoReadiness =
+  | 'ready'
+  | 'needs_input'
+  | 'needs_asset'
+  | 'needs_existing_id'
+  | 'guarded'
+  | 'disabled'
+
+const READY_CAPS = new Set([
+  'chat-openai',
+  'chat-anthropic',
+  'chat-responses-create',
+  'chat-responses-tokens',
+  'voice-list',
+  'lyrics-gen',
+  'file-list',
+  'models-openai-list',
+  'models-anthropic-list',
+])
+
+const GUARDED_CAPS = new Set([
+  'music-gen',
+  'image-t2i',
+  'tts-async',
+])
+
+const NEEDS_INPUT_CAPS = new Set([
+  'tts-sync',        // voice_id must be filled in
+  'models-openai-retrieve',
+  'models-anthropic-retrieve',
+])
+
+const NEEDS_ASSET_CAPS = new Set([
+  'image-i2i',
+  'file-upload',
+])
+
+const NEEDS_EXISTING_ID_CAPS = new Set([
+  'file-retrieve',
+  'file-content',
+  'file-delete',
+])
+
+const DISABLED_CAPS = new Set([
+  'video-gen',
+  'video-query',
+  'video-download',
+])
+
+export function getDemoReadiness(capabilityId: string): {
+  status: DemoReadiness
+  message: string
+} {
+  if (READY_CAPS.has(capabilityId)) {
+    return { status: 'ready', message: '已填入安全示例，可直接测试。' }
+  }
+  if (GUARDED_CAPS.has(capabilityId)) {
+    return { status: 'guarded', message: '该能力会消耗额度或资源，确认后再执行。' }
+  }
+  if (NEEDS_INPUT_CAPS.has(capabilityId)) {
+    return { status: 'needs_input', message: '请补充必要的字段（如 voice_id、model）后再执行。' }
+  }
+  if (NEEDS_ASSET_CAPS.has(capabilityId)) {
+    return { status: 'needs_asset', message: '该能力需要上传文件或提供真实素材 URL，不能用 JSON 示例直接调用。' }
+  }
+  if (NEEDS_EXISTING_ID_CAPS.has(capabilityId)) {
+    return { status: 'needs_existing_id', message: '该能力需要你提供真实的 file_id，请先通过 file-upload 或 file-list 获取。' }
+  }
+  if (DISABLED_CAPS.has(capabilityId)) {
+    return { status: 'disabled', message: '该能力暂不提供直接测试入口。' }
+  }
+  // Default: try to give something workable
+  return { status: 'ready', message: '已填入示例 payload，可尝试执行。' }
 }

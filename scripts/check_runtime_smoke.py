@@ -63,6 +63,11 @@ def main() -> int:
             ("/api/workflows", 200),
             ("/api/scenarios", 200),
             ("/api/history/status", 200),
+            ("/api/history/test-console", 200),
+            ("/api/history/capability/chat-openai", 200),
+            ("/api/history/capability/chat-anthropic", 200),
+            ("/api/history/capability/lyrics-gen", 200),
+            ("/api/history/capability/voice-list", 200),
         ]
 
         for path, expected_status in endpoints:

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getModelsFor, riskCheck, type RiskCheckResult, type Model } from '../api'
+import { buildDemoPayload } from '../domain/demoPayload'
 import { AsyncVideoPanel } from '../components/AsyncVideoPanel'
 import { ChatPanel } from '../components/ChatPanel'
 import { CostBadge, CostNotice } from '../components/CostBadge'
@@ -11,6 +12,7 @@ import { TtsWsPanel } from '../components/TtsWsPanel'
 import { UploadPanel } from '../components/UploadPanel'
 import { useRegistry } from '../store'
 import { getRequiredConfirmations, CONFIRM_LABELS } from '../domain/confirmations'
+import { getDemoReadiness } from '../domain/demoPayload'
 
 type Mode = 'invoke' | 'stream' | 'upload'
 
@@ -42,7 +44,7 @@ export default function CapabilityPage() {
     if (cap?.category === 'chat' && cap.streaming) setMode('stream')
     else setMode('invoke')
     if (cap) {
-      setExamplePayload(cap.example ?? {})
+      setExamplePayload(buildDemoPayload(cap))
       // Initialize confirmations state based on required confirmations
       const required = getRequiredConfirmations(cap)
       setConfirmations((prev) => {
@@ -584,16 +586,33 @@ export default function CapabilityPage() {
           {effectiveMode === 'invoke' && cap.has_handler && cap.async_job && cap.category === 'vision' && (
             <AsyncVideoPanel cap={cap} models={models} />
           )}
-          {effectiveMode === 'invoke' && cap.has_handler && !(cap.async_job && cap.category === 'vision') && cap.id !== 'tts-ws' && (
-            <InvokePanel
+          {effectiveMode === 'invoke' && cap.has_handler && !(cap.async_job && cap.category === 'vision') && cap.id !== 'tts-ws' && (() => {
+            const readiness = getDemoReadiness(cap.id)
+            return (
+              <>
+                {readiness.status !== 'ready' && (
+                  <div className={`mt-4 rounded border p-3 text-xs mb-2 ${
+                    readiness.status === 'guarded' ? 'border-amber-200 bg-amber-50 text-amber-800' :
+                    readiness.status === 'needs_input' ? 'border-blue-200 bg-blue-50 text-blue-800' :
+                    readiness.status === 'needs_asset' ? 'border-purple-200 bg-purple-50 text-purple-800' :
+                    readiness.status === 'needs_existing_id' ? 'border-orange-200 bg-orange-50 text-orange-800' :
+                    readiness.status === 'disabled' ? 'border-slate-200 bg-slate-100 text-slate-600' :
+                    'border-slate-200 bg-slate-50 text-slate-700'
+                  }`}>
+                    <span className="font-medium">测试准备状态：</span>{readiness.message}
+                  </div>
+                )}
+                <InvokePanel
               cap={cap}
               models={models}
-              defaultPayload={cap.example}
+              defaultPayload={buildDemoPayload(cap)}
               confirmations={confirmations}
               riskCheckResult={riskCheckResult}
               setRiskCheckResult={setRiskCheckResult}
-            />
-          )}
+              />
+              </>
+            )
+          })()}
           {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} />}
           {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} />}
           {effectiveMode === 'upload' && <UploadPanel cap={cap} />}

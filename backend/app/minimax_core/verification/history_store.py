@@ -497,12 +497,15 @@ def append_history(
             "result_summary": summarize_result(result),
         }
         path = _ensure_dir().joinpath("history.jsonl")
-        path.append_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         compact_history_if_needed()
     except Exception as e:
         # 写失败不影响主流程，吞掉
         import sys
+        import traceback
         print(f"[history] append failed: {e}", file=sys.stderr)
+        traceback.print_exc()
 
 
 def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None = None) -> list[dict]:

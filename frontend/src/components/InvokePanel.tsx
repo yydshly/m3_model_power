@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
@@ -31,6 +31,24 @@ export function InvokePanel({
   const [result, setResult] = useState<unknown>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Sync body when defaultPayload prop changes (e.g. capability switch)
+  const defaultPayloadText = JSON.stringify(defaultPayload ?? {}, null, 2)
+  const [lastDefaultPayloadText, setLastDefaultPayloadText] = useState(defaultPayloadText)
+  useEffect(() => {
+    if (defaultPayloadText !== lastDefaultPayloadText) {
+      setBody(defaultPayloadText)
+      setLastDefaultPayloadText(defaultPayloadText)
+      if (cap.id === 'tts-async') {
+        try {
+          const parsed = JSON.parse(defaultPayloadText)
+          setTextValue(typeof parsed.text === 'string' ? parsed.text : '')
+        } catch {
+          setTextValue('')
+        }
+      }
+    }
+  }, [cap.id, defaultPayloadText, lastDefaultPayloadText])
   const [riskCheckLoading, setRiskCheckLoading] = useState(false)
 
   // tts-async character count display
