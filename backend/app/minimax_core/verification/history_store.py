@@ -505,8 +505,13 @@ def append_history(
         print(f"[history] append failed: {e}", file=sys.stderr)
 
 
-def list_history(limit: int = _DEFAULT_HISTORY_LIMIT) -> list[dict]:
-    """读取最近 N 条历史记录，返回列表（最新优先）。"""
+def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None = None) -> list[dict]:
+    """读取最近 N 条历史记录，返回列表（最新优先）。
+
+    Args:
+        limit: 最大返回条数，默认 50，最大 200
+        capability_id: 可选，按 capability_id 过滤（支持 risk_check 和 invoke 两类）
+    """
     safe_limit = normalize_limit(limit)
     path = _ensure_dir().joinpath("history.jsonl")
     if not path.exists():
@@ -520,15 +525,20 @@ def list_history(limit: int = _DEFAULT_HISTORY_LIMIT) -> list[dict]:
         return []
 
     # history 文件会在 append 时 compact 到有限大小；这里读取全量文件后反向取最近 safe_limit 条。
+    # 如果指定了 capability_id，先收集够足够多的记录再过滤。
     records = []
     for line in reversed(lines):
         line = line.strip()
         if not line:
             continue
         try:
-            records.append(json.loads(line))
+            record = json.loads(line)
         except Exception:
             continue
+        # capability_id 过滤
+        if capability_id and record.get("capability_id") != capability_id:
+            continue
+        records.append(record)
         if len(records) >= safe_limit:
             break
     return records

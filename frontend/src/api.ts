@@ -315,6 +315,12 @@ export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestCo
   return r.json()
 }
 
+export async function getCapabilityHistory(capabilityId: string, limit = 50): Promise<{ items: TestConsoleHistoryItem[] }> {
+  const r = await fetch(`/api/history/capability/${encodeURIComponent(capabilityId)}?limit=${limit}`)
+  if (!r.ok) throw new Error(`capability history ${r.status}`)
+  return r.json()
+}
+
 export type HistoryStatusResp = {
   history_path: string
   exists: boolean
@@ -499,7 +505,9 @@ export type RunnerTemplate = {
   description: string
   suitable_for: string[]
   risk_level: string
+  cost_level: 'none' | 'quota' | 'low' | 'medium' | 'high'
   result_type: 'text' | 'audio' | 'image' | 'voice_list' | 'chat' | 'file_upload' | 'file_list' | 'file_detail' | 'file_content' | 'async_task'
+  billing_policy: BillingPolicy
   form_schema: Record<string, {
     type: 'input' | 'textarea' | 'select' | 'number' | 'slider' | 'checkbox' | 'file'
     label: string

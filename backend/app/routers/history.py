@@ -21,3 +21,14 @@ async def test_console_history(limit: int = 50) -> dict:
     safe_limit = normalize_limit(limit)
     items = list_history(limit=safe_limit)
     return {"items": items}
+
+
+@router.get("/capability/{capability_id}")
+async def capability_history(capability_id: str, limit: int = 50) -> dict:
+    """返回指定能力最近的 N 条调用历史（最多 200 条）。
+
+    同时返回 risk_check 和 invoke 两类记录，按时间倒序。
+    """
+    safe_limit = normalize_limit(limit)
+    items = list_history(limit=safe_limit, capability_id=capability_id)
+    return {"items": items}
