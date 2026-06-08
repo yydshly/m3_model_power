@@ -18,10 +18,14 @@ import {
 } from '../api'
 import { useRegistry } from '../store'
 import AssetResultPreview from '../components/AssetResultPreview'
+import ChatResultPreview from '../components/ChatResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import { getRequiredConfirmations, allConfirmationsSatisfied, CONFIRM_LABELS } from '../domain/confirmations'
 import { billingLabel, operationRiskLabel } from '../domain/workbenchLabels'
 import { buildDemoPayload } from '../domain/demoPayload'
+
+// Chat capabilities that should use ChatResultPreview instead of AssetResultPreview
+const CHAT_CAPABILITY_IDS = new Set(['chat-openai', 'chat-anthropic', 'chat-responses-create'])
 
 // ── Scope badge colors ─────────────────────────────────────────────────
 
@@ -363,7 +367,11 @@ function InvokePanel({
 
       {result && (
         <div className="mt-3">
-          <AssetResultPreview data={result} />
+          {CHAT_CAPABILITY_IDS.has(cap.id) && !('error' in result) ? (
+            <ChatResultPreview data={(result as {ok: true; data: unknown}).data} />
+          ) : (
+            <AssetResultPreview data={result} />
+          )}
         </div>
       )}
     </div>

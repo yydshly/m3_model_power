@@ -1664,6 +1664,9 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [sessionDraft, setSessionDraft] = useState<RunnerSession | null>(null)
 
+  // Ref for auto-scroll to form when capability changes
+  const formRef = useRef<HTMLDivElement>(null)
+
   const refreshHistory = (capId?: string) => {
     const id = capId ?? selected
     if (!id) return
@@ -1715,6 +1718,16 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   useEffect(() => {
     if (selected) clearHandoff(selectedId)
   }, [selectedId])
+
+  // Scroll to form when capability changes
+  useEffect(() => {
+    if (selected && formRef.current) {
+      // Small delay to let React render the form first
+      setTimeout(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 50)
+    }
+  }, [selected])
 
   return (
     <div className="p-8 max-w-5xl">
@@ -1777,16 +1790,18 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
       ) : (
         <div className="space-y-6">
           {selectedTemplate ? (
-            <CapabilityCard
-              key={selected}
-              template={selectedTemplate}
-              initialValues={initialValues}
-              handoffKeys={handoffKeys}
-              onBack={handleBack}
-              onChainNavigate={handleSelect}
-              onDone={refreshHistory}
-              sessionDraft={sessionDraft}
-            />
+            <div ref={formRef}>
+              <CapabilityCard
+                key={selected}
+                template={selectedTemplate}
+                initialValues={initialValues}
+                handoffKeys={handoffKeys}
+                onBack={handleBack}
+                onChainNavigate={handleSelect}
+                onDone={refreshHistory}
+                sessionDraft={sessionDraft}
+              />
+            </div>
           ) : (
             <div className="text-sm text-slate-500">
               不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
