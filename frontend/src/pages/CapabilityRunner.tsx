@@ -10,6 +10,23 @@ import ChatResultPreview from '../components/ChatResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 import { saveRunnerSession, loadRunnerSession, type RunnerSession } from '../domain/runnerSession'
 
+// ── Safe template normalization ──────────────────────────────────────────────
+
+function normalizeRunnerTemplate(template: RunnerTemplate, capabilityId: string): RunnerTemplate {
+  return {
+    ...template,
+    capability_id: template.capability_id ?? capabilityId,
+    label: template.label ?? capabilityId,
+    description: template.description ?? '',
+    suitable_for: Array.isArray(template.suitable_for) ? template.suitable_for : [],
+    next_steps: Array.isArray(template.next_steps) ? template.next_steps : [],
+    form_schema: template.form_schema && typeof template.form_schema === 'object' ? template.form_schema : {},
+    payload_template: template.payload_template && typeof template.payload_template === 'object' ? template.payload_template : {},
+    risk_level: template.risk_level ?? 'safe',
+    result_type: template.result_type ?? 'text',
+  }
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type FormField = {
@@ -1311,8 +1328,17 @@ function CapabilityCard({
         </div>
 
         <UsageCostExplainer
-          billingPolicy={template.billing_policy}
-          costLevel={template.cost_level}
+          billingPolicy={template.billing_policy ?? {
+            billing_category: 'normal_token_plan_test',
+            requires_explicit_confirmation: false,
+            may_charge_extra: false,
+            consumes_token_plan_quota: true,
+            requires_certification: false,
+            requires_uploaded_asset: false,
+            billing_note: '',
+            official_pricing_note: '',
+          }}
+          costLevel={template.cost_level ?? 'low'}
         />
 
         {sessionDraft?.inputValues && Object.keys(sessionDraft.inputValues).length > 0 && (
@@ -1702,10 +1728,13 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
     }
   })
 
-  const selectedTemplate = selected ? templates[selected] : null
+  const rawSelectedTemplate = selected ? templates[selected] : null
+  const selectedTemplate = selected && rawSelectedTemplate
+    ? normalizeRunnerTemplate(rawSelectedTemplate, selected)
+    : null
 
   // Merge: URL params > sessionStorage handoff > session draft
-  const selectedId = selected as string
+  const selectedId = selected ?? ''
   const storedHandoff = selectedTemplate ? loadHandoff(selectedId) : {}
   const initialValues = selectedTemplate
     ? { ...(sessionDraft?.inputValues ?? {}), ...storedHandoff, ...queryInitialValues }
@@ -1716,17 +1745,19 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
   // Clear handoff after loading to prevent stale reuse
   useEffect(() => {
-    if (selected) clearHandoff(selectedId)
-  }, [selectedId])
+    if (selectedId && selectedTemplate) {
+      clearHandoff(selectedId)
+    }
+  }, [selectedId, selectedTemplate?.capability_id])
 
   // Scroll to form when capability changes
   useEffect(() => {
-    if (selected && formRef.current) {
-      // Small delay to let React render the form first
-      setTimeout(() => {
-        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 50)
-    }
+    if (!selected) return
+    const timer = window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+
+    return () => window.clearTimeout(timer)
   }, [selected])
 
   return (
@@ -1803,8 +1834,25 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               />
             </div>
           ) : (
-            <div className="text-sm text-slate-500">
-              不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              <div className="font-semibold">未找到能力体验模板：{selected}</div>
+              <div className="text-xs mt-1">
+                该能力可能尚未产品化为 Runner 表单。你可以返回能力列表，或进入高级测试。
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={handleBack}
+                  className="px-3 py-1.5 rounded bg-white border border-amber-200 text-xs hover:bg-amber-100"
+                >
+                  返回能力列表
+                </button>
+                <Link
+                  to={`/test-console?capability=${selected}`}
+                  className="px-3 py-1.5 rounded bg-white border border-amber-200 text-xs hover:bg-amber-100"
+                >
+                  进入高级测试
+                </Link>
+              </div>
             </div>
           )}
 
