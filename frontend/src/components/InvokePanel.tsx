@@ -25,6 +25,8 @@ export function InvokePanel({
   const requiresExistingTask = cap.operation_policy.requires_existing_task
 
   const { model, setModel } = useSyncedModelSelection(models)
+  const requiresModelSelection = models.length > 0
+  const hasModelSelection = !requiresModelSelection || !!model
   const [body, setBody] = useState<string>(JSON.stringify(defaultPayload ?? {}, null, 2))
   const [result, setResult] = useState<unknown>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -77,8 +79,6 @@ export function InvokePanel({
     }
   })()
 
-  const requiresModelSelection = models.length > 0
-  const hasModelSelection = !requiresModelSelection || !!model
   const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
   const invokeDisabled = !canInvoke || loading
   const invokeDisabledReason = requiresModelSelection && !model

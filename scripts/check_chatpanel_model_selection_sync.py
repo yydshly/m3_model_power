@@ -6,6 +6,7 @@
 2. 存在同步逻辑：models.some + setModel((current) => ...)
 3. 如果新增 useSyncedModelSelection.ts，三个组件都引用它
 4. 没有新的 MiniMax-M3 fallback
+5. InvokePanel 支持无模型能力不被误拦截（requiresModelSelection 模式）
 """
 import os
 import re

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, uploadCapability, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getTestConsoleHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
+import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import FileResultPreview from '../components/FileResultPreview'
 import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
 import ChatResultPreview from '../components/ChatResultPreview'
@@ -847,12 +848,19 @@ function InvokeResultView({
     return (
       <div className="mt-3 p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
         <strong>调用失败：</strong> {result.message}
-        {result.blocked_reasons && result.blocked_reasons.length > 0 && (
-          <div className="mt-1">阻断原因：{result.blocked_reasons.join('；')}</div>
-        )}
-        {result.required_confirmations && result.required_confirmations.length > 0 && (
-          <div className="mt-1">需要确认：{result.required_confirmations.join('、')}</div>
-        )}
+        <details className="mt-1 border border-red-200 rounded">
+          <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
+            调试信息
+          </summary>
+          <div className="px-2 pb-2 space-y-1">
+            {result.blocked_reasons && result.blocked_reasons.length > 0 && (
+              <div>阻断原因：{result.blocked_reasons.join('；')}</div>
+            )}
+            {result.required_confirmations && result.required_confirmations.length > 0 && (
+              <div>需要确认：{result.required_confirmations.join('、')}</div>
+            )}
+          </div>
+        </details>
       </div>
     )
   }
@@ -1084,12 +1092,14 @@ function CapabilityCard({
   handoffKeys,
   onBack,
   onChainNavigate,
+  onDone,
 }: {
   template: RunnerTemplate
   initialValues?: Record<string, string>
   handoffKeys?: string[]
   onBack: () => void
   onChainNavigate: (capId: string) => void
+  onDone?: () => void
 }) {
   const schema = template.form_schema as FormSchema
   const defaults = getDefaultValues(schema)
@@ -1157,6 +1167,7 @@ function CapabilityCard({
         }
         setResult(res)
         setRunState('done')
+        onDone?.()
         return
       }
 
@@ -1181,6 +1192,7 @@ function CapabilityCard({
 
       setResult(res)
       setRunState('done')
+      onDone?.()
     } catch (e: any) {
       setErrorMessage(e?.message ?? String(e))
       setRunState('error')
@@ -1373,10 +1385,18 @@ function CapabilityCard({
         )}
         {riskResult && !riskResult.allowed && (
           <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-            <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-            {riskResult.required_confirmations.length > 0 && (
-              <div className="mt-1">需要确认：{riskResult.required_confirmations.join('、')}</div>
-            )}
+            <strong>安全检查阻断：</strong>
+            <details className="mt-1 border border-red-200 rounded">
+              <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
+                调试信息
+              </summary>
+              <div className="px-2 pb-2 space-y-1">
+                <div>阻断原因：{riskResult.blocked_reasons.join('；')}</div>
+                {riskResult.required_confirmations.length > 0 && (
+                  <div>需要确认：{riskResult.required_confirmations.join('、')}</div>
+                )}
+              </div>
+            </details>
           </div>
         )}
         {result && (
@@ -1507,6 +1527,18 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const fromWorkflow = searchParams.get('from_workflow')
   const fromScenario = searchParams.get('from_scenario')
 
+  const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  const refreshHistory = () => {
+    getTestConsoleHistory(50)
+      .then(r => { setHistory(r.items); setHistoryErr(null) })
+      .catch((e: any) => setHistoryErr(e.message))
+  }
+
+  useEffect(() => { refreshHistory() }, [])
+
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
   }
@@ -1541,6 +1573,11 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   useEffect(() => {
     if (selected) clearHandoff(selectedId)
   }, [selectedId])
+
+  // Filter history to current capability
+  const currentCapabilityHistory = selected
+    ? history.filter(item => item.capability_id === selected)
+    : []
 
   return (
     <div className="p-8 max-w-5xl">
@@ -1586,11 +1623,38 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               handoffKeys={handoffKeys}
               onBack={handleBack}
               onChainNavigate={handleSelect}
+              onDone={refreshHistory}
             />
           ) : (
             <div className="text-sm text-slate-500">
               不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
             </div>
+          )}
+
+          {/* Current capability history */}
+          {selected && (
+            <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+                <button
+                  onClick={refreshHistory}
+                  className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+                >
+                  刷新
+                </button>
+              </div>
+
+              {historyErr && (
+                <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+              )}
+
+              <InvocationHistoryPanel
+                items={currentCapabilityHistory}
+                expandedId={expandedHistoryId}
+                onToggleExpand={setExpandedHistoryId}
+                emptyMessage="当前能力暂无调用记录"
+              />
+            </section>
           )}
         </div>
       )}

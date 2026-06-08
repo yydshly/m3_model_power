@@ -38,6 +38,7 @@ jobs:
           python scripts/check_frontend_copy_no_leaky_internal_terms.py
           python scripts/check_shared_confirmation_logic.py
           python scripts/check_chatpanel_model_selection_sync.py
+          python scripts/check_invocation_history_and_assets.py
 
       - name: Compile Python
         run: |
