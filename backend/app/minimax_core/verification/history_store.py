@@ -12,6 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from .diagnostics_store import append_trace_event
+except ImportError:
+    append_trace_event = None  # type: ignore
+
 # ── Constants ─────────────────────────────────────────────────────────
 
 _HISTORY_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
@@ -483,12 +488,25 @@ def append_history(
     confirmations: dict | None,
     result: dict,
     duration_ms: int | None = None,
+    trace_id: str | None = None,
 ) -> str | None:
     """追加一条历史记录到 JSONL 文件。写失败不抛异常。
+
+    Args:
+        trace_id: optional trace ID for observability chain tracking.
 
     Returns:
         The record ID on success, None on failure.
     """
+    if append_trace_event and trace_id:
+        append_trace_event(
+            trace_id,
+            "history_append_attempt",
+            capability_id=capability_id,
+            action=action,
+            data={"history_path": "runtime/test_console/history.jsonl"},
+        )
+
     try:
         record_id = str(uuid.uuid4())
         record = {
@@ -497,6 +515,7 @@ def append_history(
             "action": action,
             "capability_id": capability_id,
             "duration_ms": duration_ms,
+            "trace_id": trace_id,
             "payload_summary": summarize_payload(payload),
             "confirmations": confirmations or {},
             "result": summarize_result_record(result),
@@ -506,6 +525,19 @@ def append_history(
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         compact_history_if_needed()
+
+        if append_trace_event and trace_id:
+            append_trace_event(
+                trace_id,
+                "history_append_success",
+                capability_id=capability_id,
+                action=action,
+                data={
+                    "history_id": record_id,
+                    "history_path": "runtime/test_console/history.jsonl",
+                },
+            )
+
         return record_id
     except Exception as e:
         # 写失败不影响主流程，吞掉
@@ -513,8 +545,18 @@ def append_history(
         import traceback
         print(f"[history] append failed: {e}", file=sys.stderr)
         traceback.print_exc()
+
+        if append_trace_event and trace_id:
+            append_trace_event(
+                trace_id,
+                "history_append_failed",
+                capability_id=capability_id,
+                action=action,
+                status="error",
+                message=str(e),
+            )
+
         return None
-        traceback.print_exc()
 
 
 def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None = None) -> list[dict]:
@@ -571,14 +613,17 @@ def get_history_status() -> dict:
 
     Returns:
         dict with history_path (relative), exists, line_count, valid_record_count,
-        size_bytes, last_modified (ISO string or null).
+        size_bytes, last_modified (ISO string or null), history_dir_exists, history_file_name.
     """
     # Use a logical relative path, not absolute filesystem path
     history_rel_path = "runtime/test_console/history.jsonl"
-    path = _ensure_dir().joinpath("history.jsonl")
+    parent_dir = _ensure_dir()
+    path = parent_dir.joinpath("history.jsonl")
 
     result: dict = {
         "history_path": history_rel_path,
+        "history_dir_exists": parent_dir.exists(),
+        "history_file_name": "history.jsonl",
         "exists": False,
         "line_count": 0,
         "valid_record_count": 0,

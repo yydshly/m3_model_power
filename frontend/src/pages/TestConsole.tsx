@@ -6,6 +6,7 @@ import {
   getTestConsoleHistory,
   getHistoryStatus,
   getCapabilityDescriptions,
+  runHistoryProbe,
   invoke,
   riskCheck,
   type Capability,
@@ -446,6 +447,8 @@ export default function TestConsole() {
   const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'|'stream'|'upload'|'ws'>('all')
   const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
+  const [probeResult, setProbeResult] = useState<{ ok: boolean; trace_id: string; history_id: string | null } | null>(null)
+  const [probeLoading, setProbeLoading] = useState(false)
 
   // Ref for scroll-into-view of test panel
   const panelRef = useRef<HTMLDivElement>(null)
@@ -471,6 +474,20 @@ export default function TestConsole() {
       .then(r => { setHistory(r.items); setHistoryErr(null) })
       .catch((e: any) => setHistoryErr(e.message))
     refreshHistoryStatus()
+  }
+
+  const handleHistoryProbe = async () => {
+    setProbeLoading(true)
+    setProbeResult(null)
+    try {
+      const result = await runHistoryProbe()
+      setProbeResult(result)
+      await refreshHistory()
+    } catch (e: any) {
+      setProbeResult({ ok: false, trace_id: '', history_id: null })
+    } finally {
+      setProbeLoading(false)
+    }
   }
 
   useEffect(() => { refreshHistory() }, [])
@@ -866,16 +883,34 @@ export default function TestConsole() {
               </span>
             )}
           </h3>
-          <button
-            onClick={refreshHistory}
-            className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-          >
-            刷新
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleHistoryProbe}
+              disabled={probeLoading}
+              className="px-3 py-1 text-xs border border-sky-300 rounded bg-sky-50 hover:bg-sky-100 disabled:opacity-50"
+              title="写入一条诊断历史，验证后端 history 写入能力"
+            >
+              {probeLoading ? '探测中…' : '诊断：写入一条测试历史'}
+            </button>
+            <button
+              onClick={refreshHistory}
+              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+            >
+              刷新
+            </button>
+          </div>
         </div>
 
         {historyErr && (
           <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        {probeResult && (
+          <div className={`mb-3 p-2 rounded text-xs ${probeResult.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            {probeResult.ok
+              ? <>History Probe 成功：<span className="font-mono">{probeResult.history_id}</span>（trace_id：<span className="font-mono">{probeResult.trace_id}</span>）</>
+              : 'History Probe 失败，请检查后端是否运行中'}
+          </div>
         )}
 
         {history.length === 0 && !historyErr && (

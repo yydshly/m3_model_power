@@ -21,6 +21,7 @@ import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..config import settings
+from ..minimax_core.verification.diagnostics_store import new_trace_id, append_trace_event
 from ..minimax_core.verification.history_store import append_history
 from ..registry import get_registry
 
@@ -42,6 +43,10 @@ def _upstream_ws_url(path: str) -> str:
 
 @router.websocket("/ws/{cap_id}")
 async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
+    trace_id = ws.query_params.get("trace_id") or new_trace_id("ws")
+
+    append_trace_event(trace_id, "ws_route_entered", capability_id=cap_id, action="ws")
+
     await ws.accept()
     reg = get_registry()
     cap = next((c for c in reg.capabilities if c.id == cap_id), None)
@@ -68,6 +73,7 @@ async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
         "finished_ok": False,
         "error_message": None,
         "terminal_seen": False,
+        "trace_id": trace_id,
     }
 
     async def client_to_up() -> None:
@@ -178,6 +184,7 @@ async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
                         "message": stats.get("error_message"),
                     },
                     duration_ms=duration_ms,
+                    trace_id=trace_id,
                 )
             except Exception as hist_err:
                 print(f"[history] ws append failed: {hist_err}", file=sys.stderr)

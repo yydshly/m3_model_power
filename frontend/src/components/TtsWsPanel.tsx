@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Capability, Model } from '../api'
+import { createTraceId } from '../api'
 
 /**
  * tts-ws 专用面板。
@@ -31,6 +32,7 @@ export function TtsWsPanel({
   const finishedRef = useRef(false)
   const terminalSeenRef = useRef(false)
   const audioUrlRef = useRef<string | null>(null)
+  const [traceId, setTraceId] = useState<string>('')
 
   const append = (s: string) => setLog((prev) => [...prev.slice(-200), s])
 
@@ -80,7 +82,9 @@ export function TtsWsPanel({
     finishedRef.current = false
     terminalSeenRef.current = false
     setRunning(true)
-    const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/api/ws/${cap.id}`)
+    const tid = createTraceId('ws')
+    setTraceId(tid)
+    const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/api/ws/${cap.id}?trace_id=${encodeURIComponent(tid)}`)
     wsRef.current = ws
 
     ws.onopen = () => {
@@ -186,6 +190,12 @@ export function TtsWsPanel({
       )}
       {log.length > 0 && (
         <pre className="text-[11px] bg-slate-900 text-slate-200 rounded p-2 max-h-40 overflow-auto">{log.join('\n')}</pre>
+      )}
+
+      {traceId && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+          <div>trace_id：<span className="font-mono">{traceId}</span></div>
+        </div>
       )}
     </div>
   )

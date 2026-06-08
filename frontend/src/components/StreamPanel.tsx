@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { streamInvoke, type Capability, type Model } from '../api'
+import { streamInvoke, createTraceId, getDiagnosticsTrace, type Capability, type Model } from '../api'
 import { quotaLabel } from '../domain/workbenchLabels'
 import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 import { buildDemoPayload } from '../domain/demoPayload'
@@ -40,6 +40,9 @@ export function StreamPanel({
   const [err, setErr] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [traceEvents, setTraceEvents] = useState<Record<string, unknown>[]>([])
+  const [showTrace, setShowTrace] = useState(false)
 
   function updateJsonBodyField(bdy: string, key: string, value: unknown): string {
     const safe = parseBodySafely(bdy)
@@ -76,11 +79,15 @@ export function StreamPanel({
     }
 
     if (model && !('model' in parsed)) parsed.model = model
+    const tid = createTraceId('stream')
+    setTraceId(tid)
+    setTraceEvents([])
+    setShowTrace(false)
     setRunning(true)
     const ctl = new AbortController()
     abortRef.current = ctl
     try {
-      const r = await streamInvoke(cap.id, parsed)
+      const r = await streamInvoke(cap.id, parsed, tid)
       if (!r.ok || !r.body) {
         const txt = await r.text().catch(() => '')
         setErr(`[${r.status}] ${txt}`)
@@ -104,6 +111,16 @@ export function StreamPanel({
   }
 
   const stop = () => abortRef.current?.abort()
+
+  const loadTrace = async (tid: string) => {
+    try {
+      const data = await getDiagnosticsTrace(tid)
+      setTraceEvents(data.events ?? [])
+      setShowTrace(true)
+    } catch {
+      setTraceEvents([])
+    }
+  }
 
   // Safe render-time validation — never throws
   const safeBody = parseBodySafely(body)
@@ -174,6 +191,31 @@ export function StreamPanel({
         )}
       </div>
       {err && <div className="text-sm text-red-600 whitespace-pre-wrap">{err}</div>}
+
+      {traceId && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+          <div>trace_id：<span className="font-mono">{traceId}</span></div>
+          {!showTrace && (
+            <button onClick={() => loadTrace(traceId)} className="mt-1 text-sky-600 hover:underline">
+              查看链路诊断
+            </button>
+          )}
+          {showTrace && traceEvents.length > 0 && (
+            <div className="mt-1">
+              <div className="text-slate-500 mb-1">链路事件：</div>
+              {traceEvents.map((e: Record<string, unknown>, i: number) => (
+                <div key={i} className="font-mono text-[10px] text-slate-600">
+                  {String(e.event)} {e.status !== 'ok' ? `❌ ${e.status}` : '✅'} {e.message ? String(e.message) : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {showTrace && traceEvents.length === 0 && (
+            <div className="mt-1 text-slate-400">暂无链路事件</div>
+          )}
+        </div>
+      )}
+
       {out && (
         <pre className="text-xs bg-slate-900 text-emerald-200 rounded p-3 overflow-auto max-h-[480px] whitespace-pre-wrap">
           {out}

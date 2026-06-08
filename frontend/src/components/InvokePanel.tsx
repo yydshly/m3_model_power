@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
+import { invoke, riskCheck, createTraceId, getDiagnosticsTrace, type Capability, type Model, type RiskCheckResult } from '../api'
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
 import { quotaLabel } from '../domain/workbenchLabels'
@@ -36,6 +36,9 @@ export function InvokePanel({
   const [loading, setLoading] = useState(false)
   const [lastHistoryId, setLastHistoryId] = useState<string | null>(null)
   const [lastInvokeCapabilityId, setLastInvokeCapabilityId] = useState<string | null>(null)
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [traceEvents, setTraceEvents] = useState<Record<string, unknown>[]>([])
+  const [showTrace, setShowTrace] = useState(false)
 
   // Sync body when defaultPayload prop changes (e.g. capability switch)
   const defaultPayloadText = JSON.stringify(defaultPayload ?? {}, null, 2)
@@ -152,10 +155,14 @@ export function InvokePanel({
       return
     }
     if (model && !('model' in parsed)) parsed.model = model
+    const tid = createTraceId()
+    setTraceId(tid)
+    setTraceEvents([])
+    setShowTrace(false)
     setLoading(true)
     let invokeResult: Awaited<ReturnType<typeof invoke>> | null = null
     try {
-      invokeResult = await invoke(cap.id, parsed, confirmations)
+      invokeResult = await invoke(cap.id, parsed, confirmations, tid)
     } catch (e: any) {
       setLoading(false)
       setErr(`调用失败：${e?.message ?? String(e)}`)
@@ -218,6 +225,16 @@ export function InvokePanel({
       })
     } finally {
       setRiskCheckLoading(false)
+    }
+  }
+
+  const loadTrace = async (tid: string) => {
+    try {
+      const data = await getDiagnosticsTrace(tid)
+      setTraceEvents(data.events ?? [])
+      setShowTrace(true)
+    } catch {
+      setTraceEvents([])
     }
   }
 
@@ -416,6 +433,29 @@ export function InvokePanel({
       </div>
 
       {err && <div className="text-sm text-red-600 whitespace-pre-wrap">{err}</div>}
+      {traceId && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+          <div>trace_id：<span className="font-mono">{traceId}</span></div>
+          {!showTrace && (
+            <button onClick={() => loadTrace(traceId)} className="mt-1 text-sky-600 hover:underline">
+              查看链路诊断
+            </button>
+          )}
+          {showTrace && traceEvents.length > 0 && (
+            <div className="mt-1">
+              <div className="text-slate-500 mb-1">链路事件：</div>
+              {traceEvents.map((e: Record<string, unknown>, i: number) => (
+                <div key={i} className="font-mono text-[10px] text-slate-600">
+                  {String(e.event)} {e.status !== 'ok' ? `❌ ${e.status}` : '✅'} {e.message ? String(e.message) : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {showTrace && traceEvents.length === 0 && (
+            <div className="mt-1 text-slate-400">暂无链路事件</div>
+          )}
+        </div>
+      )}
       {lastHistoryId && (
         <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
           历史已写入：<span className="font-mono">{lastHistoryId}</span>

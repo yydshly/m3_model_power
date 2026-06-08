@@ -11,11 +11,12 @@ from __future__ import annotations
 import time
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..minimax.client import MiniMaxError
 from ..minimax_core.guards.risk_gate import evaluate_capability_risk
+from ..minimax_core.verification.diagnostics_store import append_trace_event
 from ..registry import HANDLERS, get_registry
 from ..minimax_core.registry.loader import get_capability_registry
 from ..minimax_core.verification.history_store import append_history
@@ -62,6 +63,7 @@ def _append_invoke_history(
     confirmations: dict,
     result: dict,
     t0: float,
+    trace_id: str | None = None,
 ) -> str | None:
     """追加历史记录，返回 record ID（供前端调试观测）。"""
     duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -72,11 +74,14 @@ def _append_invoke_history(
         confirmations=confirmations,
         result=result,
         duration_ms=duration_ms,
+        trace_id=trace_id,
     )
 
 
 @router.post("/{cap_id}")
-async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse:
+async def invoke(cap_id: str, request: Request, body: InvokeRequest | None = None) -> JSONResponse:
+    trace_id = getattr(request.state, "trace_id", None)
+
     payload = body.payload if body else None
     confirmations = body.confirmations if body else None
     payload = payload or {}
@@ -119,9 +124,11 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
             history_id = _append_invoke_history(
                 "invoke", cap_id, payload, confirmations,
                 {"ok": False, "allowed": False, **content}, t0,
+                trace_id=trace_id,
             )
             if history_id:
                 content["history_id"] = history_id
+            content["trace_id"] = trace_id
             return JSONResponse(status_code=403, content=content)
 
     try:
@@ -131,9 +138,11 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
         history_id = _append_invoke_history(
             "invoke", cap_id, payload, confirmations,
             {"ok": False, "error": "minimax_error", "status": e.status, "message": e.message}, t0,
+            trace_id=trace_id,
         )
         if history_id:
             content["history_id"] = history_id
+        content["trace_id"] = trace_id
         return JSONResponse(
             status_code=502 if e.status >= 500 else e.status,
             content=content,
@@ -145,18 +154,22 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
         history_id = _append_invoke_history(
             "invoke", cap_id, payload, confirmations,
             {"ok": False, **business_error, "data": result}, t0,
+            trace_id=trace_id,
         )
         content = {**business_error, "data": result}
         if history_id:
             content["history_id"] = history_id
+        content["trace_id"] = trace_id
         return JSONResponse(status_code=400, content=content)
 
     # 真正成功
     history_id = _append_invoke_history(
         "invoke", cap_id, payload, confirmations,
         {"ok": True, "data": result}, t0,
+        trace_id=trace_id,
     )
     content = {"ok": True, "data": result}
     if history_id:
         content["history_id"] = history_id
+    content["trace_id"] = trace_id
     return JSONResponse(content=content)

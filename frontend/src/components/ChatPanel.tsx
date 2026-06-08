@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { streamInvoke, type Capability, type Model } from '../api'
+import { streamInvoke, createTraceId, getDiagnosticsTrace, type Capability, type Model } from '../api'
 import { quotaLabel } from '../domain/workbenchLabels'
 import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 
@@ -74,6 +74,9 @@ export function ChatPanel({
   const [err, setErr] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [traceEvents, setTraceEvents] = useState<Record<string, unknown>[]>([])
+  const [showTrace, setShowTrace] = useState(false)
 
   useEffect(() => { localStorage.setItem(KEY(cap.id), JSON.stringify(messages)) }, [messages, cap.id])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streaming])
@@ -86,6 +89,10 @@ export function ChatPanel({
       return
     }
     setErr(null)
+    const tid = createTraceId('chat')
+    setTraceId(tid)
+    setTraceEvents([])
+    setShowTrace(false)
     const next: Msg[] = [...messages, { role: 'user', content: input.trim() }, { role: 'assistant', content: '' }]
     setMessages(next)
     setInput('')
@@ -93,7 +100,7 @@ export function ChatPanel({
     const ctl = new AbortController()
     abortRef.current = ctl
     try {
-      const r = await streamInvoke(cap.id, buildBody(cap.id, selectedModel, next.slice(0, -1)))
+      const r = await streamInvoke(cap.id, buildBody(cap.id, selectedModel, next.slice(0, -1)), tid)
       if (!r.ok || !r.body) {
         const txt = await r.text().catch(() => '')
         setErr(`[${r.status}] ${txt}`)
@@ -133,6 +140,16 @@ export function ChatPanel({
   const stop = () => abortRef.current?.abort()
   const reset = () => setMessages([{ role: 'system', content: '你是一个有帮助的助手。' }])
 
+  const loadTrace = async (tid: string) => {
+    try {
+      const data = await getDiagnosticsTrace(tid)
+      setTraceEvents(data.events ?? [])
+      setShowTrace(true)
+    } catch {
+      setTraceEvents([])
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -156,6 +173,30 @@ export function ChatPanel({
       </div>
 
       {err && <div className="text-sm text-red-600 whitespace-pre-wrap">{err}</div>}
+
+      {traceId && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+          <div>trace_id：<span className="font-mono">{traceId}</span></div>
+          {!showTrace && (
+            <button onClick={() => loadTrace(traceId)} className="mt-1 text-sky-600 hover:underline">
+              查看链路诊断
+            </button>
+          )}
+          {showTrace && traceEvents.length > 0 && (
+            <div className="mt-1">
+              <div className="text-slate-500 mb-1">链路事件：</div>
+              {traceEvents.map((e: Record<string, unknown>, i: number) => (
+                <div key={i} className="font-mono text-[10px] text-slate-600">
+                  {String(e.event)} {e.status !== 'ok' ? `❌ ${e.status}` : '✅'} {e.message ? String(e.message) : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {showTrace && traceEvents.length === 0 && (
+            <div className="mt-1 text-slate-400">暂无链路事件</div>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2">
         <textarea

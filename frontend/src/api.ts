@@ -149,6 +149,30 @@ export async function getHealth(): Promise<HealthResp> {
   return r.json()
 }
 
+// ── Trace ID ────────────────────────────────────────────────────────────
+
+export function createTraceId(prefix = 'hist'): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`
+}
+
+export async function getDiagnosticsTrace(traceId: string): Promise<{ trace_id: string; events: Record<string, unknown>[] }> {
+  const r = await fetch(`/api/diagnostics/trace/${encodeURIComponent(traceId)}`)
+  if (!r.ok) throw new Error(`diagnostics trace ${r.status}`)
+  return r.json()
+}
+
+export async function runHistoryProbe(): Promise<{ ok: boolean; trace_id: string; history_id: string | null }> {
+  const traceId = createTraceId('probe')
+  const r = await fetch('/api/history/probe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-MMW-Trace-ID': traceId },
+    body: JSON.stringify({ capability_id: 'history-probe', action: 'diagnostic_probe' }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.message ?? `history probe ${r.status}`)
+  return data
+}
+
 export async function getRegistry(): Promise<Registry> {
   const r = await fetch('/api/registry')
   if (!r.ok) throw new Error(`registry ${r.status}`)
@@ -183,12 +207,14 @@ export async function invoke(
   capId: string,
   payload: Record<string, unknown>,
   confirmations?: Record<string, boolean>,
+  traceId?: string,
 ): Promise<InvokeResult> {
+  const tid = traceId ?? createTraceId()
   const body: Record<string, unknown> = { payload }
   if (confirmations) body.confirmations = confirmations
   const r = await fetch(`/api/invoke/${capId}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-MMW-Trace-ID': tid },
     body: JSON.stringify(body),
   })
   const data = await r.json().catch(() => ({}))
@@ -201,22 +227,29 @@ export async function uploadCapability(
   file: File,
   purpose?: string,
   confirmAssetSource?: boolean,
+  traceId?: string,
 ): Promise<InvokeResult> {
+  const tid = traceId ?? createTraceId()
   const fd = new FormData()
   fd.append('file', file)
   if (purpose) fd.append('purpose', purpose)
   fd.append('confirm_asset_source', String(confirmAssetSource === true))
-  const r = await fetch(`/api/upload/${capId}`, { method: 'POST', body: fd })
+  const r = await fetch(`/api/upload/${capId}`, {
+    method: 'POST',
+    headers: { 'X-MMW-Trace-ID': tid },
+    body: fd,
+  })
   const data = await r.json().catch(() => ({}))
   if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status, history_id: data.history_id }
   return { ok: true, data, history_id: data.history_id }
 }
 
 /** 流式调用：返回 Response，调用方自己读 body。 */
-export async function streamInvoke(capId: string, payload: Record<string, unknown>): Promise<Response> {
+export async function streamInvoke(capId: string, payload: Record<string, unknown>, traceId?: string): Promise<Response> {
+  const tid = traceId ?? createTraceId()
   return fetch(`/api/stream/${capId}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-MMW-Trace-ID': tid },
     body: JSON.stringify(payload),
   })
 }
@@ -232,10 +265,12 @@ export async function riskCheck(
   capId: string,
   payload: Record<string, unknown>,
   confirmations: Record<string, boolean>,
+  traceId?: string,
 ): Promise<RiskCheckResult> {
+  const tid = traceId ?? createTraceId()
   const r = await fetch(`/api/capabilities/${capId}/risk-check`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-MMW-Trace-ID': tid },
     body: JSON.stringify({ payload, confirmations }),
   })
   if (!r.ok) {

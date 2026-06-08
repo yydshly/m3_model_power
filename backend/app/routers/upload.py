@@ -17,7 +17,7 @@
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..config import settings
@@ -73,10 +73,12 @@ def _build_history_payload(
 @router.post("/{cap_id}")
 async def upload(
     cap_id: str,
+    request: Request,
     file: UploadFile = File(...),
     purpose: str | None = Form(default=None),
     confirm_asset_source: bool | None = Form(default=None),
 ) -> Any:
+    trace_id = getattr(request.state, "trace_id", None)
     reg = get_registry()
     cap = next((c for c in reg.capabilities if c.id == cap_id), None)
     if cap is None:
@@ -134,10 +136,12 @@ async def upload(
             payload=history_payload,
             confirmations={"confirm_asset_source": confirm_asset_source is True},
             result={"ok": False, "error": "minimax_error", "status": r.status_code, "message": msg},
+            trace_id=trace_id,
         )
         content: dict[str, Any] = {"error": "minimax_error", "status": r.status_code, "message": msg}
         if history_id:
             content["history_id"] = history_id
+        content["trace_id"] = trace_id
         return JSONResponse(
             status_code=502 if r.status_code >= 500 else r.status_code,
             content=content,
@@ -157,9 +161,11 @@ async def upload(
         payload=history_payload,
         confirmations={"confirm_asset_source": confirm_asset_source is True},
         result={"ok": True, "data": response_data},
+        trace_id=trace_id,
     )
 
     content: dict[str, Any] = {"ok": True, "data": response_data}
     if history_id:
         content["history_id"] = history_id
+    content["trace_id"] = trace_id
     return content
