@@ -6,6 +6,7 @@ import {
   getTestConsoleHistory,
   getHistoryStatus,
   getCapabilityDescriptions,
+  runHistoryProbe,
   invoke,
   riskCheck,
   type Capability,
@@ -18,10 +19,15 @@ import {
 } from '../api'
 import { useRegistry } from '../store'
 import AssetResultPreview from '../components/AssetResultPreview'
+import ChatResultPreview from '../components/ChatResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import { getRequiredConfirmations, allConfirmationsSatisfied, CONFIRM_LABELS } from '../domain/confirmations'
 import { billingLabel, operationRiskLabel } from '../domain/workbenchLabels'
 import { buildDemoPayload } from '../domain/demoPayload'
+import { validatePayloadForCapability } from '../domain/payloadValidation'
+
+// Chat capabilities that should use ChatResultPreview instead of AssetResultPreview
+const CHAT_CAPABILITY_IDS = new Set(['chat-openai', 'chat-anthropic', 'chat-responses-create'])
 
 // ── Scope badge colors ─────────────────────────────────────────────────
 
@@ -157,6 +163,10 @@ function RiskCheckPanel({
   let payloadErr: string | null = null
   try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
 
+  const validationResult = payloadErr
+    ? { valid: false, issues: [{ field: 'body', message: payloadErr, severity: 'error' as const }] }
+    : validatePayloadForCapability(cap.id, parsedPayload)
+
   const runCheck = async () => {
     if (payloadErr) { setErr(payloadErr); return }
     setLoading(true)
@@ -209,6 +219,20 @@ function RiskCheckPanel({
         />
         {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
       </div>
+
+      {!validationResult.valid && (
+        <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5 mb-1">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>
+                <span className="font-mono">{issue.field}</span>：{issue.message}
+              </li>
+            ))}
+          </ul>
+          <p className="text-amber-600">风险检查通过 ≠ 参数可执行；参数不完整时真实调用仍会被后端拒绝。</p>
+        </div>
+      )}
 
       <button
         onClick={runCheck}
@@ -272,8 +296,16 @@ function InvokePanel({
   let payloadErr: string | null = null
   try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
 
+  const validationResult = payloadErr
+    ? { valid: false, issues: [{ field: 'body', message: payloadErr, severity: 'error' as const }] }
+    : validatePayloadForCapability(cap.id, parsedPayload)
+
   const runInvoke = async () => {
     if (payloadErr) { setErr(payloadErr); return }
+    if (!validationResult.valid) {
+      setErr(`参数检查未通过：${validationResult.issues.filter(i => i.severity === 'error').map(i => `${i.field}: ${i.message}`).join('；')}`)
+      return
+    }
     setLoading(true)
     setErr(null)
     setResult(null)
@@ -353,17 +385,38 @@ function InvokePanel({
 
       <button
         onClick={runInvoke}
-        disabled={loading || !allConfirmed || !!payloadErr}
+        disabled={loading || !allConfirmed || !!payloadErr || !validationResult.valid}
         className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40 mt-3"
       >
         {loading ? '执行中…' : '真实调用'}
       </button>
 
+      {allConfirmed && !validationResult.valid && (
+        <span className="text-xs text-rose-600 ml-2">参数检查未通过，暂不能执行真实调用</span>
+      )}
+
+      {!validationResult.valid && (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>
+                <span className="font-mono">{issue.field}</span>：{issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {err && <p className="mt-2 text-sm text-red-600">错误: {err}</p>}
 
       {result && (
         <div className="mt-3">
-          <AssetResultPreview data={result} />
+          {CHAT_CAPABILITY_IDS.has(cap.id) && !('error' in result) ? (
+            <ChatResultPreview data={(result as {ok: true; data: unknown}).data} />
+          ) : (
+            <AssetResultPreview data={result} />
+          )}
         </div>
       )}
     </div>
@@ -391,9 +444,11 @@ export default function TestConsole() {
   const [historyErr, setHistoryErr] = useState<string | null>(null)
   const [historyStatus, setHistoryStatus] = useState<HistoryStatusResp | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
-  const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'>('all')
+  const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'|'stream'|'upload'|'ws'>('all')
   const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
+  const [probeResult, setProbeResult] = useState<{ ok: boolean; trace_id: string; history_id: string | null } | null>(null)
+  const [probeLoading, setProbeLoading] = useState(false)
 
   // Ref for scroll-into-view of test panel
   const panelRef = useRef<HTMLDivElement>(null)
@@ -419,6 +474,20 @@ export default function TestConsole() {
       .then(r => { setHistory(r.items); setHistoryErr(null) })
       .catch((e: any) => setHistoryErr(e.message))
     refreshHistoryStatus()
+  }
+
+  const handleHistoryProbe = async () => {
+    setProbeLoading(true)
+    setProbeResult(null)
+    try {
+      const result = await runHistoryProbe()
+      setProbeResult(result)
+      await refreshHistory()
+    } catch (e: any) {
+      setProbeResult({ ok: false, trace_id: '', history_id: null })
+    } finally {
+      setProbeLoading(false)
+    }
   }
 
   useEffect(() => { refreshHistory() }, [])
@@ -814,16 +883,34 @@ export default function TestConsole() {
               </span>
             )}
           </h3>
-          <button
-            onClick={refreshHistory}
-            className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-          >
-            刷新
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleHistoryProbe}
+              disabled={probeLoading}
+              className="px-3 py-1 text-xs border border-sky-300 rounded bg-sky-50 hover:bg-sky-100 disabled:opacity-50"
+              title="写入一条诊断历史，验证后端 history 写入能力"
+            >
+              {probeLoading ? '探测中…' : '诊断：写入一条测试历史'}
+            </button>
+            <button
+              onClick={refreshHistory}
+              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+            >
+              刷新
+            </button>
+          </div>
         </div>
 
         {historyErr && (
           <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        {probeResult && (
+          <div className={`mb-3 p-2 rounded text-xs ${probeResult.ok ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+            {probeResult.ok
+              ? <>History Probe 成功：<span className="font-mono">{probeResult.history_id}</span>（trace_id：<span className="font-mono">{probeResult.trace_id}</span>）</>
+              : 'History Probe 失败，请检查后端是否运行中'}
+          </div>
         )}
 
         {history.length === 0 && !historyErr && (
@@ -856,6 +943,7 @@ export default function TestConsole() {
             onFilterChange={setFilterHistoryAction}
             filterHasAssets={filterHistoryHasAssets}
             onFilterHasAssetsChange={setFilterHistoryHasAssets}
+            showCapabilityHeader
           />
         )}
       </div>

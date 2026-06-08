@@ -373,6 +373,167 @@ def test_old_format_list_history():
         os.unlink(tmp_path)
 
 
+def test_anthropic_content_blocks():
+    """summarize_result extracts text from Anthropic content[].text blocks."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "content": [
+                {"type": "text", "text": "MiniMax 是一家 AI 公司。"},
+            ],
+            "usage": {"input_tokens": 48, "output_tokens": 203},
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text", f"expected text, got {summary['output_type']}"
+    assert "MiniMax" in (summary["text_preview"] or ""), f"expected 'MiniMax' in text_preview, got {summary['text_preview']}"
+    print("PASS: summarize_result extracts text from Anthropic content blocks")
+
+
+def test_anthropic_thinking_skipped():
+    """summarize_result skips thinking blocks and extracts real text."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "content": [
+                {"type": "thinking", "thinking": "hidden thought content"},
+                {"type": "text", "text": "Real answer here."},
+            ],
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text"
+    assert "Real answer" in (summary["text_preview"] or "")
+    assert "hidden thought" not in (summary["text_preview"] or "")
+    print("PASS: summarize_result skips thinking blocks")
+
+
+def test_openai_choices_message_content():
+    """summarize_result extracts text from OpenAI choices[].message.content."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "choices": [
+                {"message": {"role": "assistant", "content": "你好，我是 MiniMax。"}}
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text", f"expected text, got {summary['output_type']}"
+    assert "MiniMax" in (summary["text_preview"] or ""), f"expected 'MiniMax' in text_preview, got {summary['text_preview']}"
+    print("PASS: summarize_result extracts text from OpenAI choices message.content")
+
+
+def test_openai_choices_delta_content():
+    """summarize_result extracts text from OpenAI choices[].delta.content (streaming)."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "choices": [
+                {"delta": {"content": "这是 delta 内容。"}}
+            ],
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text", f"expected text, got {summary['output_type']}"
+    assert "delta" in (summary["text_preview"] or ""), f"expected 'delta' in text_preview, got {summary['text_preview']}"
+    print("PASS: summarize_result extracts text from OpenAI choices delta.content")
+
+
+def test_responses_output_content():
+    """summarize_result extracts text from Responses API output[].content[].text."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "output": [
+                {"content": [{"type": "output_text", "text": "这是 Responses 文本。"}]}
+            ],
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text", f"expected text, got {summary['output_type']}"
+    assert "Responses" in (summary["text_preview"] or ""), f"expected 'Responses' in text_preview, got {summary['text_preview']}"
+    print("PASS: summarize_result extracts text from Responses API output")
+
+
+def test_text_preview_from_nested_data():
+    """summarize_result extracts text from nested data.result fields."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "result": {
+                "text": "Deeply nested text content.",
+            }
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary["output_type"] == "text", f"expected text, got {summary['output_type']}"
+    assert "Deeply nested" in (summary["text_preview"] or ""), f"expected 'Deeply nested' in text_preview, got {summary['text_preview']}"
+    print("PASS: summarize_result extracts text from nested data.result")
+
+
+def test_usage_extraction_input_output_tokens():
+    """summarize_result extracts usage.input_tokens / output_tokens / total_tokens."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "content": [{"type": "text", "text": "hello"}],
+            "usage": {"input_tokens": 1, "output_tokens": 2},
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary.get("usage") is not None, "usage should be extracted"
+    assert summary["usage"]["input_tokens"] == 1, f"expected input_tokens=1, got {summary['usage']['input_tokens']}"
+    assert summary["usage"]["output_tokens"] == 2, f"expected output_tokens=2, got {summary['usage']['output_tokens']}"
+    assert summary["usage"]["total_tokens"] == 3, f"expected total_tokens=3, got {summary['usage']['total_tokens']}"
+    print("PASS: summarize_result extracts usage input/output/total tokens")
+
+
+def test_usage_extraction_nested_data():
+    """summarize_result extracts usage from nested data.usage."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "content": [{"type": "text", "text": "hello"}],
+            "usage": {"input_token_count": 5, "output_token_count": 7},
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary.get("usage") is not None, "usage should be extracted"
+    assert summary["usage"]["input_tokens"] == 5, f"expected input_tokens=5, got {summary['usage']['input_tokens']}"
+    assert summary["usage"]["output_tokens"] == 7, f"expected output_tokens=7, got {summary['usage']['output_tokens']}"
+    print("PASS: summarize_result extracts usage from nested data.usage with input/output_token_count")
+
+
+def test_usage_extraction_prompt_completion_tokens():
+    """summarize_result extracts usage from prompt_tokens / completion_tokens."""
+    hs = _import_hs()
+    result = {
+        "ok": True,
+        "data": {
+            "choices": [
+                {"message": {"content": "hi"}}
+            ],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+        },
+    }
+    summary = hs.summarize_result(result)
+    assert summary.get("usage") is not None, "usage should be extracted"
+    assert summary["usage"]["input_tokens"] == 3, f"expected input_tokens=3, got {summary['usage']['input_tokens']}"
+    assert summary["usage"]["output_tokens"] == 4, f"expected output_tokens=4, got {summary['usage']['output_tokens']}"
+    assert summary["usage"]["total_tokens"] == 7, f"expected total_tokens=7, got {summary['usage']['total_tokens']}"
+    print("PASS: summarize_result extracts usage from prompt_tokens/completion_tokens")
+
+
 def main():
     print("=" * 60)
     print("History Result Summary checks")
@@ -397,6 +558,16 @@ def main():
         test_result_record_fields_correct,
         test_result_summary_still_extracts_assets,
         test_old_format_list_history,
+        # New: text_preview from LLM response shapes
+        test_anthropic_content_blocks,
+        test_anthropic_thinking_skipped,
+        test_openai_choices_message_content,
+        test_openai_choices_delta_content,
+        test_responses_output_content,
+        test_text_preview_from_nested_data,
+        test_usage_extraction_input_output_tokens,
+        test_usage_extraction_nested_data,
+        test_usage_extraction_prompt_completion_tokens,
     ]
 
     all_passed = True

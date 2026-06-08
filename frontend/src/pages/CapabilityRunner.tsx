@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getCapabilityHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getCapabilityHistory, getTestConsoleHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import UsageCostExplainer from '../components/UsageCostExplainer'
@@ -9,6 +9,23 @@ import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
 import ChatResultPreview from '../components/ChatResultPreview'
 import { extractAudioSource, audioSourceToSrc } from '../components/assetResultUtils'
 import { saveRunnerSession, loadRunnerSession, type RunnerSession } from '../domain/runnerSession'
+
+// ── Safe template normalization ──────────────────────────────────────────────
+
+function normalizeRunnerTemplate(template: RunnerTemplate, capabilityId: string): RunnerTemplate {
+  return {
+    ...template,
+    capability_id: template.capability_id ?? capabilityId,
+    label: template.label ?? capabilityId,
+    description: template.description ?? '',
+    suitable_for: Array.isArray(template.suitable_for) ? template.suitable_for : [],
+    next_steps: Array.isArray(template.next_steps) ? template.next_steps : [],
+    form_schema: template.form_schema && typeof template.form_schema === 'object' ? template.form_schema : {},
+    payload_template: template.payload_template && typeof template.payload_template === 'object' ? template.payload_template : {},
+    risk_level: template.risk_level ?? 'safe',
+    result_type: template.result_type ?? 'text',
+  }
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,8 +154,8 @@ function extractImageUrl(data: unknown): string {
   if (typeof d.img_url === 'string' && d.img_url) return d.img_url
   if (typeof d.imageUrl === 'string' && d.imageUrl) return d.imageUrl
   if (typeof d.imageURL === 'string' && d.imageURL) return d.imageURL
-  if (typeof d.file_url === 'string' && d.file_url) return d.file_url
-  if (typeof d.download_url === 'string' && d.download_url) return d.download_url
+  if (typeof d.file_url === 'string' && d.file_url && looksLikeImageUrl(d.file_url, 'file_url')) return d.file_url
+  if (typeof d.download_url === 'string' && d.download_url && looksLikeImageUrl(d.download_url, 'download_url')) return d.download_url
   if (typeof d.url === 'string' && d.url) {
     const u = d.url as string
     if (looksLikeImageUrl(u, 'url')) return u
@@ -1106,16 +1123,21 @@ function getExecutionDisabled(template: RunnerTemplate, values: Record<string, s
     }
   }
   // Chat capabilities: validate prompt and model
-  if (['chat-openai', 'chat-anthropic', 'chat-responses-create'].includes(template.capability_id)) {
-    if (!values['prompt']?.trim()) return '请填写问题'
+  if (['chat-openai', 'chat-anthropic', 'chat-responses-create', 'chat-responses-tokens'].includes(template.capability_id)) {
+    if (!values['prompt']?.trim() && !values['input']?.trim()) return '请填写问题'
     if (!values['model']?.trim()) return '请选择模型'
     // Validate max_tokens / max_output_tokens range
-    const maxKey = template.capability_id === 'chat-responses-create' ? 'max_output_tokens' : 'max_tokens'
+    const maxKey = template.capability_id === 'chat-responses-create' || template.capability_id === 'chat-responses-tokens' ? 'max_output_tokens' : 'max_tokens'
     const raw = values[maxKey]
     if (raw) {
       const n = Number(raw)
       if (isNaN(n) || n < 1 || n > 4096) return `${maxKey} 必须在 1~4096 之间`
     }
+  }
+  // tts-sync: validate model and voice_id
+  if (template.capability_id === 'tts-sync') {
+    if (!values['model']?.trim()) return '请选择语音模型'
+    if (!values['voice_id']?.trim()) return '请先填写 voice_id（可从音色列表获取）'
   }
   return null
 }
@@ -1193,6 +1215,8 @@ function CapabilityCard({
     setRiskResult(null)
     setErrorMessage(null)
 
+    let calledBackend = false
+
     try {
       // file-upload uses multipart upload path
       if (template.capability_id === 'file-upload') {
@@ -1211,17 +1235,17 @@ function CapabilityCard({
         }
         const risk = await riskCheck(template.capability_id, riskPayload, {})
         setRiskResult(risk)
-        if (!risk.allowed) { setRunState('error'); return }
+        if (!risk.allowed) { calledBackend = true; setRunState('error'); return }
 
         setRunState('running')
         const res = await uploadCapability(template.capability_id, file, values['purpose'], true)
+        calledBackend = true
         if (isOk(res)) {
           const bizErr = extractBusinessError(res.data)
           if (bizErr) { setErrorMessage(bizErr); setResult(res); setRunState('error'); return }
         }
         setResult(res)
         setRunState('done')
-        onDone?.()
         if (isOk(res)) {
           saveRunnerSession({
             capabilityId: template.capability_id,
@@ -1239,8 +1263,9 @@ function CapabilityCard({
       const payload = applyI2IPromptMode(basePayload, values, template.capability_id)
       const risk = await riskCheck(template.capability_id, payload, {})
       setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
+      if (!risk.allowed) { calledBackend = true; setRunState('error'); return }
       setRunState('running')
+      calledBackend = true
       const res = await invoke(template.capability_id, payload, {})
 
       if (isOk(res)) {
@@ -1255,7 +1280,6 @@ function CapabilityCard({
 
       setResult(res)
       setRunState('done')
-      onDone?.()
       if (isOk(res)) {
         saveRunnerSession({
           capabilityId: template.capability_id,
@@ -1268,6 +1292,8 @@ function CapabilityCard({
     } catch (e: any) {
       setErrorMessage(e?.message ?? String(e))
       setRunState('error')
+    } finally {
+      if (calledBackend) onDone?.()
     }
   }
 
@@ -1307,8 +1333,17 @@ function CapabilityCard({
         </div>
 
         <UsageCostExplainer
-          billingPolicy={template.billing_policy}
-          costLevel={template.cost_level}
+          billingPolicy={template.billing_policy ?? {
+            billing_category: 'normal_token_plan_test',
+            requires_explicit_confirmation: false,
+            may_charge_extra: false,
+            consumes_token_plan_quota: true,
+            requires_certification: false,
+            requires_uploaded_asset: false,
+            billing_note: '',
+            official_pricing_note: '',
+          }}
+          costLevel={template.cost_level ?? 'low'}
         />
 
         {sessionDraft?.inputValues && Object.keys(sessionDraft.inputValues).length > 0 && (
@@ -1657,15 +1692,59 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyFallbackUsed, setHistoryFallbackUsed] = useState(false)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [sessionDraft, setSessionDraft] = useState<RunnerSession | null>(null)
+  const [globalHistoryCount, setGlobalHistoryCount] = useState<number | null>(null)
+  const [lastGlobalCapabilityIds, setLastGlobalCapabilityIds] = useState<string[]>([])
 
-  const refreshHistory = (capId?: string) => {
+  // Ref for auto-scroll to form when capability changes
+  const formRef = useRef<HTMLDivElement>(null)
+
+  const refreshHistory = (capId?: string, options?: { retry?: boolean }) => {
     const id = capId ?? selected
     if (!id) return
-    getCapabilityHistory(id, 50)
-      .then(r => { setHistory(r.items); setHistoryErr(null) })
-      .catch((e: any) => setHistoryErr(e.message))
+    setHistoryFallbackUsed(false)
+
+    const doFetch = () => {
+      getCapabilityHistory(id, 50)
+        .then(r => {
+          setHistory(r.items)
+          setHistoryErr(null)
+          if (r.items.length === 0) {
+            return getTestConsoleHistory(20)
+              .then(gr => {
+                setGlobalHistoryCount(gr.items.length)
+                setLastGlobalCapabilityIds(Array.from(new Set(gr.items.map(i => i.capability_id))).slice(0, 8))
+              })
+              .catch(() => {})
+          } else {
+            setGlobalHistoryCount(null)
+            setLastGlobalCapabilityIds([])
+          }
+        })
+        .catch((e: any) => {
+          getTestConsoleHistory(200)
+            .then(r => {
+              const filtered = r.items.filter(item => item.capability_id === id)
+              setHistory(filtered)
+              setHistoryErr(null)
+              setHistoryFallbackUsed(true)
+              setGlobalHistoryCount(r.items.length)
+              setLastGlobalCapabilityIds(Array.from(new Set(r.items.map(i => i.capability_id))).slice(0, 8))
+            })
+            .catch(() => {
+              setHistoryErr(
+                `当前能力历史接口不可用：${e instanceof Error ? e.message : String(e)}`
+              )
+            })
+        })
+    }
+
+    doFetch()
+    if (options?.retry) {
+      window.setTimeout(doFetch, 300)
+    }
   }
 
   // Refresh history and load session draft when capability changes
@@ -1695,10 +1774,13 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
     }
   })
 
-  const selectedTemplate = selected ? templates[selected] : null
+  const rawSelectedTemplate = selected ? templates[selected] : null
+  const selectedTemplate = selected && rawSelectedTemplate
+    ? normalizeRunnerTemplate(rawSelectedTemplate, selected)
+    : null
 
   // Merge: URL params > sessionStorage handoff > session draft
-  const selectedId = selected as string
+  const selectedId = selected ?? ''
   const storedHandoff = selectedTemplate ? loadHandoff(selectedId) : {}
   const initialValues = selectedTemplate
     ? { ...(sessionDraft?.inputValues ?? {}), ...storedHandoff, ...queryInitialValues }
@@ -1709,8 +1791,20 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
   // Clear handoff after loading to prevent stale reuse
   useEffect(() => {
-    if (selected) clearHandoff(selectedId)
-  }, [selectedId])
+    if (selectedId && selectedTemplate) {
+      clearHandoff(selectedId)
+    }
+  }, [selectedId, selectedTemplate?.capability_id])
+
+  // Scroll to form when capability changes
+  useEffect(() => {
+    if (!selected) return
+    const timer = window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+
+    return () => window.clearTimeout(timer)
+  }, [selected])
 
   return (
     <div className="p-8 max-w-5xl">
@@ -1773,19 +1867,38 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
       ) : (
         <div className="space-y-6">
           {selectedTemplate ? (
-            <CapabilityCard
-              key={selected}
-              template={selectedTemplate}
-              initialValues={initialValues}
-              handoffKeys={handoffKeys}
-              onBack={handleBack}
-              onChainNavigate={handleSelect}
-              onDone={refreshHistory}
-              sessionDraft={sessionDraft}
-            />
+            <div ref={formRef}>
+              <CapabilityCard
+                key={selected}
+                template={selectedTemplate}
+                initialValues={initialValues}
+                handoffKeys={handoffKeys}
+                onBack={handleBack}
+                onChainNavigate={handleSelect}
+                onDone={() => refreshHistory(selected, { retry: true })}
+                sessionDraft={sessionDraft}
+              />
+            </div>
           ) : (
-            <div className="text-sm text-slate-500">
-              不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+              <div className="font-semibold">未找到能力体验模板：{selected}</div>
+              <div className="text-xs mt-1">
+                该能力可能尚未产品化为 Runner 表单。你可以返回能力列表，或进入高级测试。
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={handleBack}
+                  className="px-3 py-1.5 rounded bg-white border border-amber-200 text-xs hover:bg-amber-100"
+                >
+                  返回能力列表
+                </button>
+                <Link
+                  to={`/test-console?capability=${selected}`}
+                  className="px-3 py-1.5 rounded bg-white border border-amber-200 text-xs hover:bg-amber-100"
+                >
+                  进入高级测试
+                </Link>
+              </div>
             </div>
           )}
 
@@ -1793,17 +1906,42 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
           {selected && (
             <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
-                <button
-                  onClick={() => refreshHistory()}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-                >
-                  刷新
-                </button>
+                <div>
+                  <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+                  <p className="text-[10px] text-slate-400">按 capability_id = {selected} 过滤</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to={`/test-console${selected ? `?capability=${selected}` : ''}`}
+                    className="px-3 py-1 text-xs text-sky-600 hover:underline"
+                  >
+                    查看全部历史 →
+                  </Link>
+                  <button
+                    onClick={() => refreshHistory()}
+                    className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+                  >
+                    刷新
+                  </button>
+                </div>
               </div>
+
+              {historyFallbackUsed && !historyErr && (
+                <p className="text-xs text-amber-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+                  当前能力历史接口不可用，已临时从全局最近调用中过滤展示。
+                </p>
+              )}
 
               {historyErr && (
                 <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+              )}
+
+              {history.length === 0 && !historyErr && globalHistoryCount != null && (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+                  {globalHistoryCount > 0
+                    ? `全局最近有 ${globalHistoryCount} 条记录，但没有 capability_id = ${selected} 的记录。最近能力：${lastGlobalCapabilityIds.join('、')}`
+                    : `全局历史暂无记录，当前能力 ${selected} 也无调用记录。`}
+                </div>
               )}
 
               <InvocationHistoryPanel

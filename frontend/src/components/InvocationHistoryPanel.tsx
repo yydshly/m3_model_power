@@ -14,8 +14,8 @@ type Props = {
   items: TestConsoleHistoryItem[]
   expandedId: string | null
   onToggleExpand: (id: string | null) => void
-  filterAction?: 'all' | 'risk_check' | 'invoke'
-  onFilterChange?: (v: 'all' | 'risk_check' | 'invoke') => void
+  filterAction?: 'all' | 'risk_check' | 'invoke' | 'stream' | 'upload' | 'ws'
+  onFilterChange?: (v: 'all' | 'risk_check' | 'invoke' | 'stream' | 'upload' | 'ws') => void
   filterHasAssets?: boolean
   onFilterHasAssetsChange?: (v: boolean) => void
   emptyMessage?: string
@@ -26,6 +26,9 @@ type Props = {
 const ACTION_LABELS: Record<string, string> = {
   risk_check: '安检',
   invoke: '调用',
+  stream: '流式',
+  upload: '上传',
+  ws: 'WebSocket',
 }
 
 function formatDuration(ms: number | null | undefined): string {
@@ -83,7 +86,10 @@ export default function InvocationHistoryPanel({
             >
               <option value="all">全部动作</option>
               <option value="risk_check">安全检查</option>
-              <option value="invoke">真实调用</option>
+              <option value="invoke">调用</option>
+              <option value="stream">流式</option>
+              <option value="upload">上传</option>
+              <option value="ws">WebSocket</option>
             </select>
           )}
           {onFilterHasAssetsChange && (
@@ -118,13 +124,27 @@ export default function InvocationHistoryPanel({
                 className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${
                   item.action === 'risk_check'
                     ? 'bg-sky-100 text-sky-700'
+                    : item.action === 'stream'
+                    ? 'bg-cyan-100 text-cyan-700'
+                    : item.action === 'upload'
+                    ? 'bg-rose-100 text-rose-700'
+                    : item.action === 'ws'
+                    ? 'bg-violet-100 text-violet-700'
                     : 'bg-indigo-100 text-indigo-700'
                 }`}
               >
                 {ACTION_LABELS[item.action] ?? item.action}
               </span>
               {showCapabilityHeader && (
-                <span className="font-mono text-slate-700">{item.capability_id}</span>
+                <>
+                  {item.capability_id === 'history-smoke-test' ? (
+                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-500">
+                      测试记录
+                    </span>
+                  ) : (
+                    <span className="font-mono text-slate-700">{item.capability_id}</span>
+                  )}
+                </>
               )}
               {item.result_summary?.output_type && item.result_summary.output_type !== 'unknown' && (
                 <span className="shrink-0 px-1 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]">
@@ -231,6 +251,20 @@ export default function InvocationHistoryPanel({
                       {item.result_summary.text_preview && (
                         <div className="mb-1 text-slate-600 italic truncate">
                           文本：{item.result_summary.text_preview}
+                        </div>
+                      )}
+                      {item.result_summary.usage && (
+                        <div className="mt-1 text-xs text-slate-500">
+                          Token：
+                          {item.result_summary.usage.input_tokens != null && (
+                            <span>输入 {item.result_summary.usage.input_tokens}</span>
+                          )}
+                          {item.result_summary.usage.output_tokens != null && (
+                            <span className="ml-2">输出 {item.result_summary.usage.output_tokens}</span>
+                          )}
+                          {item.result_summary.usage.total_tokens != null && (
+                            <span className="ml-2">总计 {item.result_summary.usage.total_tokens}</span>
+                          )}
                         </div>
                       )}
                       <HistoryAssetPreview

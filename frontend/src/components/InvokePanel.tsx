@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { invoke, riskCheck, type Capability, type Model, type RiskCheckResult } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import { invoke, riskCheck, createTraceId, getDiagnosticsTrace, type Capability, type Model, type RiskCheckResult } from '../api'
 import { getRequiredConfirmations, allConfirmationsSatisfied } from '../domain/confirmations'
 import { JsonView } from './JsonView'
 import { quotaLabel } from '../domain/workbenchLabels'
 import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
+import { validatePayloadForCapability } from '../domain/payloadValidation'
 
 export function InvokePanel({
   cap,
@@ -12,6 +13,7 @@ export function InvokePanel({
   confirmations,
   riskCheckResult,
   setRiskCheckResult,
+  onDone,
 }: {
   cap: Capability
   models: Model[]
@@ -19,6 +21,7 @@ export function InvokePanel({
   confirmations: Record<string, boolean>
   riskCheckResult: RiskCheckResult | null
   setRiskCheckResult: (r: RiskCheckResult | null) => void
+  onDone?: (info?: { history_id?: string | null; capability_id?: string }) => void
 }) {
   const required = getRequiredConfirmations(cap)
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
@@ -31,7 +34,53 @@ export function InvokePanel({
   const [result, setResult] = useState<unknown>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [lastHistoryId, setLastHistoryId] = useState<string | null>(null)
+  const [lastInvokeCapabilityId, setLastInvokeCapabilityId] = useState<string | null>(null)
+  const [traceId, setTraceId] = useState<string | null>(null)
+  const [traceEvents, setTraceEvents] = useState<Record<string, unknown>[]>([])
+  const [showTrace, setShowTrace] = useState(false)
+
+  // Sync body when defaultPayload prop changes (e.g. capability switch)
+  const defaultPayloadText = JSON.stringify(defaultPayload ?? {}, null, 2)
+  const [lastDefaultPayloadText, setLastDefaultPayloadText] = useState(defaultPayloadText)
+  useEffect(() => {
+    if (defaultPayloadText !== lastDefaultPayloadText) {
+      setBody(defaultPayloadText)
+      setLastDefaultPayloadText(defaultPayloadText)
+      if (cap.id === 'tts-async') {
+        try {
+          const parsed = JSON.parse(defaultPayloadText)
+          setTextValue(typeof parsed.text === 'string' ? parsed.text : '')
+        } catch {
+          setTextValue('')
+        }
+      }
+    }
+  }, [cap.id, defaultPayloadText, lastDefaultPayloadText])
   const [riskCheckLoading, setRiskCheckLoading] = useState(false)
+
+  // ── Model → body.model sync ────────────────────────────────────────────────
+
+  function updateJsonBodyField(body: string, key: string, value: unknown): string {
+    try {
+      const parsed = JSON.parse(body || '{}')
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return body
+      return JSON.stringify({ ...parsed, [key]: value }, null, 2)
+    } catch {
+      return body
+    }
+  }
+
+  // ── Payload validation ─────────────────────────────────────────────────────
+
+  const validationResult = useMemo(() => {
+    try {
+      const parsed = JSON.parse(body)
+      return validatePayloadForCapability(cap.id, parsed)
+    } catch {
+      return { valid: false, issues: [{ field: 'body', message: 'JSON 格式错误', severity: 'error' }] }
+    }
+  }, [cap.id, body])
 
   // tts-async character count display
   const [textValue, setTextValue] = useState('')
@@ -79,7 +128,7 @@ export function InvokePanel({
     }
   })()
 
-  const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
+  const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload) && validationResult.valid
   const invokeDisabled = !canInvoke || loading
   const invokeDisabledReason = requiresModelSelection && !model
     ? '请选择模型'
@@ -87,6 +136,8 @@ export function InvokePanel({
     ? '请先完成执行前确认'
     : requiresExistingTask && !hasTaskIdInPayload
     ? '该能力仅限已有任务，请填写 task_id 或 file_id'
+    : !validationResult.valid
+    ? '参数检查未通过'
     : ''
 
   const submit = async () => {
@@ -104,27 +155,49 @@ export function InvokePanel({
       return
     }
     if (model && !('model' in parsed)) parsed.model = model
+    const tid = createTraceId()
+    setTraceId(tid)
+    setTraceEvents([])
+    setShowTrace(false)
     setLoading(true)
-    const r = await invoke(cap.id, parsed, confirmations)
+    let invokeResult: Awaited<ReturnType<typeof invoke>> | null = null
+    try {
+      invokeResult = await invoke(cap.id, parsed, confirmations, tid)
+    } catch (e: any) {
+      setLoading(false)
+      setErr(`调用失败：${e?.message ?? String(e)}`)
+      setLastHistoryId(null)
+      setLastInvokeCapabilityId(cap.id)
+      onDone?.({ history_id: null, capability_id: cap.id })
+      return
+    }
     setLoading(false)
-    if ('error' in r) {
-      setErr(`[${r.status ?? '-'}]: ${r.message}`)
-      if (r.blocked_reasons?.length) {
+    const histId = 'history_id' in invokeResult && typeof invokeResult.history_id === 'string'
+      ? invokeResult.history_id
+      : null
+    setLastHistoryId(histId)
+    setLastInvokeCapabilityId(cap.id)
+
+    if ('error' in invokeResult) {
+      setErr(`[${invokeResult.status ?? '-'}]: ${invokeResult.message}`)
+      if (invokeResult.blocked_reasons?.length) {
         setRiskCheckResult({
           allowed: false,
-          blocked_reasons: r.blocked_reasons,
-          required_confirmations: r.required_confirmations ?? [],
-          warnings: r.warnings ?? [],
+          blocked_reasons: invokeResult.blocked_reasons,
+          required_confirmations: invokeResult.required_confirmations ?? [],
+          warnings: invokeResult.warnings ?? [],
         })
       }
+      onDone?.({ history_id: histId, capability_id: cap.id })
     } else {
-      setResult(r.data)
+      setResult(invokeResult.data)
       setRiskCheckResult({
         allowed: true,
         blocked_reasons: [],
         required_confirmations: [],
         warnings: [],
       })
+      onDone?.({ history_id: histId, capability_id: cap.id })
     }
   }
 
@@ -155,6 +228,16 @@ export function InvokePanel({
     }
   }
 
+  const loadTrace = async (tid: string) => {
+    try {
+      const data = await getDiagnosticsTrace(tid)
+      setTraceEvents(data.events ?? [])
+      setShowTrace(true)
+    } catch {
+      setTraceEvents([])
+    }
+  }
+
   return (
     <div className="space-y-4">
       {models.length > 0 && (
@@ -162,7 +245,11 @@ export function InvokePanel({
           <label className="block text-xs text-slate-600 mb-1">模型</label>
           <select
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => {
+              const selected = e.target.value
+              setModel(selected)
+              setBody(prev => updateJsonBodyField(prev, 'model', selected))
+            }}
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white"
           >
             {models.map((m) => (
@@ -251,6 +338,18 @@ export function InvokePanel({
         />
       </div>
 
+      {/* Validation error display */}
+      {!validationResult.valid && (
+        <div className="rounded p-3 text-xs bg-red-50 border border-red-200 text-red-800">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>{issue.message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* RiskGate 检查结果 */}
       {riskCheckResult && (
         <div className={`rounded p-3 text-xs ${
@@ -259,10 +358,10 @@ export function InvokePanel({
             : 'bg-red-50 border border-red-200 text-red-800'
         }`}>
           <div className="font-semibold mb-1">
-            RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
+            风险检查：{riskCheckResult.allowed ? '✅ 通过' : '❌ 未通过'}
           </div>
           {riskCheckResult.allowed
-            ? <div className="text-emerald-700">当前请求已满足执行前确认</div>
+            ? <div className="text-emerald-700">当前请求已满足风险/额度/素材确认要求</div>
             : <div className="text-red-700">当前请求会被后端阻断</div>
           }
           {riskCheckResult.blocked_reasons.length > 0 && (
@@ -325,12 +424,49 @@ export function InvokePanel({
         {!allConfirmed && (
           <span className="text-xs text-rose-600">请先完成执行前确认</span>
         )}
+        {allConfirmed && !validationResult.valid && (
+          <span className="text-xs text-rose-600">参数检查未通过，暂不能执行真实调用</span>
+        )}
         {allConfirmed && requiresExistingTask && !hasTaskIdInPayload && (
           <span className="text-xs text-blue-600">请填写 task_id 或 file_id</span>
         )}
       </div>
 
       {err && <div className="text-sm text-red-600 whitespace-pre-wrap">{err}</div>}
+      {traceId && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs">
+          <div>trace_id：<span className="font-mono">{traceId}</span></div>
+          {!showTrace && (
+            <button onClick={() => loadTrace(traceId)} className="mt-1 text-sky-600 hover:underline">
+              查看链路诊断
+            </button>
+          )}
+          {showTrace && traceEvents.length > 0 && (
+            <div className="mt-1">
+              <div className="text-slate-500 mb-1">链路事件：</div>
+              {traceEvents.map((e: Record<string, unknown>, i: number) => (
+                <div key={i} className="font-mono text-[10px] text-slate-600">
+                  {String(e.event)} {e.status !== 'ok' ? `❌ ${e.status}` : '✅'} {e.message ? String(e.message) : ''}
+                </div>
+              ))}
+            </div>
+          )}
+          {showTrace && traceEvents.length === 0 && (
+            <div className="mt-1 text-slate-400">暂无链路事件</div>
+          )}
+        </div>
+      )}
+      {lastHistoryId && (
+        <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+          历史已写入：<span className="font-mono">{lastHistoryId}</span>
+          <span className="ml-2 text-slate-500">capability_id: {lastInvokeCapabilityId}</span>
+        </div>
+      )}
+      {!lastHistoryId && result !== null && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+          未收到 history_id，请检查后端是否为最新版本或历史写入是否失败。
+        </div>
+      )}
       {result !== null && (
         <>
           <AudioPreview data={result} />

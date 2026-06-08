@@ -23,11 +23,13 @@ jobs:
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml
+          pip install -e backend
 
       - name: Run guard scripts
         run: |
           python scripts/check_github_actions_ci_yaml.py
+          python scripts/check_history_trace_contract.py
+          python scripts/check_history_chain_observability.py
           python scripts/check_official_docs_full_drift.py
           python scripts/check_capability_source_matrix_coverage.py
           python scripts/check_model_quota_and_protocol_ui_consistency.py
@@ -42,6 +44,16 @@ jobs:
           python scripts/check_productized_test_console.py
           python scripts/check_overview_navigation_productization.py
           python scripts/check_productized_workbench_docs.py
+          python scripts/check_frontend_api_proxy.py
+          python scripts/check_demo_payload_coverage.py
+          python scripts/check_history_write_read.py
+          python scripts/check_invoke_history_integration.py
+          python scripts/check_payload_validation_and_model_sync.py
+          python scripts/check_history_observability.py
+          python scripts/check_runtime_smoke.py
+          python scripts/check_interaction_regression.py
+          python scripts/check_special_panels_history.py
+          python scripts/check_history_result_summary.py
 
       - name: Compile Python
         run: |

@@ -57,7 +57,7 @@ export default function CapabilityScenariosPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">场景推荐</h1>
         <p className="text-sm text-slate-600 mt-1">
-          从你的目标出发，找到推荐的能力链路和测试入口。
+          从你的目标出发，找到推荐的能力链路和测试入口。场景推荐不会自动执行所有能力；它会帮你找到最合适的能力入口和流程说明。
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export default function CapabilityScenariosPage() {
                     return runnerSupported ? (
                       <Link
                         key={cap}
-                        to={`/capability-runner?capability=${cap}`}
+                        to={`/capability-runner?capability=${cap}&from_scenario=${s.id}`}
                         className="inline-flex items-center gap-1 text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-100"
                       >
                         {cap}

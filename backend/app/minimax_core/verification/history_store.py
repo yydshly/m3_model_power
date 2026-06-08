@@ -6,10 +6,16 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    from .diagnostics_store import append_trace_event
+except ImportError:
+    append_trace_event = None  # type: ignore
 
 # ── Constants ─────────────────────────────────────────────────────────
 
@@ -290,6 +296,129 @@ def _safe_str(value: Any, max_len: int) -> str:
     return s[:max_len] + ("…" if len(s) > max_len else "")
 
 
+def _extract_text_preview(value: Any) -> str | None:
+    """Extract text preview from common LLM response shapes."""
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        s = value.strip()
+        return _safe_str(s, _TEXT_PREVIEW_MAX) if s else None
+
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value[:10]:
+            if isinstance(item, dict) and item.get("type") == "thinking":
+                continue
+            text = _extract_text_preview(item)
+            if text:
+                parts.append(text)
+            if len("".join(parts)) >= _TEXT_PREVIEW_MAX:
+                break
+        joined = "\n".join(parts).strip()
+        return _safe_str(joined, _TEXT_PREVIEW_MAX) if joined else None
+
+    if not isinstance(value, dict):
+        return None
+
+    if value.get("type") == "thinking":
+        return None
+
+    # Direct common fields
+    for key in ("text", "content", "answer", "message", "lyrics"):
+        if key in value:
+            text = _extract_text_preview(value.get(key))
+            if text:
+                return text
+
+    # Anthropic: content: [{type:"text", text:"..."}]
+    content = value.get("content")
+    if isinstance(content, list):
+        text = _extract_text_preview(content)
+        if text:
+            return text
+
+    # OpenAI: choices[].message.content / choices[].delta.content
+    choices = value.get("choices")
+    if isinstance(choices, list):
+        parts: list[str] = []
+        for ch in choices[:5]:
+            if not isinstance(ch, dict):
+                continue
+            for holder in ("message", "delta"):
+                h = ch.get(holder)
+                if isinstance(h, dict):
+                    t = _extract_text_preview(h.get("content"))
+                    if t:
+                        parts.append(t)
+        joined = "\n".join(parts).strip()
+        if joined:
+            return _safe_str(joined, _TEXT_PREVIEW_MAX)
+
+    # Responses API: output[].content[].text
+    output = value.get("output")
+    if isinstance(output, list):
+        text = _extract_text_preview(output)
+        if text:
+            return text
+
+    # Wrapped result.data
+    data = value.get("data")
+    if isinstance(data, (dict, list, str)):
+        text = _extract_text_preview(data)
+        if text:
+            return text
+
+    # Nested result field (e.g. data.result.text)
+    nested_result = value.get("result")
+    if isinstance(nested_result, (dict, list, str)):
+        text = _extract_text_preview(nested_result)
+        if text:
+            return text
+
+    return None
+
+
+def _extract_usage(value: Any) -> dict | None:
+    """Extract token usage from common response shapes."""
+    if not isinstance(value, dict):
+        return None
+
+    candidates: list[dict] = []
+
+    usage = value.get("usage")
+    if isinstance(usage, dict):
+        candidates.append(usage)
+
+    data = value.get("data")
+    if isinstance(data, dict) and isinstance(data.get("usage"), dict):
+        candidates.append(data["usage"])
+
+    for u in candidates:
+        input_tokens = (
+            u.get("input_tokens")
+            or u.get("prompt_tokens")
+            or u.get("input_token_count")
+        )
+        output_tokens = (
+            u.get("output_tokens")
+            or u.get("completion_tokens")
+            or u.get("output_token_count")
+        )
+        total_tokens = (
+            u.get("total_tokens")
+            or ((input_tokens or 0) + (output_tokens or 0) if input_tokens or output_tokens else None)
+        )
+
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+        }
+
+    return None
+
+
 def summarize_result(result: Any) -> dict:
     """Extract a safe, compact summary from an invoke/risk-check result.
 
@@ -305,10 +434,10 @@ def summarize_result(result: Any) -> dict:
     payloads are redacted / truncated. Never writes raw values of sensitive fields.
     """
     if result is None:
-        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": []}
+        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": [], "usage": None}
 
     if not isinstance(result, dict):
-        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": []}
+        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": [], "usage": None}
 
     out: dict[str, Any] = {
         "ok": result.get("ok", result.get("allowed")),
@@ -319,6 +448,7 @@ def summarize_result(result: Any) -> dict:
         "assets": [],
         "text_preview": None,
         "raw_keys": [],
+        "usage": None,
     }
 
     # Error / message extraction
@@ -344,20 +474,17 @@ def summarize_result(result: Any) -> dict:
         else:
             out["output_type"] = "unknown"
 
-    # Text preview: look for common text fields
-    for field in ("lyrics", "text", "content", "answer", "message"):
-        if field in result and isinstance(result[field], str) and result[field].strip():
-            out["text_preview"] = _safe_str(result[field], _TEXT_PREVIEW_MAX)
-            if out["output_type"] == "unknown":
-                out["output_type"] = "text"
-            break
-        # Also check nested data.*
-        d = result.get("data")
-        if isinstance(d, dict) and field in d and isinstance(d[field], str) and d[field].strip():
-            out["text_preview"] = _safe_str(d[field], _TEXT_PREVIEW_MAX)
-            if out["output_type"] == "unknown":
-                out["output_type"] = "text"
-            break
+    # Text preview: use the deep extractor
+    text_preview = _extract_text_preview(result)
+    if text_preview:
+        out["text_preview"] = text_preview
+        if out["output_type"] == "unknown":
+            out["output_type"] = "text"
+
+    # Usage extraction
+    usage = _extract_usage(result)
+    if usage:
+        out["usage"] = usage
 
     return out
 
@@ -482,27 +609,75 @@ def append_history(
     confirmations: dict | None,
     result: dict,
     duration_ms: int | None = None,
-) -> None:
-    """追加一条历史记录到 JSONL 文件。写失败不抛异常。"""
+    trace_id: str | None = None,
+) -> str | None:
+    """追加一条历史记录到 JSONL 文件。写失败不抛异常。
+
+    Args:
+        trace_id: optional trace ID for observability chain tracking.
+
+    Returns:
+        The record ID on success, None on failure.
+    """
+    if append_trace_event and trace_id:
+        append_trace_event(
+            trace_id,
+            "history_append_attempt",
+            capability_id=capability_id,
+            action=action,
+            data={"history_path": "runtime/test_console/history.jsonl"},
+        )
+
     try:
+        record_id = str(uuid.uuid4())
         record = {
-            "id": str(uuid.uuid4()),
+            "id": record_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "action": action,
             "capability_id": capability_id,
             "duration_ms": duration_ms,
+            "trace_id": trace_id,
             "payload_summary": summarize_payload(payload),
             "confirmations": confirmations or {},
             "result": summarize_result_record(result),
             "result_summary": summarize_result(result),
         }
         path = _ensure_dir().joinpath("history.jsonl")
-        path.append_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         compact_history_if_needed()
+
+        if append_trace_event and trace_id:
+            append_trace_event(
+                trace_id,
+                "history_append_success",
+                capability_id=capability_id,
+                action=action,
+                data={
+                    "history_id": record_id,
+                    "history_path": "runtime/test_console/history.jsonl",
+                },
+            )
+
+        return record_id
     except Exception as e:
         # 写失败不影响主流程，吞掉
         import sys
+        import traceback
         print(f"[history] append failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+
+        if append_trace_event and trace_id:
+            append_trace_event(
+                trace_id,
+                "history_append_failed",
+                capability_id=capability_id,
+                action=action,
+                status="error",
+                message=str(e),
+            )
+
+        return None
 
 
 def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None = None) -> list[dict]:
@@ -545,7 +720,11 @@ def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None 
 
 
 def _ensure_dir() -> Path:
-    d = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "test_console"
+    override = os.environ.get("MINIMAX_HISTORY_DIR")
+    if override:
+        d = Path(override)
+    else:
+        d = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "test_console"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -555,14 +734,17 @@ def get_history_status() -> dict:
 
     Returns:
         dict with history_path (relative), exists, line_count, valid_record_count,
-        size_bytes, last_modified (ISO string or null).
+        size_bytes, last_modified (ISO string or null), history_dir_exists, history_file_name.
     """
     # Use a logical relative path, not absolute filesystem path
     history_rel_path = "runtime/test_console/history.jsonl"
-    path = _ensure_dir().joinpath("history.jsonl")
+    parent_dir = _ensure_dir()
+    path = parent_dir.joinpath("history.jsonl")
 
     result: dict = {
         "history_path": history_rel_path,
+        "history_dir_exists": parent_dir.exists(),
+        "history_file_name": "history.jsonl",
         "exists": False,
         "line_count": 0,
         "valid_record_count": 0,

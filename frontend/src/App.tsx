@@ -1,3 +1,4 @@
+import React from 'react'
 import { NavLink, Route, Routes } from 'react-router-dom'
 import CapabilityPage from './pages/Capability'
 import CapabilityProfilesPage from './pages/CapabilityProfiles'
@@ -10,6 +11,50 @@ import Overview from './pages/Overview'
 import TestConsole from './pages/TestConsole'
 import { RegistryProvider, useRegistry } from './store'
 import { WORKBENCH_NAV, buildCategoryNavItems, type NavGroup } from './navigation/workbenchNav'
+
+class PageErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[PageErrorBoundary]', error, info)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div className="font-semibold mb-2">页面渲染失败</div>
+            <div className="text-xs mb-3">
+              当前页面发生前端运行时错误。请打开浏览器 Console 查看详细堆栈。
+            </div>
+            <pre className="text-[10px] whitespace-pre-wrap break-all bg-white border border-red-100 rounded p-2 max-h-60 overflow-auto">
+              {this.state.error.message}
+            </pre>
+            <button
+              className="mt-3 px-3 py-1 rounded bg-white border border-red-200 text-xs hover:bg-red-100"
+              onClick={() => this.setState({ error: null })}
+            >
+              重试渲染
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 export default function App() {
   return (
@@ -63,11 +108,12 @@ function Shell() {
             </div>
           )}
           <button onClick={reload} className="mt-2 text-sky-600 hover:underline">
-            重新加载
+            重新加载配置
           </button>
         </div>
       </aside>
       <main className="flex-1 overflow-auto">
+        <PageErrorBoundary>
         <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/category/:id" element={<CategoryPage />} />
@@ -79,6 +125,7 @@ function Shell() {
           <Route path="/capability-workflows" element={<CapabilityWorkflowsPage />} />
           <Route path="/capability-runner" element={<CapabilityRunnerPage />} />
         </Routes>
+        </PageErrorBoundary>
       </main>
     </div>
   )

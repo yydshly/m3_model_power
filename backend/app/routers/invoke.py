@@ -11,11 +11,12 @@ from __future__ import annotations
 import time
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..minimax.client import MiniMaxError
 from ..minimax_core.guards.risk_gate import evaluate_capability_risk
+from ..minimax_core.verification.diagnostics_store import append_trace_event
 from ..registry import HANDLERS, get_registry
 from ..minimax_core.registry.loader import get_capability_registry
 from ..minimax_core.verification.history_store import append_history
@@ -28,6 +29,33 @@ class InvokeRequest(BaseModel):
     confirmations: dict | None = None
 
 
+def _extract_base_resp_error(result: object) -> dict | None:
+    """从 MiniMax handler 返回值中提取 base_resp 业务错误。
+
+    MiniMax API 在业务层面失败时会返回：
+      {"base_resp": {"status_code": 2013, "status_msg": "invalid params, empty field"}}
+
+    status_code == 0 表示成功，非 0 都是业务错误。
+    """
+    if not isinstance(result, dict):
+        return None
+    base_resp = result.get("base_resp")
+    if not isinstance(base_resp, dict):
+        return None
+    status_code = base_resp.get("status_code")
+    try:
+        code = int(status_code)
+    except (TypeError, ValueError):
+        return None
+    if code == 0:
+        return None
+    return {
+        "error": "minimax_business_error",
+        "status": code,
+        "message": str(base_resp.get("status_msg") or "MiniMax business error"),
+    }
+
+
 def _append_invoke_history(
     action: str,
     cap_id: str,
@@ -35,20 +63,27 @@ def _append_invoke_history(
     confirmations: dict,
     result: dict,
     t0: float,
-) -> None:
+    trace_id: str | None = None,
+) -> str | None:
+    """追加历史记录，返回 record ID（供前端调试观测）。"""
     duration_ms = int((time.perf_counter() - t0) * 1000)
-    append_history(
+    return append_history(
         action=action,
         capability_id=cap_id,
         payload=payload,
         confirmations=confirmations,
         result=result,
         duration_ms=duration_ms,
+        trace_id=trace_id,
     )
 
 
 @router.post("/{cap_id}")
-async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse:
+async def invoke(cap_id: str, request: Request, body: InvokeRequest | None = None) -> JSONResponse:
+    trace_id = getattr(request.state, "trace_id", None)
+
+    append_trace_event(trace_id, "invoke_route_entered", capability_id=cap_id, action="invoke")
+
     payload = body.payload if body else None
     confirmations = body.confirmations if body else None
     payload = payload or {}
@@ -88,27 +123,55 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
                 "required_confirmations": decision.required_confirmations,
                 "warnings": decision.warnings,
             }
-            _append_invoke_history(
+            history_id = _append_invoke_history(
                 "invoke", cap_id, payload, confirmations,
                 {"ok": False, "allowed": False, **content}, t0,
+                trace_id=trace_id,
             )
+            if history_id:
+                content["history_id"] = history_id
+            content["trace_id"] = trace_id
             return JSONResponse(status_code=403, content=content)
 
     try:
         result = await handler(payload)
     except MiniMaxError as e:
         content = {"error": "minimax_error", "status": e.status, "message": e.message}
-        _append_invoke_history(
+        history_id = _append_invoke_history(
             "invoke", cap_id, payload, confirmations,
             {"ok": False, "error": "minimax_error", "status": e.status, "message": e.message}, t0,
+            trace_id=trace_id,
         )
+        if history_id:
+            content["history_id"] = history_id
+        content["trace_id"] = trace_id
         return JSONResponse(
             status_code=502 if e.status >= 500 else e.status,
             content=content,
         )
-    content = {"ok": True, "data": result}
-    _append_invoke_history(
+
+    # 检查 MiniMax 业务层错误（如 base_resp.status_code != 0）
+    business_error = _extract_base_resp_error(result)
+    if business_error:
+        history_id = _append_invoke_history(
+            "invoke", cap_id, payload, confirmations,
+            {"ok": False, **business_error, "data": result}, t0,
+            trace_id=trace_id,
+        )
+        content = {**business_error, "data": result}
+        if history_id:
+            content["history_id"] = history_id
+        content["trace_id"] = trace_id
+        return JSONResponse(status_code=400, content=content)
+
+    # 真正成功
+    history_id = _append_invoke_history(
         "invoke", cap_id, payload, confirmations,
         {"ok": True, "data": result}, t0,
+        trace_id=trace_id,
     )
+    content = {"ok": True, "data": result}
+    if history_id:
+        content["history_id"] = history_id
+    content["trace_id"] = trace_id
     return JSONResponse(content=content)

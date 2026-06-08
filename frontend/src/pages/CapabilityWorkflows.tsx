@@ -52,6 +52,7 @@ function WorkflowCard({ workflow }: { workflow: CapabilityWorkflow }) {
           </div>
         </div>
         <p className="text-sm text-slate-600 mt-3">{workflow.summary}</p>
+        <p className="text-xs text-slate-400 mt-1">这是能力流程入口页。你可以按步骤进入对应能力体验或高级测试；当前版本不会自动连续执行整个流程。</p>
       </div>
 
       {/* Steps */}
@@ -269,7 +270,7 @@ export default function CapabilityWorkflowsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-900">流程体验</h1>
         <p className="text-sm text-slate-600 mt-1">
-          按步骤执行能力调用，体验完整的能力链路。每个步骤都可以跳转到高级测试控制台。
+          按步骤进入能力体验或高级测试。当前版本不会自动连续执行整个流程，每个步骤都需要你手动触发。
         </p>
       </div>
 
@@ -302,7 +303,7 @@ export default function CapabilityWorkflowsPage() {
                   </Link>
                   {isRunnerSupported(step.capability_id!) ? (
                     <Link
-                      to={`/capability-runner?capability=${step.capability_id!}`}
+                      to={`/capability-runner?capability=${step.capability_id!}&from_workflow=${wf.id}`}
                       className="text-sky-600 hover:underline ml-1"
                     >
                       体验

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { getModelsFor, riskCheck, type RiskCheckResult, type Model } from '../api'
+import { getModelsFor, riskCheck, getCapabilityHistory, getTestConsoleHistory, type RiskCheckResult, type Model, type TestConsoleHistoryItem } from '../api'
+import { buildDemoPayload } from '../domain/demoPayload'
 import { AsyncVideoPanel } from '../components/AsyncVideoPanel'
 import { ChatPanel } from '../components/ChatPanel'
 import { CostBadge, CostNotice } from '../components/CostBadge'
@@ -11,6 +12,8 @@ import { TtsWsPanel } from '../components/TtsWsPanel'
 import { UploadPanel } from '../components/UploadPanel'
 import { useRegistry } from '../store'
 import { getRequiredConfirmations, CONFIRM_LABELS } from '../domain/confirmations'
+import { getDemoReadiness } from '../domain/demoPayload'
+import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 
 type Mode = 'invoke' | 'stream' | 'upload'
 
@@ -23,6 +26,56 @@ export default function CapabilityPage() {
   const [riskCheckResult, setRiskCheckResult] = useState<RiskCheckResult | null>(null)
   const [riskCheckLoading, setRiskCheckLoading] = useState(false)
   const [examplePayload, setExamplePayload] = useState<Record<string, unknown>>({})
+  const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyFallbackUsed, setHistoryFallbackUsed] = useState(false)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [globalHistoryCount, setGlobalHistoryCount] = useState<number | null>(null)
+  const [lastGlobalCapabilityIds, setLastGlobalCapabilityIds] = useState<string[]>([])
+
+  const refreshCapabilityHistory = (options?: { retry?: boolean }) => {
+    if (!id) return
+    setHistoryFallbackUsed(false)
+
+    const doFetch = () => {
+      getCapabilityHistory(id, 50)
+        .then(r => {
+          setHistory(r.items)
+          setHistoryErr(null)
+          // Also fetch global diagnostics when history is empty
+          if (r.items.length === 0) {
+            return getTestConsoleHistory(20)
+              .then(gr => {
+                setGlobalHistoryCount(gr.items.length)
+                setLastGlobalCapabilityIds(Array.from(new Set(gr.items.map(i => i.capability_id))).slice(0, 8))
+              })
+              .catch(() => {})
+          } else {
+            setGlobalHistoryCount(null)
+            setLastGlobalCapabilityIds([])
+          }
+        })
+        .catch((e: any) => {
+          getTestConsoleHistory(200)
+            .then(r => {
+              const filtered = r.items.filter(item => item.capability_id === id)
+              setHistory(filtered)
+              setHistoryErr(null)
+              setHistoryFallbackUsed(true)
+              setGlobalHistoryCount(r.items.length)
+              setLastGlobalCapabilityIds(Array.from(new Set(r.items.map(i => i.capability_id))).slice(0, 8))
+            })
+            .catch(() => setHistoryErr(e instanceof Error ? e.message : String(e)))
+        })
+    }
+
+    doFetch()
+    if (options?.retry) {
+      window.setTimeout(doFetch, 300)
+    }
+  }
+
+  useEffect(() => { refreshCapabilityHistory() }, [id])
 
   useEffect(() => {
     if (id) {
@@ -42,7 +95,7 @@ export default function CapabilityPage() {
     if (cap?.category === 'chat' && cap.streaming) setMode('stream')
     else setMode('invoke')
     if (cap) {
-      setExamplePayload(cap.example ?? {})
+      setExamplePayload(buildDemoPayload(cap))
       // Initialize confirmations state based on required confirmations
       const required = getRequiredConfirmations(cap)
       setConfirmations((prev) => {
@@ -436,8 +489,14 @@ export default function CapabilityPage() {
                     : 'bg-red-50 border border-red-200 text-red-800'
                 }`}>
                   <div className="font-semibold mb-1">
-                    RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
+                    风险检查：{riskCheckResult.allowed ? '✅ 通过' : '❌ 未通过'}
                   </div>
+                  {riskCheckResult.allowed && (
+                    <div className="text-emerald-700">当前请求已满足风险/额度/素材确认要求</div>
+                  )}
+                  {!riskCheckResult.allowed && (
+                    <div className="text-red-700">暂不能执行真实调用</div>
+                  )}
                   <details className="mt-1 border border-red-200 rounded">
                     <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
                       调试信息
@@ -501,20 +560,20 @@ export default function CapabilityPage() {
         </section>
       ) : models.length > 0 ? (
         <section className="mt-6">
-          <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
+          <div className="text-xs text-slate-500 mb-1">当前项目已开放测试模型</div>
           <div className="text-[10px] text-slate-400 mb-2">
-            按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。
+            这里展示的是本项目 Registry 当前开放/已建模/可测试的模型，不等同于 MiniMax 官方完整模型清单。
             {cap.id === 'chat-anthropic' && (
-              <span className="block mt-1 text-amber-600">Anthropic 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持图片/视频输入；M2.x 系列仅支持文本与工具调用相关内容块。</span>
+              <span className="block mt-1 text-amber-600">Anthropic 兼容接口和 /v1/models 可能返回更多模型；当前页面仅展示本项目筛选后开放测试的模型。注意：仅 MiniMax-M3 支持图片/视频输入；M2.x 系列仅支持文本与工具调用相关内容块。</span>
             )}
             {cap.id === 'chat-openai' && (
-              <span className="block mt-1 text-amber-600">OpenAI 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持多模态输入（图片/视频）。</span>
+              <span className="block mt-1 text-amber-600">OpenAI 兼容接口和 /v1/models 可能返回更多模型；当前页面仅展示本项目筛选后开放测试的模型。注意：仅 MiniMax-M3 支持多模态输入（图片/视频）。</span>
             )}
             {cap.id === 'chat-responses-create' && (
-              <span className="block mt-1 text-amber-600">Responses API 官方文档示例使用 MiniMax-M3；其他模型是否支持以实测为准。</span>
+              <span className="block mt-1 text-amber-600">官方 Responses API 可能支持更多模型；当前页面仅展示本项目筛选后开放测试的模型。</span>
             )}
             {!['chat-anthropic', 'chat-openai', 'chat-responses-create'].includes(cap.id) && (
-              <span>Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。</span>
+              <span>语音/图像/音乐/视频类能力模型以 capability_probe 或验收记录为准。</span>
             )}
             {' '}默认选择优先成本友好模型，不代表官方推荐模型。
           </div>
@@ -579,26 +638,93 @@ export default function CapabilityPage() {
             </div>
           )}
           {effectiveMode === 'invoke' && cap.id === 'tts-ws' && (
-            <TtsWsPanel cap={cap} models={models} />
+            <TtsWsPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />
           )}
           {effectiveMode === 'invoke' && cap.has_handler && cap.async_job && cap.category === 'vision' && (
             <AsyncVideoPanel cap={cap} models={models} />
           )}
-          {effectiveMode === 'invoke' && cap.has_handler && !(cap.async_job && cap.category === 'vision') && cap.id !== 'tts-ws' && (
-            <InvokePanel
+          {effectiveMode === 'invoke' && cap.has_handler && !(cap.async_job && cap.category === 'vision') && cap.id !== 'tts-ws' && (() => {
+            const readiness = getDemoReadiness(cap.id)
+            return (
+              <>
+                {readiness.status !== 'ready' && (
+                  <div className={`mt-4 rounded border p-3 text-xs mb-2 ${
+                    readiness.status === 'guarded' ? 'border-amber-200 bg-amber-50 text-amber-800' :
+                    readiness.status === 'needs_input' ? 'border-blue-200 bg-blue-50 text-blue-800' :
+                    readiness.status === 'needs_asset' ? 'border-purple-200 bg-purple-50 text-purple-800' :
+                    readiness.status === 'needs_existing_id' ? 'border-orange-200 bg-orange-50 text-orange-800' :
+                    readiness.status === 'disabled' ? 'border-slate-200 bg-slate-100 text-slate-600' :
+                    'border-slate-200 bg-slate-50 text-slate-700'
+                  }`}>
+                    <span className="font-medium">测试准备状态：</span>{readiness.message}
+                  </div>
+                )}
+                <InvokePanel
               cap={cap}
               models={models}
-              defaultPayload={cap.example}
+              defaultPayload={buildDemoPayload(cap)}
               confirmations={confirmations}
               riskCheckResult={riskCheckResult}
               setRiskCheckResult={setRiskCheckResult}
-            />
-          )}
-          {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} />}
-          {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} />}
-          {effectiveMode === 'upload' && <UploadPanel cap={cap} />}
+              onDone={() => refreshCapabilityHistory({ retry: true })}
+              />
+              </>
+            )
+          })()}
+          {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />}
+          {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />}
+          {effectiveMode === 'upload' && <UploadPanel cap={cap} onDone={() => refreshCapabilityHistory({ retry: true })} />}
         </>
       )}
+
+      {/* Current capability history */}
+      <section className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+            <p className="text-[10px] text-slate-400">按 capability_id = {id} 过滤</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/test-console${id ? `?capability=${id}` : ''}`}
+              className="px-3 py-1 text-xs text-sky-600 hover:underline"
+            >
+              查看全部历史 →
+            </Link>
+            <button
+              onClick={() => refreshCapabilityHistory()}
+              className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        {historyFallbackUsed && !historyErr && (
+          <p className="text-xs text-amber-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+            当前能力历史接口不可用，已临时从全局最近调用中过滤展示。
+          </p>
+        )}
+
+        {historyErr && (
+          <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+        )}
+
+        {history.length === 0 && !historyErr && globalHistoryCount != null && (
+          <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+            {globalHistoryCount > 0
+              ? `全局最近有 ${globalHistoryCount} 条记录，但没有 capability_id = ${id} 的记录。最近能力：${lastGlobalCapabilityIds.join('、')}`
+              : `全局历史暂无记录，当前能力 ${id} 也无调用记录。`}
+          </div>
+        )}
+
+        <InvocationHistoryPanel
+          items={history}
+          expandedId={expandedHistoryId}
+          onToggleExpand={setExpandedHistoryId}
+          emptyMessage="当前能力暂无调用记录"
+        />
+      </section>
     </div>
   )
 }

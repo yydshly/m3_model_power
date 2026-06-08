@@ -17,11 +17,12 @@
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..minimax.client import MiniMaxError
+from ..minimax_core.verification.diagnostics_store import append_trace_event
 from ..minimax_core.verification.history_store import append_history
 from ..registry import get_registry
 
@@ -73,10 +74,15 @@ def _build_history_payload(
 @router.post("/{cap_id}")
 async def upload(
     cap_id: str,
+    request: Request,
     file: UploadFile = File(...),
     purpose: str | None = Form(default=None),
     confirm_asset_source: bool | None = Form(default=None),
 ) -> Any:
+    trace_id = getattr(request.state, "trace_id", None)
+
+    append_trace_event(trace_id, "upload_route_entered", capability_id=cap_id, action="upload")
+
     reg = get_registry()
     cap = next((c for c in reg.capabilities if c.id == cap_id), None)
     if cap is None:
@@ -128,16 +134,21 @@ async def upload(
         except ValueError:
             msg = r.text
         # Write failed upload to history (summary only, no binary)
-        append_history(
+        history_id = append_history(
             action="upload",
             capability_id=cap_id,
             payload=history_payload,
             confirmations={"confirm_asset_source": confirm_asset_source is True},
             result={"ok": False, "error": "minimax_error", "status": r.status_code, "message": msg},
+            trace_id=trace_id,
         )
+        content: dict[str, Any] = {"error": "minimax_error", "status": r.status_code, "message": msg}
+        if history_id:
+            content["history_id"] = history_id
+        content["trace_id"] = trace_id
         return JSONResponse(
             status_code=502 if r.status_code >= 500 else r.status_code,
-            content={"error": "minimax_error", "status": r.status_code, "message": msg},
+            content=content,
         )
 
     # Success: parse response, write history with result summary (no binary)
@@ -148,15 +159,17 @@ async def upload(
 
     # Write successful upload to history — result_summary is built by summarize_result(),
     # which extracts file_id/filename/etc. from response_data automatically.
-    append_history(
+    history_id = append_history(
         action="upload",
         capability_id=cap_id,
         payload=history_payload,
         confirmations={"confirm_asset_source": confirm_asset_source is True},
         result={"ok": True, "data": response_data},
+        trace_id=trace_id,
     )
 
-    try:
-        return {"ok": True, "data": response_data}
-    except ValueError:
-        return {"ok": True, "data": {"raw": r.text}}
+    content: dict[str, Any] = {"ok": True, "data": response_data}
+    if history_id:
+        content["history_id"] = history_id
+    content["trace_id"] = trace_id
+    return content
