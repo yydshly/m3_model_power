@@ -1,6 +1,6 @@
-# MiniMax 能力聚合工作台
+# MiniMax Token Plan 能力聚合工作台
 
-MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
+MiniMax Token Plan 能力盘点、实测验收与可视化测试工作台。
 
 把 MiniMax 订阅内所有公开 API 统一登记、统一访问。
 能力 / 模型清单由 YAML 配置驱动，前端动态渲染，未实现的能力也会出现在目录里并给出文档链接。
@@ -27,6 +27,11 @@ MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
 | Protected Invoke + RiskGate | ✅ 已完成 |
 | 调用历史 + 脱敏 | ✅ 已完成 |
 | Asset Result Preview | ✅ 已完成 |
+| Overview 工作台首页 | ✅ 已完成（PR #12） |
+| 分组导航 | ✅ 已完成（PR #12） |
+| UsageCostExplainer | ✅ 已完成（PR #11） |
+| Demo Payload 自动填充 | ✅ 已完成（PR #11） |
+| InvocationHistoryPanel | ✅ 已完成（PR #10） |
 
 ## 核心模块
 
@@ -57,7 +62,21 @@ MiniMax TokenPlanPlus 极速版年度会员能力盘点与实测工作台。
 - **调用历史**：查看本次会话所有 RC（Risk Check）和 INV（Invoke）记录
 - **Asset Result Preview**：图片 URL 展示图片预览，音频 URL 展示 audio controls，文件类结果展示文件信息
 
-### 不执行的能力
+### 当前工作台入口
+
+| 页面 | 路由 | 目标用户 |
+|---|---|---|
+| 工作台首页 | `/` | 所有用户 |
+| 能力体验 | `/capability-runner` | 能力探索者 |
+| 高级测试 | `/test-console` | 开发者 |
+| 场景推荐 | `/capability-scenarios` | 业务人员 |
+| 流程体验 | `/capability-workflows` | 探索者 |
+| 能力画像 | `/capability-profiles` | 分析人员 |
+| 模型目录 | `/models-all` | 开发者 |
+
+详细产品说明见 [docs/PRODUCTIZED_WORKBENCH_COMPLETION_REPORT.md](docs/PRODUCTIZED_WORKBENCH_COMPLETION_REPORT.md)。
+
+## 不执行的能力
 
 以下能力默认不执行（需显式确认）：
 
@@ -180,13 +199,15 @@ cd frontend && npm run build && cd ..
 
 ## 后续路线
 
-当前阶段目标已完成。后续优先：
+当前阶段目标已完成。详细路线图与未完成项见 [docs/PRODUCTIZED_WORKBENCH_COMPLETION_REPORT.md](docs/PRODUCTIZED_WORKBENCH_COMPLETION_REPORT.md)。
 
-1. 完善 Test Console 交互体验
-2. 增强 Asset Result Preview（支持更多资产类型）
-3. 增加 history 详情与导出
-4. 将 minimax_core 沉淀为可复用 Python 模块
-5. 支持 Voice Lab / 图片工具 / 音乐工具 / 文件知识入口等产品复用
+近期优先：
+
+1. 真实页面人工验收 checklist
+2. 低成本 image/audio/file 实测
+3. 资产结果展示增强
+4. 调用历史详情页
+5. Run Session 完整恢复（P1）
 
 ---
 
