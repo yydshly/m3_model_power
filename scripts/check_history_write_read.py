@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Verify history write/read roundtrip: append_history → list_history → status counts increase."""
+"""Verify history write/read roundtrip: append_history → list_history → status counts increase.
+
+Uses a temporary directory for history to avoid polluting the real runtime.
+"""
 from __future__ import annotations
 
-import sys
 import os
+import sys
+import tempfile
+
+# Set temp dir BEFORE importing history_store (import caches module)
+tmpdir = tempfile.mkdtemp(prefix="minimax_history_test_")
+os.environ["MINIMAX_HISTORY_DIR"] = tmpdir
 
 # Ensure backend is on path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -18,8 +26,8 @@ def main() -> int:
     before = get_history_status()
     before_count = before["valid_record_count"]
 
-    # Write a smoke record
-    append_history(
+    # Write a smoke record (returns history_id)
+    history_id = append_history(
         action="invoke",
         capability_id="history-smoke-test",
         payload={"hello": "world"},
@@ -28,15 +36,18 @@ def main() -> int:
         duration_ms=1,
     )
 
-    # Read it back
-    items = list_history(limit=10, capability_id="history-smoke-test")
-    if not items:
-        errors.append("history-smoke-test record missing from list_history()")
+    if history_id is None:
+        errors.append("append_history returned None (write failed)")
     else:
-        if items[0]["capability_id"] != "history-smoke-test":
-            errors.append(f"Expected capability_id=history-smoke-test, got {items[0].get('capability_id')}")
-        if items[0]["action"] != "invoke":
-            errors.append(f"Expected action=invoke, got {items[0].get('action')}")
+        # Read it back
+        items = list_history(limit=10, capability_id="history-smoke-test")
+        if not items:
+            errors.append("history-smoke-test record missing from list_history()")
+        else:
+            if items[0]["capability_id"] != "history-smoke-test":
+                errors.append(f"Expected capability_id=history-smoke-test, got {items[0].get('capability_id')}")
+            if items[0]["action"] != "invoke":
+                errors.append(f"Expected action=invoke, got {items[0].get('action')}")
 
     after = get_history_status()
     if after["valid_record_count"] < before_count:
@@ -83,7 +94,8 @@ def main() -> int:
         return 1
     else:
         print("[PASSED] history write/read check passed")
-        print(f"  - write → read roundtrip OK")
+        print(f"  - temp dir: {tmpdir}")
+        print(f"  - write → read roundtrip OK (history_id={history_id})")
         print(f"  - valid_record_count before={before_count}, after={after['valid_record_count']}")
         print(f"  - /api/history/status → 200")
         print(f"  - /api/history/test-console → 200")

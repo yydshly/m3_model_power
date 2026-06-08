@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -482,11 +483,16 @@ def append_history(
     confirmations: dict | None,
     result: dict,
     duration_ms: int | None = None,
-) -> None:
-    """追加一条历史记录到 JSONL 文件。写失败不抛异常。"""
+) -> str | None:
+    """追加一条历史记录到 JSONL 文件。写失败不抛异常。
+
+    Returns:
+        The record ID on success, None on failure.
+    """
     try:
+        record_id = str(uuid.uuid4())
         record = {
-            "id": str(uuid.uuid4()),
+            "id": record_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "action": action,
             "capability_id": capability_id,
@@ -500,11 +506,14 @@ def append_history(
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
         compact_history_if_needed()
+        return record_id
     except Exception as e:
         # 写失败不影响主流程，吞掉
         import sys
         import traceback
         print(f"[history] append failed: {e}", file=sys.stderr)
+        traceback.print_exc()
+        return None
         traceback.print_exc()
 
 
@@ -548,7 +557,11 @@ def list_history(limit: int = _DEFAULT_HISTORY_LIMIT, capability_id: str | None 
 
 
 def _ensure_dir() -> Path:
-    d = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "test_console"
+    override = os.environ.get("MINIMAX_HISTORY_DIR")
+    if override:
+        d = Path(override)
+    else:
+        d = Path(__file__).resolve().parent.parent.parent.parent / "runtime" / "test_console"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
