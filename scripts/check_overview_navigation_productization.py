@@ -142,6 +142,41 @@ def check_nav_has_developer_section(errors, warnings):
         errors.append("[NAV] '开发者' group not found in nav config")
 
 
+def check_no_hardcoded_has_recent_history_false(errors, warnings):
+    base = _base()
+    overview_page = os.path.join(base, "frontend/src/pages/Overview.tsx")
+    if not os.path.exists(overview_page):
+        errors.append("[OVERVIEW] Overview.tsx not found")
+        return
+    with open(overview_page, 'r', encoding='utf-8') as f:
+        content = f.read()
+    if 'hasRecentHistory={false}' in content:
+        errors.append("[OVERVIEW] Overview.tsx contains hardcoded hasRecentHistory={false}")
+
+
+def check_overview_uses_history_api(errors, warnings):
+    base = _base()
+    overview_page = os.path.join(base, "frontend/src/pages/Overview.tsx")
+    if not os.path.exists(overview_page):
+        return
+    with open(overview_page, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Must either call getTestConsoleHistory or receive recentHistory from props
+    if 'getTestConsoleHistory' not in content and 'recentHistory' not in content:
+        errors.append("[OVERVIEW] Overview.tsx must call getTestConsoleHistory or receive recentHistory from props")
+
+
+def check_recent_history_no_href(errors, warnings):
+    base = _base()
+    recent_path = os.path.join(base, "frontend/src/components/overview/OverviewRecentHistory.tsx")
+    if not os.path.exists(recent_path):
+        return
+    with open(recent_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    if 'href="/capability-runner"' in content:
+        errors.append("[OVERVIEW] OverviewRecentHistory.tsx uses href, should use Link to instead")
+
+
 def main():
     errors = []
     warnings = []
@@ -153,6 +188,9 @@ def main():
     check_internal_fields_in_diagnostics(errors, warnings)
     check_ci_runs_overview_guard(errors, warnings)
     check_nav_has_developer_section(errors, warnings)
+    check_no_hardcoded_has_recent_history_false(errors, warnings)
+    check_overview_uses_history_api(errors, warnings)
+    check_recent_history_no_href(errors, warnings)
     if errors:
         print(f"[FAILED] {len(errors)} error(s):")
         for e in errors:

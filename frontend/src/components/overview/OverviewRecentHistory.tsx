@@ -38,7 +38,7 @@ export default function OverviewRecentHistory() {
         <div className="rounded-lg border border-slate-200 bg-white p-4 text-center">
           <p className="text-sm text-slate-500">还没有调用记录</p>
           <p className="text-xs text-slate-400 mt-1">
-            去<a href="/capability-runner" className="text-sky-600 hover:underline mx-1">能力体验</a>
+            去<Link to="/capability-runner" className="text-sky-600 hover:underline mx-1">能力体验</Link>
             执行一次
           </p>
         </div>

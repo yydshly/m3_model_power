@@ -10,7 +10,8 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getHealth, getRunnerTemplates } from '../api'
+import { getHealth, getRunnerTemplates, getTestConsoleHistory } from '../api'
+import type { TestConsoleHistoryItem } from '../api'
 import { useRegistry } from '../store'
 import { computeWorkbenchStats } from '../workbenchStatus'
 import { buildOverviewStats } from '../domain/overviewStats'
@@ -26,6 +27,7 @@ export default function Overview() {
   const [healthErr, setHealthErr] = useState<string | null>(null)
   const [runnerSupported, setRunnerSupported] = useState<Set<string>>(new Set())
   const [runnerTemplatesErr, setRunnerTemplatesErr] = useState<string | null>(null)
+  const [recentHistory, setRecentHistory] = useState<TestConsoleHistoryItem[]>([])
 
   useEffect(() => {
     getHealth()
@@ -37,6 +39,12 @@ export default function Overview() {
     getRunnerTemplates()
       .then((r) => setRunnerSupported(new Set(r.supported)))
       .catch((e) => setRunnerTemplatesErr(String(e)))
+  }, [])
+
+  useEffect(() => {
+    getTestConsoleHistory(5)
+      .then((r) => setRecentHistory(r.items))
+      .catch(() => setRecentHistory([]))
   }, [])
 
   const overviewStats = registry ? buildOverviewStats(registry) : null
@@ -56,7 +64,7 @@ export default function Overview() {
         inScopeTotal={overviewStats?.inScopeTotal ?? 0}
         directlyTestable={overviewStats?.directlyTestable ?? 0}
         cautionRequired={overviewStats?.cautionRequired ?? 0}
-        hasRecentHistory={false}
+        hasRecentHistory={recentHistory.length > 0}
       />
 
       {/* "What do I want to do?" action cards */}
