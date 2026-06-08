@@ -351,6 +351,28 @@ def main() -> None:
         print("FAIL: ws.py does not guard against empty history writes")
         errors += 1
 
+    # ── 32. TtsWsPanel must read voice_id from searchParams ─────────────
+    if re.search(r"searchParams\s*\.\s*get\s*\(\s*['\"]voice_id['\"]", tws_content):
+        pass_check("TtsWsPanel reads voice_id from searchParams")
+    else:
+        print("FAIL: TtsWsPanel does not read voice_id from searchParams")
+        errors += 1
+
+    # ── 33. TtsWsPanel must read text from searchParams ─────────────────
+    if re.search(r"searchParams\s*\.\s*get\s*\(\s*['\"]text['\"]", tws_content):
+        pass_check("TtsWsPanel reads text from searchParams")
+    else:
+        print("FAIL: TtsWsPanel does not read text from searchParams")
+        errors += 1
+
+    # ── 34. TtsWsPanel must still validate empty text ───────────────────
+    if re.search(r"!text\.trim\s*\(\s*\)\s*\)", tws_content) or \
+       re.search(r"text\.trim\s*\(\s*\)\s*===\s*['\"]['\"]", tws_content):
+        pass_check("TtsWsPanel still validates empty text")
+    else:
+        print("FAIL: TtsWsPanel does not validate empty text")
+        errors += 1
+
     # ── Summary ──────────────────────────────────────────────────────────
     if errors == 0:
         print(f"\nAll {errors} checks passed.")

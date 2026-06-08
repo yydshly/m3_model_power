@@ -22,7 +22,7 @@ export function TtsWsPanel({
   const [searchParams] = useSearchParams()
   const [model, setModel] = useState(models[0]?.id ?? 'speech-02-turbo')
   const [voiceId, setVoiceId] = useState(searchParams.get('voice_id') || '')
-  const [text, setText] = useState('')
+  const [text, setText] = useState(searchParams.get('text') || '')
   const [log, setLog] = useState<string[]>([])
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
