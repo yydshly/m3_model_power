@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Verify invoke router history integration: base_resp normalization, history_id in responses.
 
-Uses a temporary directory for history to avoid polluting the real runtime.
+Uses monkeypatched handlers to avoid real MiniMax upstream calls in CI.
 """
 from __future__ import annotations
 
@@ -77,40 +77,99 @@ def main() -> int:
     except ImportError as e:
         errors.append(f"[STORE] Cannot import history_store: {e}")
 
-    # ── 3. Test FastAPI invoke endpoint returns history_id ───────────────────────
+    # ── 3. Test FastAPI invoke endpoint with monkeypatched handlers ───────────────
     try:
         from fastapi.testclient import TestClient
         from app.main import app
+        from app.registry import handlers as handlers_module
 
         client = TestClient(app)
 
-        # Invoke with a capability that always succeeds (chat-openai)
-        # We just check that history_id appears in response (may be None if write fails)
-        r = client.post(
-            "/api/invoke/chat-openai",
-            json={"payload": {"model": "MiniMax-M2.7-highspeed", "messages": [{"role": "user", "content": "hi"}]}},
-        )
-        body = r.json()
-        # We don't assert ok:true here (MiniMax key may be missing), just check history_id field exists
-        if "history_id" not in body:
-            errors.append("/api/invoke/chat-openai response missing history_id field")
+        # Save original handlers
+        original_chat_handler = handlers_module.HANDLERS.get("chat-openai")
+        original_tts_handler = handlers_module.HANDLERS.get("tts-sync")
 
-        # Invoke with a capability that returns base_resp error (tts-sync without voice_id)
-        # Should return 400 with minimax_business_error
-        r2 = client.post(
-            "/api/invoke/tts-sync",
-            json={"payload": {"model": "speech-02-turbo", "text": "hello", "voice_setting": {"voice_id": "", "speed": 1}}},
-        )
-        body2 = r2.json()
-        # If history writing works, history_id should be present
-        if "history_id" not in body2:
-            errors.append("/api/invoke/tts-sync response missing history_id field")
-        # The base_resp error should be normalized
-        if "error" in body2 and body2["error"] != "minimax_business_error":
-            errors.append(f"tts-sync error should be minimax_business_error, got {body2.get('error')}")
+        # Monkeypatched handlers
+        async def fake_chat_success(payload):
+            return {
+                "choices": [
+                    {"message": {"role": "assistant", "content": "hello from fake handler"}}
+                ],
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 4,
+                    "total_tokens": 7,
+                },
+            }
+
+        async def fake_tts_business_error(payload):
+            return {
+                "base_resp": {
+                    "status_code": 2013,
+                    "status_msg": "invalid params, empty field",
+                }
+            }
+
+        try:
+            # Apply monkeypatches
+            handlers_module.HANDLERS["chat-openai"] = fake_chat_success
+            handlers_module.HANDLERS["tts-sync"] = fake_tts_business_error
+
+            # Test: chat-openai success → history_id returned
+            r = client.post(
+                "/api/invoke/chat-openai",
+                json={
+                    "payload": {
+                        "model": "MiniMax-M2.7-highspeed",
+                        "messages": [{"role": "user", "content": "hi"}],
+                    }
+                },
+                headers={"X-MMW-Trace-ID": "test_invoke_success"},
+            )
+            body = r.json()
+            if r.status_code != 200:
+                errors.append(f"/api/invoke/chat-openai returned {r.status_code}: {body}")
+            if "history_id" not in body:
+                errors.append("/api/invoke/chat-openai response missing history_id field")
+            if body.get("ok") is not True:
+                errors.append(f"/api/invoke/chat-openai expected ok=true, got {body}")
+
+            # Test: tts-sync base_resp business error → 400 + minimax_business_error
+            r2 = client.post(
+                "/api/invoke/tts-sync",
+                json={
+                    "payload": {
+                        "model": "speech-02-turbo",
+                        "text": "hello",
+                        "voice_setting": {"voice_id": "fake_voice_id", "speed": 1},
+                    }
+                },
+                headers={"X-MMW-Trace-ID": "test_invoke_business_error"},
+            )
+            body2 = r2.json()
+            if r2.status_code != 400:
+                errors.append(f"/api/invoke/tts-sync business error returned {r2.status_code}, expected 400: {body2}")
+            if "history_id" not in body2:
+                errors.append("/api/invoke/tts-sync response missing history_id field")
+            if body2.get("error") != "minimax_business_error":
+                errors.append(f"tts-sync error should be minimax_business_error, got {body2.get('error')}")
+            if body2.get("status") != 2013:
+                errors.append(f"tts-sync status should be 2013, got {body2.get('status')}")
+
+        finally:
+            # Restore original handlers
+            if original_chat_handler is not None:
+                handlers_module.HANDLERS["chat-openai"] = original_chat_handler
+            else:
+                handlers_module.HANDLERS.pop("chat-openai", None)
+
+            if original_tts_handler is not None:
+                handlers_module.HANDLERS["tts-sync"] = original_tts_handler
+            else:
+                handlers_module.HANDLERS.pop("tts-sync", None)
 
     except ImportError as e:
-        errors.append(f"[TESTCLIENT] fastapi.testclient not installed: {e}")
+        errors.append(f"[TESTCLIENT] Cannot import: {e}")
     except Exception as e:
         errors.append(f"[API] invoke endpoint test failed: {e}")
 
@@ -124,8 +183,8 @@ def main() -> int:
         print(f"  - temp dir: {tmpdir}")
         print(f"  - _extract_base_resp_error normalizes non-zero status_code")
         print(f"  - append_history returns history_id")
-        print(f"  - /api/invoke/chat-openai returns history_id")
-        print(f"  - /api/invoke/tts-sync normalizes base_resp business error")
+        print(f"  - /api/invoke/chat-openai mock returns history_id")
+        print(f"  - /api/invoke/tts-sync mock normalizes base_resp business error")
         return 0
 
 
