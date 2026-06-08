@@ -9,6 +9,7 @@ import ModelsPage from './pages/Models'
 import Overview from './pages/Overview'
 import TestConsole from './pages/TestConsole'
 import { RegistryProvider, useRegistry } from './store'
+import { WORKBENCH_NAV, buildCategoryNavItems, type NavGroup } from './navigation/workbenchNav'
 
 export default function App() {
   return (
@@ -20,36 +21,50 @@ export default function App() {
 
 function Shell() {
   const { registry, error, reload } = useRegistry()
+
+  // Build category nav items from registry
+  const categoryItems = registry
+    ? buildCategoryNavItems(registry.categories, registry.capabilities)
+    : []
+
   return (
     <div className="flex h-full">
       <aside className="w-60 shrink-0 border-r border-slate-200 bg-white flex flex-col">
         <div className="px-4 py-5 border-b border-slate-200">
-          <div className="text-lg font-semibold text-slate-900">MiniMax 工作台</div>
-          <div className="text-xs text-slate-500 mt-1">TokenPlanPlus · 极速版</div>
+          <div className="text-lg font-semibold text-slate-900">MiniMax Token Plan 工作台</div>
+          <div className="text-xs text-slate-500 mt-1">能力验收、风险门禁、真实调用</div>
         </div>
-        <nav className="p-2 space-y-0.5 flex-1 overflow-auto">
-          <NavItem to="/" emoji="🏠" label="总览" />
-          {registry?.categories.map((c) => (
-            <NavItem key={c.id} to={`/category/${c.id}`} emoji={c.emoji} label={c.label}
-              hint={`${registry.capabilities.filter((x) => x.category === c.id && x.status === 'implemented').length}/${registry.capabilities.filter((x) => x.category === c.id).length}`}
-            />
+        <nav className="p-2 space-y-4 flex-1 overflow-auto">
+          {WORKBENCH_NAV.map((group: NavGroup) => (
+            <div key={group.title}>
+              <div className="px-3 py-1 text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                {group.title}
+              </div>
+              <div className="space-y-0.5">
+                {group.title === '能力目录'
+                  ? categoryItems.map((item) => (
+                      <NavItem key={item.to} {...item} />
+                    ))
+                  : group.items.map((item) => (
+                      <NavItem key={item.to} {...item} />
+                    ))}
+              </div>
+            </div>
           ))}
-          <NavItem to="/models-all" emoji="🧬" label="所有模型" />
-          <NavItem to="/capability-profiles" emoji="🧭" label="能力画像" />
-          <NavItem to="/capability-scenarios" emoji="🎯" label="场景推荐" />
-          <NavItem to="/capability-workflows" emoji="🔁" label="流程体验" />
-          <NavItem to="/capability-runner" emoji="⚡" label="能力体验" />
-          <NavItem to="/test-console" emoji="🧪" label="高级测试" />
         </nav>
         <div className="p-3 border-t border-slate-200 text-xs text-slate-500">
           {error ? (
             <div className="text-red-600">注册中心不可达</div>
           ) : (
             <div>
-              {registry ? `${registry.capabilities.length} 能力配置 · ${registry.models.filter(m => m.enabled).length} 启用模型` : '加载中…'}
+              {registry
+                ? `${registry.capabilities.length} 能力配置 · ${registry.models.filter((m) => m.enabled).length} 启用模型`
+                : '加载中…'}
             </div>
           )}
-          <button onClick={reload} className="mt-2 text-sky-600 hover:underline">重新加载</button>
+          <button onClick={reload} className="mt-2 text-sky-600 hover:underline">
+            重新加载
+          </button>
         </div>
       </aside>
       <main className="flex-1 overflow-auto">
@@ -69,7 +84,13 @@ function Shell() {
   )
 }
 
-function NavItem({ to, emoji, label, hint }: { to: string; emoji: string; label: string; hint?: string }) {
+function NavItem({ to, emoji, label, hint, developerOnly }: {
+  to: string
+  emoji: string
+  label: string
+  hint?: string
+  developerOnly?: boolean
+}) {
   return (
     <NavLink
       to={to}
@@ -83,6 +104,11 @@ function NavItem({ to, emoji, label, hint }: { to: string; emoji: string; label:
       <span className="text-base leading-none">{emoji}</span>
       <span>{label}</span>
       {hint && <span className="ml-auto text-[10px] opacity-70">{hint}</span>}
+      {developerOnly && (
+        <span className="ml-auto text-[9px] bg-slate-200 text-slate-500 px-1 rounded">
+          dev
+        </span>
+      )}
     </NavLink>
   )
 }

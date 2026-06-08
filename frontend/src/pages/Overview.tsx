@@ -1,26 +1,36 @@
+/**
+ * Overview.tsx — MiniMax Token Plan Workbench homepage.
+ *
+ * First screen answers:
+ * 1. How far has Token Plan verification progressed?
+ * 2. What can I do right now?
+ * 3. Which capabilities are safe to test?
+ * 4. Which capabilities need caution?
+ * 5. How do I navigate to capability runner / advanced testing / workflows?
+ */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getHealth, getRunnerTemplates, type HealthResp } from '../api'
+import { getHealth, getRunnerTemplates } from '../api'
 import { useRegistry } from '../store'
 import { computeWorkbenchStats } from '../workbenchStatus'
-
-const PLAN_FEATURES = [
-  '能力与模型配置由 backend/config/*.yaml 驱动',
-  'Chat 模型 live 状态来自 /v1/models 探测',
-  '非 Chat 能力以 capability_probe / Verification Index 为准',
-  '高成本、破坏性、素材型能力默认受 RiskGate 阻断',
-  'Token Plan 完成率以累计 Verification Index 为准',
-]
+import { buildOverviewStats } from '../domain/overviewStats'
+import OverviewHero from '../components/overview/OverviewHero'
+import OverviewActionCards from '../components/overview/OverviewActionCards'
+import OverviewRecentHistory from '../components/overview/OverviewRecentHistory'
+import OverviewRiskGuide from '../components/overview/OverviewRiskGuide'
+import OverviewDiagnostics from '../components/overview/OverviewDiagnostics'
 
 export default function Overview() {
   const { registry, error: regErr } = useRegistry()
-  const [h, setH] = useState<HealthResp | null>(null)
+  const [h, setH] = useState<import('../api').HealthResp | null>(null)
   const [healthErr, setHealthErr] = useState<string | null>(null)
   const [runnerSupported, setRunnerSupported] = useState<Set<string>>(new Set())
   const [runnerTemplatesErr, setRunnerTemplatesErr] = useState<string | null>(null)
 
   useEffect(() => {
-    getHealth().then(setH).catch((e) => setHealthErr(String(e)))
+    getHealth()
+      .then(setH)
+      .catch((e) => setHealthErr(String(e)))
   }, [])
 
   useEffect(() => {
@@ -29,291 +39,50 @@ export default function Overview() {
       .catch((e) => setRunnerTemplatesErr(String(e)))
   }, [])
 
-  const stats = registry && {
-    total: registry.capabilities.length,
-    implemented: registry.capabilities.filter((c) => c.status === 'implemented').length,
-    planned: registry.capabilities.filter((c) => c.status === 'planned').length,
-    unsupported: registry.capabilities.filter((c) => c.status === 'unsupported').length,
-    models: registry.models.filter((m) => m.enabled).length,
-    quota: registry.models.filter((m) => m.enabled && m.quota_eligible).length,
-    // 4-layer model status
-    officialCurrent: registry.models.filter((m) => m.official_current).length,
-    liveAvailable: registry.models.filter((m) => m.live_available === true).length,
-    legacyHidden: registry.models.filter((m) => m.enabled && !m.official_current).length,
-    // full coverage stats
-    liveChatModels: registry.models.filter((m) => m.family === 'chat' && m.live_available === true).length,
-    localConfigured: registry.models.length,
-    capabilityProbePending: registry.models.filter((m) => m.discovery_method === 'capability_probe' && m.discovery_status === 'unknown').length,
-    officialCurrentNonLive: registry.models.filter((m) => m.official_current && m.live_available !== true && m.tier !== 'legacy' && m.tier !== 'deprecated').length,
-    highspeedCount: registry.models.filter((m) => m.tier === 'highspeed').length,
-    // billing category stats
-    normalTokenPlanTest: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'normal_token_plan_test').length,
-    quotaSensitive: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'quota_sensitive').length,
-    paidConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'paid_confirm_required').length,
-    highCostConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'high_cost_confirm_required').length,
-    assetRequiredConfirmRequired: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'asset_required_confirm_required').length,
-    mayChargeExtra: registry.capabilities.filter((c) => c.billing_policy?.may_charge_extra === true).length,
-    requiresExplicitConfirm: registry.capabilities.filter((c) => c.billing_policy?.requires_explicit_confirmation === true).length,
-    // operation risk stats
-    opNormal: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'normal').length,
-    opDestructive: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'destructive').length,
-    opAssetRequired: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'asset_required').length,
-    opExistingTaskOnly: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'existing_task_only').length,
-    opLongRunning: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'long_running').length,
-    opQuotaGuarded: registry.capabilities.filter((c) => c.operation_policy?.operation_risk === 'quota_guarded').length,
-    opRequiresConfirm: registry.capabilities.filter((c) => c.operation_policy?.requires_operation_confirmation === true).length,
-    // confirmation gate stats
-    requiresAnyConfirm: registry.capabilities.filter((c) => {
-      const bp = c.billing_policy
-      const op = c.operation_policy
-      if (bp.may_charge_extra) return true
-      if (bp.billing_category === 'high_cost_confirm_required') return true
-      if (bp.requires_explicit_confirmation) return true
-      if (op.is_destructive) return true
-      if (op.requires_uploaded_asset) return true
-      if (op.is_long_running) return true
-      if (op.requires_existing_task) return true
-      if (c.id === 'tts-async') return true
-      return false
-    }).length,
-    confirmPaid: registry.capabilities.filter((c) => c.billing_policy?.may_charge_extra === true).length,
-    confirmHighCost: registry.capabilities.filter((c) => c.billing_policy?.billing_category === 'high_cost_confirm_required').length,
-    confirmDestructive: registry.capabilities.filter((c) => c.operation_policy?.is_destructive === true).length,
-    confirmAssetSource: registry.capabilities.filter((c) => c.operation_policy?.requires_uploaded_asset === true).length,
-    confirmLongRunning: registry.capabilities.filter((c) => c.operation_policy?.is_long_running === true).length,
-    confirmExistingTask: registry.capabilities.filter((c) => c.operation_policy?.requires_existing_task === true).length,
-    confirmQuota: registry.capabilities.filter((c) => c.id === 'tts-async').length,
-    // scope stats
-    inScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope').length,
-    inScopeTokenPlanCovered: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'in_scope' && (c.billing_policy?.billing_category === 'normal_token_plan_test' || c.billing_policy?.billing_category === 'quota_sensitive')).length,
-    warningOnlyTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'warning_only').length,
-    outOfScopeTotal: registry.capabilities.filter((c) => c.scope_policy?.current_scope === 'out_of_scope').length,
-  }
+  const overviewStats = registry ? buildOverviewStats(registry) : null
+  const workbenchStats =
+    registry && runnerSupported.size > 0
+      ? computeWorkbenchStats(registry, runnerSupported)
+      : null
 
   return (
     <div className="p-8 max-w-6xl">
-      <h1 className="text-2xl font-semibold text-slate-900">MiniMax 能力聚合工作台</h1>
-      <p className="text-slate-600 mt-2 text-sm">
-        TokenPlanPlus 极速版年度会员 · 下次续费 2027-05-29 · 所有能力配置驱动，可在 backend/config/*.yaml 中维护
-      </p>
+      {/* Hero + core status cards + connectivity */}
+      <OverviewHero
+        health={h}
+        healthErr={healthErr}
+        completionPercent={overviewStats?.completionPercent ?? 0}
+        inScopeCovered={overviewStats?.inScopeCovered ?? 0}
+        inScopeTotal={overviewStats?.inScopeTotal ?? 0}
+        directlyTestable={overviewStats?.directlyTestable ?? 0}
+        cautionRequired={overviewStats?.cautionRequired ?? 0}
+        hasRecentHistory={false}
+      />
 
-      <section className="mt-6 grid grid-cols-3 gap-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-5 col-span-2">
-          <div className="text-sm text-slate-500">当前工作台记录</div>
-          <div className="text-lg font-semibold mt-1">MiniMax 能力聚合工作台</div>
-          <p className="text-xs text-slate-500 mt-1">基于 backend/config/*.yaml、官方文档对齐记录、live 探测结果和累计验收索引展示。不等同于 MiniMax 官方套餐完整说明。</p>
-          <ul className="mt-3 grid grid-cols-2 gap-y-1.5 text-sm text-slate-700">
-            {PLAN_FEATURES.map((f) => (
-              <li key={f} className="flex gap-2">
-                <span className="text-emerald-500">✓</span>
-                <span>{f}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <div className="text-sm text-slate-500">连通状态</div>
-          {healthErr && <div className="mt-2 text-sm text-red-600">后端不可达：{healthErr}</div>}
-          {h && (
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
-              <dt className="text-slate-500">Base</dt>
-              <dd className="font-mono text-xs truncate">{h.base_url}</dd>
-              <dt className="text-slate-500">Key</dt>
-              <dd>{h.api_key_configured ? <span className="text-emerald-600">已配置</span> : <span className="text-red-600">未配置</span>}</dd>
-              <dt className="text-slate-500">Group</dt>
-              <dd className="font-mono text-xs">{h.group_id_tail ? `…${h.group_id_tail}` : '—'}</dd>
-              <dt className="text-slate-500">上游</dt>
-              <dd>
-                {h.minimax === 'ok' && <span className="text-emerald-600">可达 · {h.model_count} 模型</span>}
-                {h.minimax === 'no_key' && <span className="text-amber-600">缺 Key</span>}
-                {h.minimax === 'error' && <span className="text-red-600">错（{h.status}）</span>}
-              </dd>
-            </dl>
-          )}
-        </div>
-      </section>
+      {/* "What do I want to do?" action cards */}
+      <OverviewActionCards />
 
-      {/* 4-layer model status */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">模型状态</h2>
-          <div className="grid grid-cols-4 gap-3">
-            <ModelStat label="官方当前" value={stats.officialCurrent} sub="official_current=true" tone="emerald" />
-            <ModelStat label="Chat live 可用" value={stats.liveAvailable} sub="live=true 已验收" tone="indigo" />
-            <ModelStat label="前端启用模型" value={stats.models} sub="enabled=true" tone="slate" />
-            <ModelStat label="历史/废弃" value={stats.legacyHidden} sub="legacy/deprecated" tone="amber" />
-          </div>
-        </section>
+      {/* Recent invocation overview */}
+      <OverviewRecentHistory />
+
+      {/* Risk explanation */}
+      <OverviewRiskGuide />
+
+      {/* Advanced diagnostics — collapsed by default */}
+      <OverviewDiagnostics
+        overviewStats={overviewStats}
+        workbenchStats={workbenchStats}
+      />
+
+      {regErr && (
+        <div className="mt-6 text-sm text-red-600">无法加载能力图谱：{regErr}</div>
       )}
 
-      {/* 全量覆盖缺口统计 */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">配置与探测</h2>
-          <div className="grid grid-cols-6 gap-3">
-            <GapStat label="官方当前" value={stats.officialCurrent} sub="official_current=true" tone="emerald" />
-            <GapStat label="全量配置" value={stats.localConfigured} sub="含 legacy/deprecated" tone="slate" />
-            <GapStat label="Chat live 可用" value={stats.liveChatModels} sub="/v1/models 返回" tone="indigo" />
-            <GapStat label="capability_probe 待探测" value={stats.capabilityProbePending} sub="capability_probe=unknown" tone="amber" />
-            <GapStat label="官方当前未 live" value={stats.officialCurrentNonLive} sub="official_current 且 live≠true" tone="orange" />
-            <GapStat label="highspeed 档" value={stats.highspeedCount} sub="独立统计" tone="purple" />
-          </div>
-        </section>
-      )}
-
-      {/* 收费与风险统计 */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">收费与风险能力统计</h2>
-          <div className="grid grid-cols-6 gap-3">
-            <GapStat label="正常测试" value={stats.normalTokenPlanTest} sub="TokenPlan 正常验收" tone="emerald" />
-            <GapStat label="配额敏感" value={stats.quotaSensitive} sub="额度敏感能力" tone="amber" />
-            <GapStat label="需确认付费" value={stats.paidConfirmRequired} sub="voice-clone/design" tone="rose" />
-            <GapStat label="高成本" value={stats.highCostConfirmRequired} sub="video 类" tone="red" />
-            <GapStat label="素材型" value={stats.assetRequiredConfirmRequired} sub="music-cover" tone="orange" />
-            <GapStat label="可能额外收费" value={stats.mayChargeExtra} sub="may_charge_extra=true" tone="rose" />
-          </div>
-        </section>
-      )}
-
-      {/* 操作风险统计 */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">操作风险能力统计</h2>
-          <div className="grid grid-cols-7 gap-3">
-            <GapStat label="普通操作" value={stats.opNormal} sub="normal" tone="emerald" />
-            <GapStat label="破坏性操作" value={stats.opDestructive} sub="file-delete/voice-delete" tone="red" />
-            <GapStat label="素材型" value={stats.opAssetRequired} sub="file-upload/图生图等" tone="amber" />
-            <GapStat label="仅已有任务" value={stats.opExistingTaskOnly} sub="video-query/download" tone="blue" />
-            <GapStat label="长任务" value={stats.opLongRunning} sub="video 生成类" tone="purple" />
-            <GapStat label="额度保护" value={stats.opQuotaGuarded} sub="tts-async" tone="orange" />
-            <GapStat label="需操作确认" value={stats.opRequiresConfirm} sub="requires_operation_confirm" tone="rose" />
-          </div>
-        </section>
-      )}
-
-      {/* 确认门禁统计 */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">执行前确认门禁统计</h2>
-          <div className="grid grid-cols-8 gap-3">
-            <GapStat label="需任意确认" value={stats.requiresAnyConfirm} sub="默认阻断" tone="rose" />
-            <GapStat label="付费确认" value={stats.confirmPaid} sub="may_charge_extra" tone="rose" />
-            <GapStat label="高成本确认" value={stats.confirmHighCost} sub="high_cost_confirm" tone="red" />
-            <GapStat label="破坏性确认" value={stats.confirmDestructive} sub="is_destructive" tone="red" />
-            <GapStat label="素材确认" value={stats.confirmAssetSource} sub="requires_uploaded_asset" tone="amber" />
-            <GapStat label="长任务确认" value={stats.confirmLongRunning} sub="is_long_running" tone="purple" />
-            <GapStat label="已有任务确认" value={stats.confirmExistingTask} sub="requires_existing_task" tone="blue" />
-            <GapStat label="配额确认" value={stats.confirmQuota} sub="tts-async" tone="orange" />
-          </div>
-        </section>
-      )}
-
-      {regErr && <div className="mt-6 text-sm text-red-600">无法加载能力图谱：{regErr}</div>}
-
-      {/* Scope level statistics */}
-      {stats && (
-        <section className="mt-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2">Token Plan 范围统计</h2>
-          <div className="grid grid-cols-5 gap-3">
-            <GapStat label="范围内" value={stats.inScopeTotal} sub="in_scope" tone="emerald" />
-            <GapStat label="范围内已覆盖" value={stats.inScopeTokenPlanCovered} sub="TokenPlan 范围" tone="indigo" />
-            <GapStat label="范围内未覆盖" value={stats.inScopeTotal - stats.inScopeTokenPlanCovered} sub="待补充验收" tone="amber" />
-            <GapStat label="只提示" value={stats.warningOnlyTotal} sub="warning_only" tone="orange" />
-            <GapStat label="范围外" value={stats.outOfScopeTotal} sub="out_of_scope" tone="slate" />
-          </div>
-          <div className="mt-3 text-xs text-slate-600">
-            完成率：<span className="font-semibold text-emerald-600">{stats.inScopeTotal > 0 ? Math.round(stats.inScopeTokenPlanCovered / stats.inScopeTotal * 100) : 0}%</span>
-            {' '}({stats.inScopeTokenPlanCovered}/{stats.inScopeTotal}，基于 registry scope/billing，非累计验收记录)
-          </div>
-        </section>
-      )}
-
-      {runnerTemplatesErr && (
-        <div className="mt-6 text-sm text-red-600">
-          Runner 产品化状态加载失败，请检查 /api/runner/templates：{runnerTemplatesErr}
-        </div>
-      )}
-
-      {stats && registry && runnerSupported.size > 0 && (
-        <>
-          {/* Workbench 产品化进度 */}
-          <section className="mt-6">
-            <h2 className="text-sm font-semibold text-slate-700 mb-2">Runner 产品化进度</h2>
-            <div className="grid grid-cols-4 gap-3">
-              {(() => {
-                const wb = computeWorkbenchStats(registry, runnerSupported)
-                return (
-                  <>
-                    <GapStat
-                      label="Token Plan 覆盖"
-                      value={`${wb.inScopeTokenPlanCovered}/${wb.inScopeTotal}`}
-                      sub="TokenPlan 范围 / 范围内"
-                      tone="emerald"
-                    />
-                    <GapStat
-                      label="Runner 产品化"
-                      value={`${wb.runnerSupportedInScope}/${wb.inScopeTotal}`}
-                      sub="Runner 支持 / 范围内"
-                      tone="indigo"
-                    />
-                    <GapStat
-                      label="高级测试"
-                      value={wb.advancedTestCapabilities.length}
-                      sub="Advanced Test 能力"
-                      tone="amber"
-                    />
-                    <GapStat
-                      label="特殊 UI"
-                      value={wb.specialUICapabilities.length}
-                      sub="tts-ws 等"
-                      tone="purple"
-                    />
-                  </>
-                )
-              })()}
-            </div>
-          </section>
-
-          {/* 风险能力 */}
-          {(() => {
-            const wb = computeWorkbenchStats(registry, runnerSupported)
-            return wb.riskCapabilities.length > 0 ? (
-              <section className="mt-4">
-                <h2 className="text-sm font-semibold text-slate-700 mb-2">风险/不默认执行能力</h2>
-                <div className="flex flex-wrap gap-2">
-                  {wb.riskCapabilities.map((id) => {
-                    const cap = registry?.capabilities.find((c) => c.id === id)
-                    return (
-                      <span
-                        key={id}
-                        className="px-2 py-1 rounded border border-red-200 bg-red-50 text-xs text-red-700"
-                      >
-                        {cap?.label ?? id}
-                      </span>
-                    )
-                  })}
-                </div>
-              </section>
-            ) : null
-          })()}
-        </>
-      )}
-
-      {stats && (
-        <section className="mt-6 grid grid-cols-5 gap-3 text-center">
-          <Stat label="能力总数" value={stats.total} />
-          <Stat label="已可用" value={stats.implemented} tone="emerald" />
-          <Stat label="即将上线" value={stats.planned} tone="amber" />
-          <Stat label="模型数" value={stats.models} tone="indigo" />
-          <Stat label="走配额模型" value={stats.quota} tone="emerald" />
-        </section>
-      )}
-
+      {/* Category navigation */}
       {registry && (
         <section className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">分类导览</h2>
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">能力目录</h2>
+          <div className="grid grid-cols-3 gap-3">
             {registry.categories.map((cat) => {
               const caps = registry.capabilities.filter((c) => c.category === cat.id)
               const ok = caps.filter((c) => c.status === 'implemented').length
@@ -324,8 +93,8 @@ export default function Overview() {
                   className="rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-400 transition"
                 >
                   <div className="flex items-center gap-2">
-                    <span>{cat.emoji}</span>
-                    <span className="font-medium">{cat.label}</span>
+                    <span className="text-xl">{cat.emoji}</span>
+                    <span className="font-medium text-slate-900">{cat.label}</span>
                     <span className="ml-auto text-xs text-slate-500">
                       {ok}/{caps.length}
                     </span>
@@ -337,55 +106,16 @@ export default function Overview() {
           </div>
         </section>
       )}
-    </div>
-  )
-}
 
-function Stat({ label, value, tone = 'slate' }: { label: string; value: number; tone?: string }) {
-  const toneCls: Record<string, string> = {
-    slate: 'text-slate-900',
-    emerald: 'text-emerald-600',
-    amber: 'text-amber-600',
-    indigo: 'text-indigo-600',
-  }
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className={`text-2xl font-semibold ${toneCls[tone]}`}>{value}</div>
-      <div className="text-xs text-slate-500 mt-1">{label}</div>
-    </div>
-  )
-}
+      {runnerTemplatesErr && (
+        <div className="mt-6 text-sm text-red-600">
+          Runner 产品化状态加载失败，请检查 /api/runner/templates：{runnerTemplatesErr}
+        </div>
+      )}
 
-function ModelStat({ label, value, sub, tone }: { label: string; value: number; sub: string; tone: string }) {
-  const toneCls: Record<string, string> = {
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    slate: 'border-slate-200 bg-slate-50 text-slate-700',
-  }
-  return (
-    <div className={`rounded-lg border px-4 py-3 text-center ${toneCls[tone]}`}>
-      <div className="text-2xl font-semibold">{value}</div>
-      <div className="text-xs font-medium mt-0.5">{label}</div>
-      <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
-    </div>
-  )
-}
-
-function GapStat({ label, value, sub, tone }: { label: string; value: string | number; sub: string; tone: string }) {
-  const toneCls: Record<string, string> = {
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    indigo: 'border-indigo-200 bg-indigo-50 text-indigo-700',
-    amber: 'border-amber-200 bg-amber-50 text-amber-700',
-    slate: 'border-slate-200 bg-slate-50 text-slate-700',
-    orange: 'border-orange-200 bg-orange-50 text-orange-700',
-    purple: 'border-purple-200 bg-purple-50 text-purple-700',
-  }
-  return (
-    <div className={`rounded-lg border px-3 py-2 text-center ${toneCls[tone]}`}>
-      <div className="text-xl font-semibold">{value}</div>
-      <div className="text-xs font-medium mt-0.5">{label}</div>
-      <div className="text-[11px] opacity-70 mt-0.5">{sub}</div>
+      <p className="mt-8 text-xs text-slate-400">
+        当前数据来自本项目 registry，不等同于 MiniMax 官方套餐完整说明。
+      </p>
     </div>
   )
 }
