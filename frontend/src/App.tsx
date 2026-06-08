@@ -8,6 +8,7 @@ import CapabilityWorkflowsPage from './pages/CapabilityWorkflows'
 import CategoryPage from './pages/Category'
 import ModelsPage from './pages/Models'
 import Overview from './pages/Overview'
+import ProjectOverview from './pages/ProjectOverview'
 import TestConsole from './pages/TestConsole'
 import { RegistryProvider, useRegistry } from './store'
 import { WORKBENCH_NAV, buildCategoryNavItems, type NavGroup } from './navigation/workbenchNav'
@@ -124,6 +125,7 @@ function Shell() {
           <Route path="/capability-scenarios" element={<CapabilityScenariosPage />} />
           <Route path="/capability-workflows" element={<CapabilityWorkflowsPage />} />
           <Route path="/capability-runner" element={<CapabilityRunnerPage />} />
+          <Route path="/project-overview" element={<ProjectOverview />} />
         </Routes>
         </PageErrorBoundary>
       </main>
