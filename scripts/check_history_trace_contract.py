@@ -35,7 +35,7 @@ def check_diagnostics_store() -> tuple[int, int]:
     print("\n[check] diagnostics_store.py")
     path = BACKEND / "app" / "minimax_core" / "verification" / "diagnostics_store.py"
     if not path.exists():
-        print("  ✗ diagnostics_store.py not found")
+        print("  - diagnostics_store.py not found")
         return 0, 1
 
     src = _read(path)
@@ -43,10 +43,10 @@ def check_diagnostics_store() -> tuple[int, int]:
     passed = 0
     for fn in required:
         if re.search(rf"\b{fn}\b", src):
-            print(f"  ✓ {fn}")
+            print(f"  + {fn}")
             passed += 1
         else:
-            print(f"  ✗ {fn} not found")
+            print(f"  - {fn} not found")
     return passed, len(required) - passed
 
 
@@ -59,35 +59,37 @@ def check_diagnostics_router() -> tuple[int, int]:
 
     if re.search(r'from \.\routers import.*diagnostics', src, re.MULTILINE) or \
        re.search(r'from \.routers import.*diagnostics', src):
-        print("  ✓ diagnostics imported")
+        print("  + diagnostics imported")
         passed += 1
     else:
-        print("  ✗ diagnostics not imported in main.py")
+        print("  - diagnostics not imported in main.py")
 
     if re.search(r'app\.include_router\(diagnostics\.router', src):
-        print("  ✓ diagnostics.router registered")
+        print("  + diagnostics.router registered")
         passed += 1
     else:
-        print("  ✗ diagnostics.router not registered")
+        print("  - diagnostics.router not registered")
 
     diag_path = BACKEND / "app" / "routers" / "diagnostics.py"
     if diag_path.exists():
-        print("  ✓ diagnostics.py exists")
+        print("  + diagnostics.py exists")
         passed += 1
     else:
-        print("  ✗ diagnostics.py not found")
-        return passed, 2 - passed
+        print("  - diagnostics.py not found")
+        return passed, 5 - passed
 
     diag_src = _read(diag_path)
-    for ep, pattern in [
-        ("@router.get('/status')", '@router.get("/status")'),
-        ("@router.get('/trace/')", '@router.get("/trace/'),
-    ]:
-        if pattern in diag_src:
-            print(f"  ✓ {ep}")
+    # Use robust regex — match either flavor of quotes
+    endpoint_checks = [
+        ('diagnostics status endpoint', r'@router\.get\(["\']\/status["\']\)'),
+        ('diagnostics trace endpoint', r'@router\.get\(["\']\/trace\/\{trace_id\}["\']\)'),
+    ]
+    for label, pattern in endpoint_checks:
+        if re.search(pattern, diag_src):
+            print(f"  + {label}")
             passed += 1
         else:
-            print(f"  ✗ {ep} missing")
+            print(f"  - {label} missing")
 
     return passed, 5 - passed
 
@@ -100,16 +102,16 @@ def check_history_probe() -> tuple[int, int]:
     passed = 0
 
     if "history_probe" in src or "/probe" in src:
-        print("  ✓ probe endpoint found")
+        print("  + probe endpoint found")
         passed += 1
     else:
-        print("  ✗ probe endpoint not found")
+        print("  - probe endpoint not found")
 
     if "runHistoryProbe" in src or "diagnostic_probe" in src:
-        print("  ✓ probe action name correct")
+        print("  + probe action name correct")
         passed += 1
     else:
-        print("  ✗ probe action name not found")
+        print("  - probe action name not found")
 
     return passed, 2 - passed
 
@@ -122,22 +124,22 @@ def check_history_store_trace() -> tuple[int, int]:
     passed = 0
 
     if re.search(r"def append_history\([^)]*trace_id", src):
-        print("  ✓ append_history accepts trace_id param")
+        print("  + append_history accepts trace_id param")
         passed += 1
     else:
-        print("  ✗ append_history does not accept trace_id param")
+        print("  - append_history does not accept trace_id param")
 
     if '"trace_id"' in src or "'trace_id'" in src:
-        print("  ✓ trace_id written to record")
+        print("  + trace_id written to record")
         passed += 1
     else:
-        print("  ✗ trace_id not written to record")
+        print("  - trace_id not written to record")
 
     if "append_trace_event" in src:
-        print("  ✓ append_trace_event called in history_store")
+        print("  + append_trace_event called in history_store")
         passed += 1
     else:
-        print("  ✗ append_trace_event not called")
+        print("  - append_trace_event not called")
 
     return passed, 3 - passed
 
@@ -156,10 +158,10 @@ def check_trace_middleware() -> tuple[int, int]:
     ]
     for cond, label in checks:
         if cond:
-            print(f"  ✓ {label}")
+            print(f"  + {label}")
             passed += 1
         else:
-            print(f"  ✗ {label}")
+            print(f"  - {label}")
 
     return passed, len(checks) - passed
 
@@ -169,19 +171,19 @@ def check_route_trace_id() -> tuple[int, int]:
     print("\n[check] route handlers pass trace_id")
     passed = 0
     files = {
-        BACKEND / "app" / "routers" / "invoke.py": ["trace_id"],
+        BACKEND / "app" / "routers" / "invoke.py": ["trace_id", "invoke_route_entered"],
         BACKEND / "app" / "routers" / "stream.py": ["trace_id", "stream_route_entered"],
-        BACKEND / "app" / "routers" / "upload.py": ["trace_id"],
+        BACKEND / "app" / "routers" / "upload.py": ["trace_id", "upload_route_entered"],
         BACKEND / "app" / "routers" / "ws.py": ["trace_id", "ws_route_entered"],
     }
     for path, keywords in files.items():
         src = _read(path)
         for kw in keywords:
             if kw in src:
-                print(f"  ✓ {path.name}: {kw}")
+                print(f"  + {path.name}: {kw}")
                 passed += 1
             else:
-                print(f"  ✗ {path.name}: {kw} missing")
+                print(f"  - {path.name}: {kw} missing")
 
     return passed, sum(len(v) for v in files.values()) - passed
 
@@ -203,39 +205,68 @@ def check_api_ts() -> tuple[int, int]:
     ]
     for cond, label in checks:
         if cond:
-            print(f"  ✓ {label}")
+            print(f"  + {label}")
             passed += 1
         else:
-            print(f"  ✗ {label}")
+            print(f"  - {label}")
 
     return passed, len(checks) - passed
 
 
 def check_frontend_panels() -> tuple[int, int]:
-    """Key panels import and use trace_id display."""
+    """Key panels import and use trace_id display.
+
+    Each panel has its own contract — not all need all 3 keywords.
+    """
     print("\n[check] frontend panels trace_id display")
     passed = 0
     files = {
-        FRONTEND / "components" / "InvokePanel.tsx": ["createTraceId", "getDiagnosticsTrace", "traceId"],
-        FRONTEND / "components" / "ChatPanel.tsx": ["createTraceId", "getDiagnosticsTrace", "traceId"],
-        FRONTEND / "components" / "StreamPanel.tsx": ["createTraceId", "getDiagnosticsTrace", "traceId"],
-        FRONTEND / "components" / "UploadPanel.tsx": ["createTraceId", "getDiagnosticsTrace", "traceId"],
-        FRONTEND / "components" / "TtsWsPanel.tsx": ["createTraceId", "trace_id"],
+        "InvokePanel.tsx": {
+            "path": FRONTEND / "components" / "InvokePanel.tsx",
+            "required_all": ["createTraceId", "getDiagnosticsTrace", "traceId"],
+        },
+        "ChatPanel.tsx": {
+            "path": FRONTEND / "components" / "ChatPanel.tsx",
+            "required_all": ["createTraceId", "getDiagnosticsTrace", "traceId"],
+        },
+        "StreamPanel.tsx": {
+            "path": FRONTEND / "components" / "StreamPanel.tsx",
+            "required_all": ["createTraceId", "getDiagnosticsTrace", "traceId"],
+        },
+        "UploadPanel.tsx": {
+            "path": FRONTEND / "components" / "UploadPanel.tsx",
+            "required_all": ["createTraceId", "getDiagnosticsTrace", "traceId"],
+        },
+        "TtsWsPanel.tsx": {
+            "path": FRONTEND / "components" / "TtsWsPanel.tsx",
+            "required_all": ["createTraceId", "trace_id"],
+            # TTS websocket panel uses trace_id param and createTraceId; the trace
+            # display is via onDone diagnostic or lastTraceId, not necessarily
+            # getDiagnosticsTrace — so we treat it as required_any
+            "required_any": ["getDiagnosticsTrace", "traceId", "lastTraceId"],
+        },
     }
-    for path, keywords in files.items():
+    for name, cfg in files.items():
+        path = cfg["path"]
+        required_all = cfg.get("required_all", [])
+        required_any = cfg.get("required_any", [])
         src = _read(path)
-        found = sum(1 for kw in keywords if kw in src)
-        if found == len(keywords):
-            print(f"  ✓ {path.name}: all {len(keywords)} keywords")
+        all_missing = [kw for kw in required_all if kw not in src]
+        any_missing = required_any and not any(kw in src for kw in required_any)
+        if not all_missing and not any_missing:
+            print(f"  + {name}: all {len(required_all)} keywords")
             passed += 1
         else:
-            print(f"  ✗ {path.name}: only {found}/{len(keywords)} keywords")
+            if all_missing:
+                print(f"  - {name}: missing {all_missing}")
+            else:
+                print(f"  - {name}: none of {required_any} found")
 
-    return passed, len(files)
+    return passed, len(files) - passed
 
 
 def check_testconsole_probe() -> tuple[int, int]:
-    """TestConsole has History Probe button."""
+    """TestConsole has History Probe button — semantic check."""
     print("\n[check] TestConsole History Probe button")
     path = FRONTEND / "pages" / "TestConsole.tsx"
     src = _read(path)
@@ -243,15 +274,21 @@ def check_testconsole_probe() -> tuple[int, int]:
 
     checks = [
         ("runHistoryProbe" in src, "runHistoryProbe imported/called"),
-        ("诊断：写入一条测试历史" in src or "写入一条测试历史" in src, "History Probe button text"),
-        ("probeResult" in src, "probeResult state"),
+        (
+            "诊断：写入一条测试历史" in src or "写入一条测试历史" in src,
+            "History Probe button text",
+        ),
+        (
+            "history_id" in src and "trace_id" in src,
+            "probe result displays history_id and trace_id",
+        ),
     ]
     for cond, label in checks:
         if cond:
-            print(f"  ✓ {label}")
+            print(f"  + {label}")
             passed += 1
         else:
-            print(f"  ✗ {label}")
+            print(f"  - {label}")
 
     return passed, len(checks) - passed
 
@@ -269,10 +306,10 @@ def check_history_status_fields() -> tuple[int, int]:
     ]
     for cond, label in checks:
         if cond:
-            print(f"  ✓ {label}")
+            print(f"  + {label}")
             passed += 1
         else:
-            print(f"  ✗ {label}")
+            print(f"  - {label}")
 
     return passed, len(checks) - passed
 
@@ -281,7 +318,7 @@ def check_risk_check_route() -> tuple[int, int]:
     """risk_check route — trace middleware handles it automatically (no history write needed)."""
     print("\n[check] risk_check route trace_id (middleware handles it, no history write)")
     # trace middleware is already verified above; risk_check itself does not write history
-    print("  ✓ trace middleware covers risk_check automatically")
+    print("  + trace middleware covers risk_check automatically")
     return 1, 0
 
 
@@ -309,10 +346,14 @@ def run() -> tuple[int, int]:
             total_passed += p
             total_failed += f
         except Exception as e:
-            print(f"  ✗ {fn.__name__} raised: {e}")
+            print(f"  - {fn.__name__} raised: {e}")
             total_failed += 1
 
     print(f"\n[Summary] passed={total_passed} failed={total_failed}")
+    if total_failed == 0:
+        print("[PASSED] History trace contract check passed")
+    else:
+        print(f"[FAILED] History trace contract check failed ({total_failed} failures)")
     return total_passed, total_failed
 
 

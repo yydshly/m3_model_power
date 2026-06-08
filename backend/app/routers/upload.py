@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from ..config import settings
 from ..minimax.client import MiniMaxError
+from ..minimax_core.verification.diagnostics_store import append_trace_event
 from ..minimax_core.verification.history_store import append_history
 from ..registry import get_registry
 
@@ -79,6 +80,9 @@ async def upload(
     confirm_asset_source: bool | None = Form(default=None),
 ) -> Any:
     trace_id = getattr(request.state, "trace_id", None)
+
+    append_trace_event(trace_id, "upload_route_entered", capability_id=cap_id, action="upload")
+
     reg = get_registry()
     cap = next((c for c in reg.capabilities if c.id == cap_id), None)
     if cap is None:

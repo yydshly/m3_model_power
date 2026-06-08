@@ -28,6 +28,8 @@ jobs:
       - name: Run guard scripts
         run: |
           python scripts/check_github_actions_ci_yaml.py
+          python scripts/check_history_trace_contract.py
+          python scripts/check_history_chain_observability.py
           python scripts/check_official_docs_full_drift.py
           python scripts/check_capability_source_matrix_coverage.py
           python scripts/check_model_quota_and_protocol_ui_consistency.py

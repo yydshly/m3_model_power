@@ -82,6 +82,8 @@ def _append_invoke_history(
 async def invoke(cap_id: str, request: Request, body: InvokeRequest | None = None) -> JSONResponse:
     trace_id = getattr(request.state, "trace_id", None)
 
+    append_trace_event(trace_id, "invoke_route_entered", capability_id=cap_id, action="invoke")
+
     payload = body.payload if body else None
     confirmations = body.confirmations if body else None
     payload = payload or {}
