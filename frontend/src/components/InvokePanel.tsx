@@ -77,9 +77,11 @@ export function InvokePanel({
     }
   })()
 
-  const canInvoke = !!model && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
+  const requiresModelSelection = models.length > 0
+  const hasModelSelection = !requiresModelSelection || !!model
+  const canInvoke = hasModelSelection && allConfirmed && (!requiresExistingTask || hasTaskIdInPayload)
   const invokeDisabled = !canInvoke || loading
-  const invokeDisabledReason = !model
+  const invokeDisabledReason = requiresModelSelection && !model
     ? '请选择模型'
     : !allConfirmed
     ? '请先完成执行前确认'
@@ -88,7 +90,7 @@ export function InvokePanel({
     : ''
 
   const submit = async () => {
-    if (!model) {
+    if (requiresModelSelection && !model) {
       setErr('当前能力没有可用模型，请检查模型配置或协议过滤结果。')
       return
     }

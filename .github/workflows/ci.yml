@@ -26,7 +26,8 @@ jobs:
           pip install pyyaml
 
       - name: Run guard scripts
-        run |
+        run: |
+          python scripts/check_github_actions_ci_yaml.py
           python scripts/check_official_docs_full_drift.py
           python scripts/check_capability_source_matrix_coverage.py
           python scripts/check_model_quota_and_protocol_ui_consistency.py
@@ -39,7 +40,7 @@ jobs:
           python scripts/check_chatpanel_model_selection_sync.py
 
       - name: Compile Python
-        run |
+        run: |
           python -m compileall backend scripts
 
   frontend:

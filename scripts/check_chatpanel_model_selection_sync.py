@@ -72,6 +72,35 @@ def check_no_m3_in_example_payload(path: str, warnings: list[str]) -> None:
     pass
 
 
+def check_invoke_panel_model_free_guard(path: str, errors: list[str]) -> None:
+    """检查 InvokePanel.tsx 支持无模型能力不被误拦截"""
+    if not os.path.exists(path):
+        errors.append(f"[FILE NOT FOUND] {path}")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # 1. 不允许出现 !!model && ... 强制要求模型
+    if re.search(r'!!model\s+&&', content) or re.search(r'const canInvoke = !!model &&', content):
+        errors.append(f"[INVOKE] {path}: contains !!model && which blocks model-free capabilities")
+
+    # 2. 必须包含 requiresModelSelection 和 hasModelSelection
+    if 'requiresModelSelection' not in content:
+        errors.append(f"[INVOKE] {path}: missing requiresModelSelection")
+    if 'hasModelSelection' not in content:
+        errors.append(f"[INVOKE] {path}: missing hasModelSelection")
+
+    # 3. submit() 必须用 requiresModelSelection && !model，而不是单纯 if (!model)
+    # 找 submit 函数
+    submit_match = re.search(r'const submit = async \(\) => \{(.*?)\n  \}', content, re.DOTALL)
+    if submit_match:
+        submit_body = submit_match.group(1)
+        # 如果有 if (!model) 而不是 requiresModelSelection && !model，则报错
+        if re.search(r'if\s*\(\s*!model\s*\)', submit_body):
+            if 'requiresModelSelection' not in submit_body:
+                errors.append(f"[INVOKE] {path}: submit() uses 'if (!model)' instead of 'requiresModelSelection && !model'")
+
+
 def main():
     errors = []
     warnings = []
@@ -95,10 +124,13 @@ def main():
     # 4. InvokePanel 有同步逻辑
     check_sync_pattern(invokepanel, errors, warnings)
 
-    # 5. 三个组件引用 hook（如果 hook 存在）
+    # 5. InvokePanel 支持无模型能力不被误拦截
+    check_invoke_panel_model_free_guard(invokepanel, errors)
+
+    # 6. 三个组件引用 hook（如果 hook 存在）
     check_hook_imported_in_all([chatpanel, streampanel, invokepanel], errors)
 
-    # 6. 确认 hook 本身存在且逻辑正确
+    # 7. 确认 hook 本身存在且逻辑正确
     if os.path.exists(hook):
         with open(hook, 'r', encoding='utf-8') as f:
             hook_content = f.read()
