@@ -161,7 +161,23 @@ export async function getModelsFor(capId: string): Promise<Model[]> {
   return r.json()
 }
 
-export type InvokeResult = { ok: true; data: unknown } | { error: string; message: string; status?: number; blocked_reasons?: string[]; required_confirmations?: string[]; warnings?: string[] }
+export type InvokeSuccess = {
+  ok: true
+  data: unknown
+  history_id?: string | null
+}
+
+export type InvokeError = {
+  error: string
+  message: string
+  status?: number
+  history_id?: string | null
+  blocked_reasons?: string[]
+  required_confirmations?: string[]
+  warnings?: string[]
+}
+
+export type InvokeResult = InvokeSuccess | InvokeError
 
 export async function invoke(
   capId: string,
@@ -192,8 +208,8 @@ export async function uploadCapability(
   fd.append('confirm_asset_source', String(confirmAssetSource === true))
   const r = await fetch(`/api/upload/${capId}`, { method: 'POST', body: fd })
   const data = await r.json().catch(() => ({}))
-  if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status }
-  return data
+  if (!r.ok) return { error: data.error ?? 'http_error', message: data.message ?? `HTTP ${r.status}`, status: r.status, history_id: data.history_id }
+  return { ok: true, data, history_id: data.history_id }
 }
 
 /** 流式调用：返回 Response，调用方自己读 body。 */
@@ -271,7 +287,7 @@ export async function getVerificationIndex(): Promise<VerificationIndex> {
 export type TestConsoleHistoryItem = {
   id: string
   created_at: string
-  action: 'risk_check' | 'invoke'
+  action: 'risk_check' | 'invoke' | 'stream' | 'upload'
   capability_id: string
   duration_ms?: number | null
   payload_summary: {

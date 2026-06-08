@@ -26,6 +26,8 @@ type Props = {
 const ACTION_LABELS: Record<string, string> = {
   risk_check: '安检',
   invoke: '调用',
+  stream: '流式',
+  upload: '上传',
 }
 
 function formatDuration(ms: number | null | undefined): string {
@@ -83,7 +85,9 @@ export default function InvocationHistoryPanel({
             >
               <option value="all">全部动作</option>
               <option value="risk_check">安全检查</option>
-              <option value="invoke">真实调用</option>
+              <option value="invoke">调用</option>
+              <option value="stream">流式</option>
+              <option value="upload">上传</option>
             </select>
           )}
           {onFilterHasAssetsChange && (
@@ -118,6 +122,10 @@ export default function InvocationHistoryPanel({
                 className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${
                   item.action === 'risk_check'
                     ? 'bg-sky-100 text-sky-700'
+                    : item.action === 'stream'
+                    ? 'bg-cyan-100 text-cyan-700'
+                    : item.action === 'upload'
+                    ? 'bg-rose-100 text-rose-700'
                     : 'bg-indigo-100 text-indigo-700'
                 }`}
               >

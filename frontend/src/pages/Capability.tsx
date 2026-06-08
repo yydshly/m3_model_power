@@ -671,9 +671,9 @@ export default function CapabilityPage() {
               </>
             )
           })()}
-          {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} />}
-          {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} />}
-          {effectiveMode === 'upload' && <UploadPanel cap={cap} />}
+          {effectiveMode === 'stream' && cap.category === 'chat' && <ChatPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />}
+          {effectiveMode === 'stream' && cap.category !== 'chat' && <StreamPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />}
+          {effectiveMode === 'upload' && <UploadPanel cap={cap} onDone={() => refreshCapabilityHistory({ retry: true })} />}
         </>
       )}
 

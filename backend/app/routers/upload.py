@@ -128,16 +128,19 @@ async def upload(
         except ValueError:
             msg = r.text
         # Write failed upload to history (summary only, no binary)
-        append_history(
+        history_id = append_history(
             action="upload",
             capability_id=cap_id,
             payload=history_payload,
             confirmations={"confirm_asset_source": confirm_asset_source is True},
             result={"ok": False, "error": "minimax_error", "status": r.status_code, "message": msg},
         )
+        content: dict[str, Any] = {"error": "minimax_error", "status": r.status_code, "message": msg}
+        if history_id:
+            content["history_id"] = history_id
         return JSONResponse(
             status_code=502 if r.status_code >= 500 else r.status_code,
-            content={"error": "minimax_error", "status": r.status_code, "message": msg},
+            content=content,
         )
 
     # Success: parse response, write history with result summary (no binary)
@@ -148,7 +151,7 @@ async def upload(
 
     # Write successful upload to history — result_summary is built by summarize_result(),
     # which extracts file_id/filename/etc. from response_data automatically.
-    append_history(
+    history_id = append_history(
         action="upload",
         capability_id=cap_id,
         payload=history_payload,
@@ -156,7 +159,7 @@ async def upload(
         result={"ok": True, "data": response_data},
     )
 
-    try:
-        return {"ok": True, "data": response_data}
-    except ValueError:
-        return {"ok": True, "data": {"raw": r.text}}
+    content: dict[str, Any] = {"ok": True, "data": response_data}
+    if history_id:
+        content["history_id"] = history_id
+    return content

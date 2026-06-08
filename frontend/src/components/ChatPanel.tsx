@@ -54,7 +54,15 @@ function buildBody(capId: string, model: string, messages: Msg[]): Record<string
   return { model, messages }
 }
 
-export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] }) {
+export function ChatPanel({
+  cap,
+  models,
+  onDone,
+}: {
+  cap: Capability
+  models: Model[]
+  onDone?: (info?: { capability_id?: string }) => void
+}) {
   const { model, setModel } = useSyncedModelSelection(models)
   const [messages, setMessages] = useState<Msg[]>(() => {
     const h = loadHistory(cap.id)
@@ -118,6 +126,7 @@ export function ChatPanel({ cap, models }: { cap: Capability; models: Model[] })
     } finally {
       setStreaming(false)
       abortRef.current = null
+      onDone?.({ capability_id: cap.id })
     }
   }
 

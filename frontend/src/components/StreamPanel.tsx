@@ -2,19 +2,39 @@ import { useRef, useState } from 'react'
 import { streamInvoke, type Capability, type Model } from '../api'
 import { quotaLabel } from '../domain/workbenchLabels'
 import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
+import { buildDemoPayload } from '../domain/demoPayload'
+import { validatePayloadForCapability } from '../domain/payloadValidation'
 
 /**
  * 通用流式调用面板。
  * 上游 SSE/chunked 协议由后端 /api/stream/<id> 透传，前端拿到 chunks 直接追加到文本框。
  * 不解析 JSON token，目的是"看到流动"——具体 UI 后续可分协议特化。
  */
-export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] }) {
+export function StreamPanel({
+  cap,
+  models,
+  onDone,
+}: {
+  cap: Capability
+  models: Model[]
+  onDone?: (info?: { history_id?: string | null; capability_id?: string }) => void
+}) {
   const { model, setModel } = useSyncedModelSelection(models)
-  const [body, setBody] = useState<string>(JSON.stringify(cap.example ?? {}, null, 2))
+  const [body, setBody] = useState<string>(JSON.stringify(buildDemoPayload(cap), null, 2))
   const [out, setOut] = useState<string>('')
   const [err, setErr] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+
+  function updateJsonBodyField(bdy: string, key: string, value: unknown): string {
+    try {
+      const parsed = JSON.parse(bdy || '{}')
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return bdy
+      return JSON.stringify({ ...parsed, [key]: value }, null, 2)
+    } catch {
+      return bdy
+    }
+  }
 
   const start = async () => {
     if (!model) {
@@ -31,6 +51,19 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
       setErr(`JSON 解析失败：${e}`)
       return
     }
+
+    // Validate payload before sending
+    const validationResult = validatePayloadForCapability(cap.id, parsed)
+    if (!validationResult.valid) {
+      setErr(
+        `参数检查未通过：${validationResult.issues
+          .filter((i) => i.severity === 'error')
+          .map((i) => `${i.field}: ${i.message}`)
+          .join('；')}`
+      )
+      return
+    }
+
     if (model && !('model' in parsed)) parsed.model = model
     setRunning(true)
     const ctl = new AbortController()
@@ -55,10 +88,14 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
     } finally {
       setRunning(false)
       abortRef.current = null
+      onDone?.({ capability_id: cap.id })
     }
   }
 
   const stop = () => abortRef.current?.abort()
+
+  const initialValidation = validatePayloadForCapability(cap.id, JSON.parse(body || '{}'))
+  const buttonDisabled = running || !initialValidation.valid
 
   return (
     <div className="space-y-4">
@@ -67,7 +104,11 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
           <label className="block text-xs text-slate-600 mb-1">模型</label>
           <select
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => {
+              const selected = e.target.value
+              setModel(selected)
+              setBody((prev) => updateJsonBodyField(prev, 'model', selected))
+            }}
             className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white"
           >
             {models.map((m) => (
@@ -90,7 +131,7 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
       <div className="flex gap-2">
         <button
           onClick={start}
-          disabled={running}
+          disabled={buttonDisabled}
           className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm disabled:opacity-50"
         >
           {running ? '流式中…' : '流式调用'}
