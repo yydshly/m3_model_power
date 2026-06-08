@@ -317,7 +317,11 @@ export async function getTestConsoleHistory(limit = 50): Promise<{ items: TestCo
 
 export async function getCapabilityHistory(capabilityId: string, limit = 50): Promise<{ items: TestConsoleHistoryItem[] }> {
   const r = await fetch(`/api/history/capability/${encodeURIComponent(capabilityId)}?limit=${limit}`)
-  if (!r.ok) throw new Error(`capability history ${r.status}`)
+  if (!r.ok) {
+    throw new Error(
+      `当前能力历史接口 ${r.status}：请确认后端已加载 /api/history/capability/{capability_id}`
+    )
+  }
   return r.json()
 }
 

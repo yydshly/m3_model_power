@@ -99,6 +99,42 @@ def check_runner_refreshes_history_on_done(errors, warnings):
         errors.append("[RUNNER] CapabilityRunner.tsx does not use onDone callback for history refresh")
 
 
+def check_runner_history_fallback(errors, warnings):
+    """CapabilityRunner must have a fallback to getTestConsoleHistory when
+    getCapabilityHistory fails, so the runner never shows a hard 404 to users."""
+    base = _base()
+    path = os.path.join(base, "frontend/src/pages/CapabilityRunner.tsx")
+    content = _read(path)
+
+    if 'getTestConsoleHistory' not in content:
+        errors.append("[RUNNER] CapabilityRunner.tsx does not import getTestConsoleHistory for fallback")
+
+    # Must have fallback logic when getCapabilityHistory fails
+    if '.catch' not in content or 'getTestConsoleHistory' not in content:
+        errors.append("[RUNNER] CapabilityRunner.tsx refreshHistory does not fall back to getTestConsoleHistory on getCapabilityHistory failure")
+
+    if 'historyFallbackUsed' not in content:
+        errors.append("[RUNNER] CapabilityRunner.tsx does not track historyFallbackUsed state")
+
+    # UI must show a notice when fallback is used
+    if '当前能力历史接口不可用' not in content and 'historyFallbackUsed' not in content:
+        warnings.append("[RUNNER] CapabilityRunner.tsx may not show a user-visible notice when fallback is triggered")
+
+
+def check_api_capability_history_error_message(errors, warnings):
+    """api.ts getCapabilityHistory must provide a descriptive error message."""
+    base = _base()
+    path = os.path.join(base, "frontend/src/api.ts")
+    if not os.path.exists(path):
+        errors.append(f"[API] {path} not found")
+        return
+    content = _read(path)
+
+    # Must not show cryptic "capability history 404"
+    if re.search(r'throw.*Error\(\s*`capability history \$\{r\.status\}', content):
+        errors.append("[API] api.ts getCapabilityHistory still uses cryptic 'capability history 404' error message")
+
+
 def check_testconsole_refreshes_history(errors, warnings):
     base = _base()
     path = os.path.join(base, "frontend/src/pages/TestConsole.tsx")
@@ -176,9 +212,11 @@ def main() -> int:
     check_runner_shows_source(errors, warnings)
     check_runner_calls_history(errors, warnings)
     check_runner_refreshes_history_on_done(errors, warnings)
+    check_runner_history_fallback(errors, warnings)
     check_testconsole_refreshes_history(errors, warnings)
     check_capability_no_hardcoded_8_models(errors, warnings)
     check_runner_file_url_not_unconditional(errors, warnings)
+    check_api_capability_history_error_message(errors, warnings)
     check_ci_includes_smoke_guard(errors, warnings)
 
     if errors:

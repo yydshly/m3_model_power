@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getCapabilityHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getCapabilityHistory, getTestConsoleHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
 import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import UsageCostExplainer from '../components/UsageCostExplainer'
@@ -1687,6 +1687,7 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
   const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
   const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [historyFallbackUsed, setHistoryFallbackUsed] = useState(false)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [sessionDraft, setSessionDraft] = useState<RunnerSession | null>(null)
 
@@ -1696,9 +1697,24 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const refreshHistory = (capId?: string) => {
     const id = capId ?? selected
     if (!id) return
+    setHistoryFallbackUsed(false)
     getCapabilityHistory(id, 50)
       .then(r => { setHistory(r.items); setHistoryErr(null) })
-      .catch((e: any) => setHistoryErr(e.message))
+      .catch((e: any) => {
+        // Fallback: fetch global history and filter by capability_id
+        getTestConsoleHistory(200)
+          .then(r => {
+            const filtered = r.items.filter(item => item.capability_id === id)
+            setHistory(filtered)
+            setHistoryErr(null)
+            setHistoryFallbackUsed(true)
+          })
+          .catch(() => {
+            setHistoryErr(
+              `当前能力历史接口不可用：${e instanceof Error ? e.message : String(e)}`
+            )
+          })
+      })
   }
 
   // Refresh history and load session draft when capability changes
@@ -1860,7 +1876,10 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
           {selected && (
             <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+                <div>
+                  <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+                  <p className="text-[10px] text-slate-400">按 capability_id 过滤，不是按模型过滤</p>
+                </div>
                 <button
                   onClick={() => refreshHistory()}
                   className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
@@ -1868,6 +1887,12 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
                   刷新
                 </button>
               </div>
+
+              {historyFallbackUsed && !historyErr && (
+                <p className="text-xs text-amber-600 mb-2 bg-amber-50 border border-amber-200 rounded p-2">
+                  当前能力历史接口不可用，已临时从全局最近调用中过滤展示。
+                </p>
+              )}
 
               {historyErr && (
                 <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
