@@ -102,7 +102,7 @@ export default function CapabilityScenariosPage() {
                     return runnerSupported ? (
                       <Link
                         key={cap}
-                        to={`/capability-runner?capability=${cap}`}
+                        to={`/capability-runner?capability=${cap}&from_scenario=${s.id}`}
                         className="inline-flex items-center gap-1 text-[10px] bg-sky-50 text-sky-700 px-1.5 py-0.5 rounded hover:bg-sky-100"
                       >
                         {cap}

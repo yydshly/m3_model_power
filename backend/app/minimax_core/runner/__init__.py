@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..registry.loader import load_capability_registry
+from ..registry.loader import get_capability_registry
 
 _runner_dir = Path(__file__).resolve().parent
 _TEMPLATES_FILE = _runner_dir / "capability_runner_templates.json"
@@ -19,12 +19,12 @@ def load_runner_templates() -> dict[str, Any]:
     templates = data.get("templates", {})
 
     # Enrich each template with billing_policy and cost_level from the capability registry
-    registry = load_capability_registry()
+    registry = get_capability_registry()
     for cap_id, template in templates.items():
-        cap = registry.get(cap_id)
+        cap = registry.by_id(cap_id)
         if cap:
             template["billing_policy"] = {
-                "billing_category": cap.billing_policy.billing_category.value,
+                "billing_category": cap.billing_policy.billing_category,
                 "requires_explicit_confirmation": cap.billing_policy.requires_explicit_confirmation,
                 "may_charge_extra": cap.billing_policy.may_charge_extra,
                 "consumes_token_plan_quota": cap.billing_policy.consumes_token_plan_quota,
@@ -33,7 +33,7 @@ def load_runner_templates() -> dict[str, Any]:
                 "billing_note": cap.billing_policy.billing_note,
                 "official_pricing_note": cap.billing_policy.official_pricing_note,
             }
-            template["cost_level"] = cap.cost_level.value if hasattr(cap.cost_level, 'value') else str(cap.cost_level)
+            template["cost_level"] = cap.cost_level
         else:
             # Fallback defaults
             template["billing_policy"] = {

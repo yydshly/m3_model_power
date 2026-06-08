@@ -302,7 +302,7 @@ export default function CapabilityWorkflowsPage() {
                   </Link>
                   {isRunnerSupported(step.capability_id!) ? (
                     <Link
-                      to={`/capability-runner?capability=${step.capability_id!}`}
+                      to={`/capability-runner?capability=${step.capability_id!}&from_workflow=${wf.id}`}
                       className="text-sky-600 hover:underline ml-1"
                     >
                       体验

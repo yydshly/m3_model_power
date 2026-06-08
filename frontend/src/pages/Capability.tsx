@@ -501,20 +501,20 @@ export default function CapabilityPage() {
         </section>
       ) : models.length > 0 ? (
         <section className="mt-6">
-          <div className="text-xs text-slate-500 mb-1">当前能力适用模型</div>
+          <div className="text-xs text-slate-500 mb-1">当前项目已开放测试模型</div>
           <div className="text-[10px] text-slate-400 mb-2">
-            按 capability.model_family / protocols / capabilities 过滤，仅表示该能力可选择的模型。
+            这里展示的是本项目 Registry 当前开放/已建模/可测试的模型，不等同于 MiniMax 官方完整模型清单。
             {cap.id === 'chat-anthropic' && (
-              <span className="block mt-1 text-amber-600">Anthropic 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持图片/视频输入；M2.x 系列仅支持文本与工具调用相关内容块。</span>
+              <span className="block mt-1 text-amber-600">Anthropic 兼容接口和 /v1/models 可能返回更多模型；当前页面仅展示本项目筛选后开放测试的模型。注意：仅 MiniMax-M3 支持图片/视频输入；M2.x 系列仅支持文本与工具调用相关内容块。</span>
             )}
             {cap.id === 'chat-openai' && (
-              <span className="block mt-1 text-amber-600">OpenAI 兼容接口支持 8 个模型调用。注意：仅 MiniMax-M3 支持多模态输入（图片/视频）。</span>
+              <span className="block mt-1 text-amber-600">OpenAI 兼容接口和 /v1/models 可能返回更多模型；当前页面仅展示本项目筛选后开放测试的模型。注意：仅 MiniMax-M3 支持多模态输入（图片/视频）。</span>
             )}
             {cap.id === 'chat-responses-create' && (
-              <span className="block mt-1 text-amber-600">Responses API 官方文档示例使用 MiniMax-M3；其他模型是否支持以实测为准。</span>
+              <span className="block mt-1 text-amber-600">官方 Responses API 可能支持更多模型；当前页面仅展示本项目筛选后开放测试的模型。</span>
             )}
             {!['chat-anthropic', 'chat-openai', 'chat-responses-create'].includes(cap.id) && (
-              <span>Chat live 状态来自 /v1/models；语音/图像/音乐/视频以 capability_probe 或验收记录为准。</span>
+              <span>语音/图像/音乐/视频类能力模型以 capability_probe 或验收记录为准。</span>
             )}
             {' '}默认选择优先成本友好模型，不代表官方推荐模型。
           </div>

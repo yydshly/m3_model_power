@@ -137,8 +137,8 @@ function extractImageUrl(data: unknown): string {
   if (typeof d.img_url === 'string' && d.img_url) return d.img_url
   if (typeof d.imageUrl === 'string' && d.imageUrl) return d.imageUrl
   if (typeof d.imageURL === 'string' && d.imageURL) return d.imageURL
-  if (typeof d.file_url === 'string' && d.file_url) return d.file_url
-  if (typeof d.download_url === 'string' && d.download_url) return d.download_url
+  if (typeof d.file_url === 'string' && d.file_url && looksLikeImageUrl(d.file_url, 'file_url')) return d.file_url
+  if (typeof d.download_url === 'string' && d.download_url && looksLikeImageUrl(d.download_url, 'download_url')) return d.download_url
   if (typeof d.url === 'string' && d.url) {
     const u = d.url as string
     if (looksLikeImageUrl(u, 'url')) return u
@@ -1193,6 +1193,8 @@ function CapabilityCard({
     setRiskResult(null)
     setErrorMessage(null)
 
+    let calledBackend = false
+
     try {
       // file-upload uses multipart upload path
       if (template.capability_id === 'file-upload') {
@@ -1211,17 +1213,17 @@ function CapabilityCard({
         }
         const risk = await riskCheck(template.capability_id, riskPayload, {})
         setRiskResult(risk)
-        if (!risk.allowed) { setRunState('error'); return }
+        if (!risk.allowed) { calledBackend = true; setRunState('error'); return }
 
         setRunState('running')
         const res = await uploadCapability(template.capability_id, file, values['purpose'], true)
+        calledBackend = true
         if (isOk(res)) {
           const bizErr = extractBusinessError(res.data)
           if (bizErr) { setErrorMessage(bizErr); setResult(res); setRunState('error'); return }
         }
         setResult(res)
         setRunState('done')
-        onDone?.()
         if (isOk(res)) {
           saveRunnerSession({
             capabilityId: template.capability_id,
@@ -1239,8 +1241,9 @@ function CapabilityCard({
       const payload = applyI2IPromptMode(basePayload, values, template.capability_id)
       const risk = await riskCheck(template.capability_id, payload, {})
       setRiskResult(risk)
-      if (!risk.allowed) { setRunState('error'); return }
+      if (!risk.allowed) { calledBackend = true; setRunState('error'); return }
       setRunState('running')
+      calledBackend = true
       const res = await invoke(template.capability_id, payload, {})
 
       if (isOk(res)) {
@@ -1255,7 +1258,6 @@ function CapabilityCard({
 
       setResult(res)
       setRunState('done')
-      onDone?.()
       if (isOk(res)) {
         saveRunnerSession({
           capabilityId: template.capability_id,
@@ -1268,6 +1270,8 @@ function CapabilityCard({
     } catch (e: any) {
       setErrorMessage(e?.message ?? String(e))
       setRunState('error')
+    } finally {
+      if (calledBackend) onDone?.()
     }
   }
 
