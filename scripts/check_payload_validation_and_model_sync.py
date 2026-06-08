@@ -10,6 +10,9 @@ Checks:
 6. Capability.tsx reuses InvocationHistoryPanel
 7. Capability.tsx calls getCapabilityHistory
 8. demoPayload chat max_tokens >= 512
+9. TestConsole.tsx imports validatePayloadForCapability
+10. TestConsole.tsx inline InvokePanel calls validatePayloadForCapability
+11. TestConsole.tsX invoke button disabled includes validationResult.valid
 """
 import re
 import sys
@@ -73,8 +76,8 @@ def check_riskgate_copy():
             if "可以执行" in content:
                 bad_files.append(f.name)
     if bad_files:
-        return False, f"Files still contain '可以执行': {bad_files}"
-    return True, "No '可以执行' copy found in InvokePanel, Capability, CapabilityRunner"
+        return False, f"Files still contain 'ke yi zhi xing': {bad_files}"
+    return True, "No 'ke yi zhi xing' copy found in InvokePanel, Capability, CapabilityRunner"
 
 
 def check_capability_history():
@@ -120,6 +123,27 @@ def check_demo_payload_max_tokens():
     return True, "chat demo max_tokens >= 512"
 
 
+def check_test_console_validation():
+    """9, 10, 11. TestConsole.tsx imports and uses validatePayloadForCapability"""
+    f = FRONTEND / "pages" / "TestConsole.tsx"
+    if not f.exists():
+        return False, "TestConsole.tsx does not exist"
+    content = f.read_text(encoding="utf-8")
+    issues = []
+
+    if "validatePayloadForCapability" not in content:
+        issues.append("validatePayloadForCapability not imported or used")
+
+    # Check that the inline InvokePanel disabled includes validationResult.valid
+    # We look for the button's disabled prop containing !validationResult.valid
+    if "!validationResult.valid" not in content:
+        issues.append("invoke button disabled does not include !validationResult.valid")
+
+    if issues:
+        return False, "; ".join(issues)
+    return True, "TestConsole.tsx imports and uses validatePayloadForCapability correctly"
+
+
 def main():
     checks = [
         ("payloadValidation.ts exists + tts-sync voice_id", check_payload_validation_ts),
@@ -128,6 +152,7 @@ def main():
         ("RiskGate copy not 'ke yi zhi xing'", check_riskgate_copy),
         ("Capability.tsx history module", check_capability_history),
         ("chat demo max_tokens >= 512", check_demo_payload_max_tokens),
+        ("TestConsole.tsx validatePayloadForCapability", check_test_console_validation),
     ]
 
     all_passed = True

@@ -23,6 +23,7 @@ import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import { getRequiredConfirmations, allConfirmationsSatisfied, CONFIRM_LABELS } from '../domain/confirmations'
 import { billingLabel, operationRiskLabel } from '../domain/workbenchLabels'
 import { buildDemoPayload } from '../domain/demoPayload'
+import { validatePayloadForCapability } from '../domain/payloadValidation'
 
 // Chat capabilities that should use ChatResultPreview instead of AssetResultPreview
 const CHAT_CAPABILITY_IDS = new Set(['chat-openai', 'chat-anthropic', 'chat-responses-create'])
@@ -161,6 +162,10 @@ function RiskCheckPanel({
   let payloadErr: string | null = null
   try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
 
+  const validationResult = payloadErr
+    ? { valid: false, issues: [{ field: 'body', message: payloadErr, severity: 'error' as const }] }
+    : validatePayloadForCapability(cap.id, parsedPayload)
+
   const runCheck = async () => {
     if (payloadErr) { setErr(payloadErr); return }
     setLoading(true)
@@ -213,6 +218,20 @@ function RiskCheckPanel({
         />
         {payloadErr && <p className="text-xs text-red-600 mt-1">{payloadErr}</p>}
       </div>
+
+      {!validationResult.valid && (
+        <div className="mb-3 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5 mb-1">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>
+                <span className="font-mono">{issue.field}</span>：{issue.message}
+              </li>
+            ))}
+          </ul>
+          <p className="text-amber-600">风险检查通过 ≠ 参数可执行；参数不完整时真实调用仍会被后端拒绝。</p>
+        </div>
+      )}
 
       <button
         onClick={runCheck}
@@ -276,8 +295,16 @@ function InvokePanel({
   let payloadErr: string | null = null
   try { parsedPayload = JSON.parse(payload) } catch { payloadErr = 'JSON 格式错误' }
 
+  const validationResult = payloadErr
+    ? { valid: false, issues: [{ field: 'body', message: payloadErr, severity: 'error' as const }] }
+    : validatePayloadForCapability(cap.id, parsedPayload)
+
   const runInvoke = async () => {
     if (payloadErr) { setErr(payloadErr); return }
+    if (!validationResult.valid) {
+      setErr(`参数检查未通过：${validationResult.issues.filter(i => i.severity === 'error').map(i => `${i.field}: ${i.message}`).join('；')}`)
+      return
+    }
     setLoading(true)
     setErr(null)
     setResult(null)
@@ -357,11 +384,28 @@ function InvokePanel({
 
       <button
         onClick={runInvoke}
-        disabled={loading || !allConfirmed || !!payloadErr}
+        disabled={loading || !allConfirmed || !!payloadErr || !validationResult.valid}
         className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40 mt-3"
       >
         {loading ? '执行中…' : '真实调用'}
       </button>
+
+      {allConfirmed && !validationResult.valid && (
+        <span className="text-xs text-rose-600 ml-2">参数检查未通过，暂不能执行真实调用</span>
+      )}
+
+      {!validationResult.valid && (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {validationResult.issues.filter(i => i.severity === 'error').map((issue, i) => (
+              <li key={i}>
+                <span className="font-mono">{issue.field}</span>：{issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {err && <p className="mt-2 text-sm text-red-600">错误: {err}</p>}
 
