@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { streamInvoke, type Capability, type Model } from '../api'
 import { quotaLabel } from '../domain/workbenchLabels'
+import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 
 /**
  * 通用流式调用面板。
@@ -8,7 +9,7 @@ import { quotaLabel } from '../domain/workbenchLabels'
  * 不解析 JSON token，目的是"看到流动"——具体 UI 后续可分协议特化。
  */
 export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] }) {
-  const [model, setModel] = useState<string>(models[0]?.id ?? '')
+  const { model, setModel } = useSyncedModelSelection(models)
   const [body, setBody] = useState<string>(JSON.stringify(cap.example ?? {}, null, 2))
   const [out, setOut] = useState<string>('')
   const [err, setErr] = useState<string | null>(null)
@@ -16,6 +17,11 @@ export function StreamPanel({ cap, models }: { cap: Capability; models: Model[] 
   const abortRef = useRef<AbortController | null>(null)
 
   const start = async () => {
+    if (!model) {
+      setErr('当前能力没有可用模型，请检查模型配置或协议过滤结果。')
+      return
+    }
+    if (running) return
     setErr(null)
     setOut('')
     let parsed: Record<string, unknown>

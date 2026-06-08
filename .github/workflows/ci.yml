@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  guardrails:
+    name: Guardrails
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Run guard scripts
+        run: |
+          python scripts/check_github_actions_ci_yaml.py
+          python scripts/check_official_docs_full_drift.py
+          python scripts/check_capability_source_matrix_coverage.py
+          python scripts/check_model_quota_and_protocol_ui_consistency.py
+          python scripts/check_registry_fact_consistency.py
+          python scripts/check_quota_sensitive_confirmation_ui.py
+          python scripts/check_workbench_model_status_copy.py
+          python scripts/check_capability_profile_model_alignment.py
+          python scripts/check_frontend_copy_no_leaky_internal_terms.py
+          python scripts/check_shared_confirmation_logic.py
+          python scripts/check_chatpanel_model_selection_sync.py
+
+      - name: Compile Python
+        run: |
+          python -m compileall backend scripts
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Typecheck and build
+        run: npm run build
