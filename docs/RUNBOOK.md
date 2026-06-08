@@ -8,6 +8,39 @@ python start.py
 
 这会启动后端（8777）和前端（5175），并等待两端就绪后输出入口地址。
 
+如果检测到后端已经健康运行（`/api/health` 返回 200），脚本会**复用**已有后端进程，不会重复启动。
+如果检测到前端已经可访问，脚本会**复用**已有前端进程。
+
+---
+
+## 默认启动行为
+
+`python start.py`（即 `python start.py dev`）的完整流程：
+
+1. 检查 8777 端口：
+   - 若空闲：启动后端 uvicorn 进程，等待 `/api/health` 返回 200
+   - 若被占用且健康：复用已有后端，打印 `[INFO] Backend already running`
+   - 若被占用但不健康：打印错误并退出，提示先释放端口
+2. 检查 5175 端口：
+   - 若空闲：启动前端 Vite 进程
+   - 若被占用且可访问：复用已有前端，打印 `[INFO] Frontend already running`
+   - 若被占用但不可访问：打印错误并退出，提示先释放端口
+3. 打印所有页面入口地址
+4. `Ctrl+C` 只会停止**本次启动器创建的子进程**，不会停止复用（已有）的旧进程
+
+---
+
+## 常见提示解释
+
+| 提示 | 含义 |
+|------|------|
+| `[INFO] Backend already running on 127.0.0.1:8777 — reusing it.` | 脚本检测到 8777 已有健康后端，复用而非重启 |
+| `[WARN] Port 8777 occupied (unknown process)` | 端口被占用但不是本项目后端，脚本无法判断其身份 |
+| `[FAIL] Port 8777 is occupied by unknown process` | 脚本检测到端口被占用且不可访问，阻止启动 |
+| `[WARN] frontend/node_modules not found` | 需先运行 `python start.py install` |
+| `[INFO] Frontend already running on http://localhost:5175` | 脚本检测到前端已可访问，复用而非重启 |
+| `Press Ctrl+C to stop processes started by this launcher.` | Ctrl+C 只停止本次启动的子进程；复用进程需手动停止 |
+
 ---
 
 ## 首次安装
@@ -100,7 +133,13 @@ python start.py clean
 python start.py stop
 ```
 
-显示 8777 和 5175 端口的占用进程 PID，并给出手动 kill 指令。
+显示 8777 和 5175 端口的占用进程 PID，**不会自动 kill**。
+
+```bash
+python start.py stop --kill
+```
+
+传入 `--kill` 参数才会尝试停止进程（Windows: `taskkill`）。
 
 ---
 
@@ -122,13 +161,31 @@ python start.py stop
 
 后端默认 `8777`，前端默认 `5175`。
 
+脚本行为原则：**不自动 kill**。只有显式传入 `--kill` 才会尝试停止进程。
+
+### Windows 手动排查
+
 ```powershell
 # 查看端口占用
 netstat -ano | findstr :8777
 netstat -ano | findstr :5175
 
+# 查看进程名
+tasklist /FI "PID eq <PID>"
+
 # 手动 kill（替换 <PID> 为实际进程号）
 taskkill //PID <PID> //F
+```
+
+### Linux / Git Bash 手动排查
+
+```bash
+# 查看端口占用
+ss -tlnp | grep 8777
+ss -tlnp | grep 5175
+
+# kill
+kill <PID>
 ```
 
 ---
@@ -173,3 +230,4 @@ taskkill //PID <PID> //F
 | `python start.py build` | 构建验证 |
 | `python start.py clean` | 清理运行时文件 |
 | `python start.py stop` | 查看端口占用 |
+| `python start.py stop --kill` | 查看并尝试停止占用端口的进程 |

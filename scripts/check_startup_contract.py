@@ -55,7 +55,25 @@ def main() -> int:
                 print(f"FAIL: scripts/dev.py missing '{cmd}'")
                 errors.append(f"scripts/dev.py missing command: {cmd}")
 
-    # 6. RUNBOOK.md contains required content
+    # 6. scripts/dev.py contains health-check and reuse logic
+    if dev_py.exists():
+        content = dev_py.read_text(encoding="utf-8")
+        health_checks = [
+            ("/api/health", "health check URL"),
+            ("already running", "already running message"),
+            ("Backend already running", "backend reuse message"),
+            ("--kill", "--kill flag for stop"),
+            ("8777", "backend port 8777"),
+            ("5175", "frontend port 5175"),
+        ]
+        for phrase, label in health_checks:
+            if phrase in content:
+                print(f"PASS: scripts/dev.py contains '{label}'")
+            else:
+                print(f"FAIL: scripts/dev.py missing '{label}'")
+                errors.append(f"scripts/dev.py missing: {label}")
+
+    # 7. RUNBOOK.md contains required content
     if runbook.exists():
         content = runbook.read_text(encoding="utf-8")
         checks = {
@@ -66,6 +84,11 @@ def main() -> int:
             "5175": "5175",
             "/api/history/probe": "/api/history/probe",
             "runtime": "runtime",
+            "默认启动行为": "默认启动行为 section",
+            "端口占用": "端口占用 section",
+            "python start.py stop": "python start.py stop",
+            "python start.py stop --kill": "python start.py stop --kill",
+            "Ctrl+C": "Ctrl+C explanation",
         }
         for phrase, label in checks.items():
             if phrase in content:

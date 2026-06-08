@@ -59,16 +59,21 @@ def port_in_use(port: int) -> bool:
         return True
 
 
+def check_url_status(url: str, timeout: int = 5) -> bool:
+    """Return True if URL returns HTTP 200 within timeout."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 def wait_for_health(url: str, timeout: int = 30) -> bool:
     """Wait for URL to return 200 within timeout seconds."""
     deadline = time.time() + timeout
     while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(url, timeout=3) as r:
-                if r.status == 200:
-                    return True
-        except Exception:
-            pass
+        if check_url_status(url, timeout=3):
+            return True
         time.sleep(1)
     return False
 
@@ -105,7 +110,8 @@ def cmd_doctor() -> None:
     # 3. Node
     try:
         node_out = subprocess.check_output(
-            [shutil.which("node") or "node", "--version"], text=True, encoding="utf-8", errors="replace"
+            [shutil.which("node") or "node", "--version"],
+            text=True, encoding="utf-8", errors="replace",
         ).strip()
         checks.append((f"Node: {node_out}", True, None))
     except Exception:
@@ -114,7 +120,8 @@ def cmd_doctor() -> None:
     # 4. npm
     try:
         npm_out = subprocess.check_output(
-            [shutil.which("npm") or "npm", "--version"], text=True, encoding="utf-8", errors="replace"
+            [shutil.which("npm") or "npm", "--version"],
+            text=True, encoding="utf-8", errors="replace",
         ).strip()
         checks.append((f"npm: {npm_out}", True, None))
     except Exception:
@@ -131,16 +138,38 @@ def cmd_doctor() -> None:
     # 6. Port 8777
     p1 = find_process_on_port(BACKEND_PORT)
     if p1:
-        msg = f"Port {BACKEND_PORT} occupied by PID={p1[0]['pid']} ({p1[0]['name']})"
-        checks.append((f"Port {BACKEND_PORT} occupied", False, msg))
+        # Try to detect if it's our healthy backend
+        healthy = check_url_status(f"http://127.0.0.1:{BACKEND_PORT}/api/health", timeout=3)
+        pid_info = f"PID={p1[0]['pid']}"
+        if healthy:
+            checks.append(
+                (f"Port {BACKEND_PORT} occupied (healthy backend)", True,
+                 f"Backend already running on port {BACKEND_PORT}; dev will reuse it.")
+            )
+        else:
+            checks.append(
+                (f"Port {BACKEND_PORT} occupied (unknown process)", False,
+                 f"Port {BACKEND_PORT} occupied by unknown process. "
+                 f"Run 'python start.py stop' for details.")
+            )
     else:
         checks.append((f"Port {BACKEND_PORT} free", True, None))
 
     # 7. Port 5175
     p2 = find_process_on_port(FRONTEND_PORT)
     if p2:
-        msg = f"Port {FRONTEND_PORT} occupied by PID={p2[0]['pid']} ({p2[0]['name']})"
-        checks.append((f"Port {FRONTEND_PORT} occupied", False, msg))
+        reachable = check_url_status(f"http://127.0.0.1:{FRONTEND_PORT}", timeout=3)
+        if reachable:
+            checks.append(
+                (f"Port {FRONTEND_PORT} serves frontend", True,
+                 f"Frontend already running on port {FRONTEND_PORT}; dev will reuse it.")
+            )
+        else:
+            checks.append(
+                (f"Port {FRONTEND_PORT} occupied (unknown process)", False,
+                 f"Port {FRONTEND_PORT} occupied by unknown process. "
+                 f"Run 'python start.py stop' for details.")
+            )
     else:
         checks.append((f"Port {FRONTEND_PORT} free", True, None))
 
@@ -175,7 +204,7 @@ def cmd_backend() -> None:
         procs = find_process_on_port(BACKEND_PORT)
         pid_info = ", ".join(f"{p['name']} (PID {p['pid']})" for p in procs)
         print(f"[WARN] Port {BACKEND_PORT} is already in use by: {pid_info}")
-        print(f"       Stop it first or kill manually, then run this command again.")
+        print(f"       Stop it first or run 'python start.py stop --kill'.")
         return
     print(f"Starting backend on http://127.0.0.1:{BACKEND_PORT} ...")
     run_or_fail(
@@ -190,78 +219,154 @@ def cmd_frontend() -> None:
         procs = find_process_on_port(FRONTEND_PORT)
         pid_info = ", ".join(f"{p['name']} (PID {p['pid']})" for p in procs)
         print(f"[WARN] Port {FRONTEND_PORT} is already in use by: {pid_info}")
-        print(f"       Stop it first or kill manually, then run this command again.")
+        print(f"       Stop it first or run 'python start.py stop --kill'.")
         return
     print(f"Starting frontend on http://localhost:{FRONTEND_PORT} ...")
     run_or_fail(
-        [shutil.which("npm") or "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", str(FRONTEND_PORT)],
+        [shutil.which("npm") or "npm", "run", "dev", "--",
+         "--host", "127.0.0.1", "--port", str(FRONTEND_PORT)],
         cwd=FRONTEND_DIR,
     )
+
+
+DEV_BANNER = """\
+m3_model_power development launcher
+
+Default action:
+  start backend on http://127.0.0.1:8777
+  start frontend on http://localhost:5175
+
+Useful commands:
+  python start.py doctor    check local environment
+  python start.py install  install backend/frontend dependencies
+  python start.py check    run quick checks
+  python start.py backend   start backend only
+  python start.py frontend start frontend only
+  python start.py stop     inspect occupied ports
+"""
 
 
 def cmd_dev() -> None:
-    print("=" * 50)
-    print("Dev mode — starting backend + frontend")
-    print("=" * 50)
+    print(DEV_BANNER)
 
-    # Check ports
-    be_busy = port_in_use(BACKEND_PORT)
-    fe_busy = port_in_use(FRONTEND_PORT)
+    be_proc = None
+    fe_proc = None
+    be_reused = False
+    fe_reused = False
 
-    if be_busy:
-        print(f"[WARN] Backend port {BACKEND_PORT} is occupied — backend may not start")
-    if fe_busy:
-        print(f"[WARN] Frontend port {FRONTEND_PORT} is occupied — frontend may not start")
-
-    # Start backend
-    be_proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app",
-         "--reload", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
-        cwd=BACKEND_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    print(f"[INFO] Backend PID={be_proc.pid}")
-
-    print(f"[INFO] Waiting for backend health at http://127.0.0.1:{BACKEND_PORT}/api/health ...")
-    if wait_for_health(f"http://127.0.0.1:{BACKEND_PORT}/api/health"):
-        print("[PASS] Backend is up")
+    # ── Backend ────────────────────────────────────────────────────────────
+    if port_in_use(BACKEND_PORT):
+        healthy = check_url_status(f"http://127.0.0.1:{BACKEND_PORT}/api/health", timeout=5)
+        if healthy:
+            print(f"[INFO] Backend already running on http://127.0.0.1:{BACKEND_PORT} — reusing it.")
+            be_reused = True
+        else:
+            procs = find_process_on_port(BACKEND_PORT)
+            pid_info = ", ".join(f"{p['name']} (PID {p['pid']})" for p in procs)
+            print(f"[FAIL] Port {BACKEND_PORT} is occupied by unknown process ({pid_info}).")
+            print(f"       Cannot start backend. Free port {BACKEND_PORT} first.")
+            print()
+            print("Quick排查:")
+            print(f"  netstat -ano | findstr :{BACKEND_PORT}")
+            print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
+            print(f"  taskkill //PID {procs[0]['pid']} //F")
+            print()
+            print("Stopping frontend if it was started by this launcher...")
+            sys.exit(1)
     else:
-        print("[WARN] Backend health check timed out — continuing anyway")
+        be_proc = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app.main:app",
+             "--reload", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
+            cwd=BACKEND_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        print(f"[INFO] Backend starting, PID={be_proc.pid}")
+        print(f"[INFO] Waiting for backend health...")
+        if wait_for_health(f"http://127.0.0.1:{BACKEND_PORT}/api/health"):
+            print(f"[PASS] Backend is up on http://127.0.0.1:{BACKEND_PORT}")
+        else:
+            print(f"[WARN] Backend health check timed out — continuing anyway")
 
-    # Start frontend
-    fe_proc = subprocess.Popen(
-        [shutil.which("npm") or "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", str(FRONTEND_PORT)],
-        cwd=FRONTEND_DIR,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-    print(f"[INFO] Frontend PID={fe_proc.pid}")
+    # ── Frontend ───────────────────────────────────────────────────────────
+    if port_in_use(FRONTEND_PORT):
+        reachable = check_url_status(f"http://127.0.0.1:{FRONTEND_PORT}", timeout=5)
+        if reachable:
+            print(f"[INFO] Frontend already running on http://localhost:{FRONTEND_PORT} — reusing it.")
+            fe_reused = True
+        else:
+            procs = find_process_on_port(FRONTEND_PORT)
+            pid_info = ", ".join(f"{p['name']} (PID {p['pid']})" for p in procs)
+            print(f"[FAIL] Port {FRONTEND_PORT} is occupied by unknown process ({pid_info}).")
+            print(f"       Cannot start frontend. Free port {FRONTEND_PORT} first.")
+            print()
+            print("Quick排查:")
+            print(f"  netstat -ano | findstr :{FRONTEND_PORT}")
+            print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
+            print(f"  taskkill //PID {procs[0]['pid']} //F")
+            print()
+            print("Stopping backend...")
+            if be_proc:
+                be_proc.terminate()
+                be_proc.wait()
+            sys.exit(1)
+    else:
+        fe_proc = subprocess.Popen(
+            [shutil.which("npm") or "npm", "run", "dev", "--",
+             "--host", "127.0.0.1", "--port", str(FRONTEND_PORT)],
+            cwd=FRONTEND_DIR,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        print(f"[INFO] Frontend starting, PID={fe_proc.pid}")
 
+    # ── Summary ─────────────────────────────────────────────────────────────
     print()
     print("=" * 50)
-    print("Backend:  http://127.0.0.1:8777")
-    print("Frontend: http://localhost:5175")
+    print("Workbench is ready.")
+    print()
+    print("Backend:")
+    print(f"  http://127.0.0.1:{BACKEND_PORT}/api/health")
+    print()
+    print("Frontend:")
+    print(f"  http://localhost:{FRONTEND_PORT}")
     print()
     print("Pages:")
-    print("  /                         总览")
-    print("  /project-overview         项目说明")
-    print("  /test-console             高级测试")
-    print("  /capability-runner        能力体验")
-    print("  /models-all               模型列表")
+    print(f"  Overview:          http://localhost:{FRONTEND_PORT}/")
+    print(f"  Project Overview:  http://localhost:{FRONTEND_PORT}/project-overview")
+    print(f"  Test Console:      http://localhost:{FRONTEND_PORT}/test-console")
+    print(f"  Capability Runner: http://localhost:{FRONTEND_PORT}/capability-runner")
+    print(f"  Models:            http://localhost:{FRONTEND_PORT}/models-all")
     print("=" * 50)
     print()
-    print("Press Ctrl+C to stop both processes.")
+    reused_note = ""
+    if be_reused or fe_reused:
+        reused_note = (
+            "Note: Ctrl+C stops processes started by this launcher only. "
+            "Processes reused from a previous launch are NOT terminated."
+        )
+        print(reused_note)
+        print()
+    print("Press Ctrl+C to stop processes started by this launcher.")
 
     try:
-        be_proc.wait()
+        if fe_proc:
+            fe_proc.wait()
+        else:
+            # Frontend was reused — wait for backend only
+            if be_proc:
+                be_proc.wait()
     except KeyboardInterrupt:
-        print("\n[INFO] Stopping...")
-        fe_proc.terminate()
-        be_proc.terminate()
-        fe_proc.wait()
-        be_proc.wait()
-        print("[INFO] Stopped.")
+        print("\n[INFO] Stopping processes started by this launcher...")
+        if be_proc and not be_reused:
+            be_proc.terminate()
+        if fe_proc and not fe_reused:
+            fe_proc.terminate()
+        if be_proc and not be_reused:
+            be_proc.wait()
+        if fe_proc and not fe_reused:
+            fe_proc.wait()
+        print("[INFO] Done.")
 
 
 def cmd_check() -> None:
@@ -329,6 +434,8 @@ def cmd_clean() -> None:
 
 
 def cmd_stop() -> None:
+    do_kill = "--kill" in sys.argv
+
     print("Port occupancy:")
     for port in [BACKEND_PORT, FRONTEND_PORT]:
         procs = find_process_on_port(port)
@@ -336,9 +443,18 @@ def cmd_stop() -> None:
             print(f"\n  Port {port}:")
             for p in procs:
                 print(f"    PID {p['pid']} ({p['name']})")
-                print(f"    Manual kill: taskkill //PID {p['pid']} //F")
+                if do_kill:
+                    print(f"    [WARN] About to kill process on port {port}: PID={p['pid']}")
+                    subprocess.run(["taskkill", "//PID", p["pid"], "//F"])
+                    print(f"    [DONE] Kill sent.")
+                else:
+                    print(f"    Manual kill: taskkill //PID {p['pid']} //F")
         else:
             print(f"\n  Port {port}: free")
+
+    if not do_kill:
+        print("\n(Omit --kill to only inspect, not kill.)")
+        print("Run 'python start.py stop --kill' to stop processes.")
 
 
 # ── main ─────────────────────────────────────────────────────────────────────
