@@ -41,6 +41,7 @@ jobs:
           python scripts/check_invocation_history_and_assets.py
           python scripts/check_productized_test_console.py
           python scripts/check_overview_navigation_productization.py
+          python scripts/check_productized_workbench_docs.py
 
       - name: Compile Python
         run: |
