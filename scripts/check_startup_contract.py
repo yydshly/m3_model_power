@@ -97,6 +97,69 @@ def main() -> int:
                 print(f"FAIL: RUNBOOK.md missing '{label}'")
                 errors.append(f"RUNBOOK.md missing: {label}")
 
+    # 8. scripts/dev.py uses /T for taskkill (process tree kill)
+    if dev_py.exists():
+        content = dev_py.read_text(encoding="utf-8")
+        if "/T" in content and "taskkill" in content:
+            print("PASS: scripts/dev.py uses /T for taskkill process tree kill")
+        else:
+            print("FAIL: scripts/dev.py missing /T in taskkill command")
+            errors.append("scripts/dev.py missing /T in taskkill")
+
+    # 9. scripts/dev.py does not use old //PID style
+    if dev_py.exists():
+        content = dev_py.read_text(encoding="utf-8")
+        if "//PID" in content:
+            print("FAIL: scripts/dev.py still uses old //PID style")
+            errors.append("scripts/dev.py still uses //PID (should be /PID)")
+        else:
+            print("PASS: scripts/dev.py does not use old //PID style")
+
+    # 10. scripts/dev.py guards long-running startup behavior
+    if dev_py.exists():
+        content = dev_py.read_text(encoding="utf-8")
+        startup_checks = [
+            ("STARTUP_LOCK", "startup lock"),
+            ("find_project_process_root", "project parent process detection"),
+            ("kill_process_tree", "process tree cleanup"),
+            ("check_url_contains", "frontend identity check"),
+        ]
+        for phrase, label in startup_checks:
+            if phrase in content:
+                print(f"PASS: scripts/dev.py contains '{label}'")
+            else:
+                print(f"FAIL: scripts/dev.py missing '{label}'")
+                errors.append(f"scripts/dev.py missing: {label}")
+        if "stdout=subprocess.PIPE" in content:
+            print("FAIL: scripts/dev.py still captures long-running child stdout")
+            errors.append("scripts/dev.py still captures long-running child stdout")
+        else:
+            print("PASS: scripts/dev.py does not capture long-running child stdout")
+
+    # 11. RUNBOOK.md mentions uvicorn reload parent behavior
+    if runbook.exists():
+        content = runbook.read_text(encoding="utf-8")
+        doc_checks = [
+            ("uvicorn `--reload`", "uvicorn reload"),
+            ("不会向上终止父进程", "taskkill parent-process warning"),
+            ("python start.py stop --kill", "stop --kill instruction"),
+        ]
+        for phrase, label in doc_checks:
+            if phrase in content:
+                print(f"PASS: RUNBOOK.md contains '{label}'")
+            else:
+                print(f"FAIL: RUNBOOK.md missing '{label}'")
+                errors.append(f"RUNBOOK.md missing: {label}")
+
+    # 12. RUNBOOK.md has proper taskkill /T /F instruction
+    if runbook.exists():
+        content = runbook.read_text(encoding="utf-8")
+        if "/T /F" in content and "taskkill" in content:
+            print("PASS: RUNBOOK.md has taskkill /T /F instruction")
+        else:
+            print("FAIL: RUNBOOK.md missing taskkill /T /F instruction")
+            errors.append("RUNBOOK.md missing taskkill /T /F")
+
     if errors:
         print(f"\n[FAILED] {len(errors)} error(s):")
         for e in errors:

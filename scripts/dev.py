@@ -6,6 +6,7 @@ Implements: doctor, install, dev, backend, frontend, check, build, clean, stop
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import socket
 import subprocess
@@ -19,6 +20,8 @@ BACKEND_DIR = ROOT / "backend"
 FRONTEND_DIR = ROOT / "frontend"
 BACKEND_PORT = 8777
 FRONTEND_PORT = 5175
+STARTUP_LOCK = ROOT / "backend" / "runtime" / "dev_startup.lock"
+IS_WINDOWS = os.name == "nt"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +29,7 @@ FRONTEND_PORT = 5175
 def find_process_on_port(port: int) -> list[dict]:
     """Return list of dicts with pid/process info for processes on port."""
     results = []
+    seen_pids = set()
     try:
         output = subprocess.check_output(
             ["netstat", "-ano"], text=True, encoding="utf-8", errors="replace"
@@ -35,6 +39,9 @@ def find_process_on_port(port: int) -> list[dict]:
                 parts = line.split()
                 if len(parts) >= 5:
                     pid = parts[-1]
+                    if pid in seen_pids:
+                        continue
+                    seen_pids.add(pid)
                     try:
                         p = subprocess.check_output(
                             ["tasklist", "/FI", f"PID eq {pid}"],
@@ -68,6 +75,17 @@ def check_url_status(url: str, timeout: int = 5) -> bool:
         return False
 
 
+def check_url_contains(url: str, needle: str, timeout: int = 5) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            if r.status != 200:
+                return False
+            body = r.read(100_000).decode("utf-8", errors="replace")
+            return needle in body
+    except Exception:
+        return False
+
+
 def wait_for_health(url: str, timeout: int = 30) -> bool:
     """Wait for URL to return 200 within timeout seconds."""
     deadline = time.time() + timeout
@@ -76,6 +94,69 @@ def wait_for_health(url: str, timeout: int = 30) -> bool:
             return True
         time.sleep(1)
     return False
+
+
+def wait_for_port_free(port: int, timeout: float = 8.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not find_process_on_port(port):
+            return True
+        time.sleep(0.3)
+    return not find_process_on_port(port)
+
+
+def pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        if IS_WINDOWS:
+            return get_process_detail(pid) is not None
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def acquire_startup_lock(timeout: float = 45.0) -> int:
+    STARTUP_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + timeout
+    while True:
+        try:
+            fd = os.open(str(STARTUP_LOCK), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, str(os.getpid()).encode("ascii"))
+            return fd
+        except FileExistsError:
+            try:
+                owner_text = STARTUP_LOCK.read_text(encoding="utf-8").strip()
+                owner_pid = int(owner_text) if owner_text else 0
+            except Exception:
+                owner_pid = 0
+            if not pid_is_running(owner_pid):
+                try:
+                    STARTUP_LOCK.unlink()
+                    continue
+                except OSError:
+                    pass
+            if time.time() >= deadline:
+                print("[FAIL] Another launcher is still starting the project.")
+                print(f"       Lock file: {STARTUP_LOCK}")
+                print("       Wait a moment, or run 'python start.py stop' to inspect ports.")
+                sys.exit(1)
+            print("[INFO] Another launcher is starting; waiting for it to finish...")
+            time.sleep(1)
+
+
+def release_startup_lock(fd: int | None) -> None:
+    if fd is None:
+        return
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    try:
+        STARTUP_LOCK.unlink()
+    except OSError:
+        pass
 
 
 def run_or_fail(cmd: list[str], cwd: Path | None = None) -> None:
@@ -242,12 +323,14 @@ Useful commands:
   python start.py check    run quick checks
   python start.py backend   start backend only
   python start.py frontend start frontend only
-  python start.py stop     inspect occupied ports
+  python start.py stop     inspect occupied ports only
+  python start.py stop --kill inspect and stop occupied port processes
 """
 
 
 def cmd_dev() -> None:
     print(DEV_BANNER)
+    startup_lock_fd = acquire_startup_lock()
 
     be_proc = None
     fe_proc = None
@@ -268,18 +351,21 @@ def cmd_dev() -> None:
             print()
             print("Quick排查:")
             print(f"  netstat -ano | findstr :{BACKEND_PORT}")
-            print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
-            print(f"  taskkill //PID {procs[0]['pid']} //F")
+            if procs:
+                root_pid = find_project_process_root(int(procs[0]["pid"]))
+                print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
+                print(f"  taskkill /PID {root_pid} /T /F")
+            else:
+                print("  python start.py stop")
             print()
             print("Stopping frontend if it was started by this launcher...")
+            release_startup_lock(startup_lock_fd)
             sys.exit(1)
     else:
         be_proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "app.main:app",
              "--reload", "--host", "127.0.0.1", "--port", str(BACKEND_PORT)],
             cwd=BACKEND_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
         )
         print(f"[INFO] Backend starting, PID={be_proc.pid}")
         print(f"[INFO] Waiting for backend health...")
@@ -290,7 +376,11 @@ def cmd_dev() -> None:
 
     # ── Frontend ───────────────────────────────────────────────────────────
     if port_in_use(FRONTEND_PORT):
-        reachable = check_url_status(f"http://127.0.0.1:{FRONTEND_PORT}", timeout=5)
+        reachable = check_url_contains(
+            f"http://127.0.0.1:{FRONTEND_PORT}",
+            "/src/main.tsx",
+            timeout=5,
+        )
         if reachable:
             print(f"[INFO] Frontend already running on http://localhost:{FRONTEND_PORT} — reusing it.")
             fe_reused = True
@@ -302,21 +392,24 @@ def cmd_dev() -> None:
             print()
             print("Quick排查:")
             print(f"  netstat -ano | findstr :{FRONTEND_PORT}")
-            print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
-            print(f"  taskkill //PID {procs[0]['pid']} //F")
+            if procs:
+                root_pid = find_project_process_root(int(procs[0]["pid"]))
+                print(f"  tasklist /FI \"PID eq {procs[0]['pid']}\"")
+                print(f"  taskkill /PID {root_pid} /T /F")
+            else:
+                print("  python start.py stop")
             print()
             print("Stopping backend...")
             if be_proc:
-                be_proc.terminate()
+                kill_process_tree(be_proc.pid, "backend")
                 be_proc.wait()
+            release_startup_lock(startup_lock_fd)
             sys.exit(1)
     else:
         fe_proc = subprocess.Popen(
             [shutil.which("npm") or "npm", "run", "dev", "--",
              "--host", "127.0.0.1", "--port", str(FRONTEND_PORT)],
             cwd=FRONTEND_DIR,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
         )
         print(f"[INFO] Frontend starting, PID={fe_proc.pid}")
 
@@ -347,21 +440,35 @@ def cmd_dev() -> None:
         )
         print(reused_note)
         print()
+    release_startup_lock(startup_lock_fd)
     print("Press Ctrl+C to stop processes started by this launcher.")
 
     try:
-        if fe_proc:
-            fe_proc.wait()
-        else:
-            # Frontend was reused — wait for backend only
-            if be_proc:
+        while True:
+            if fe_proc and fe_proc.poll() is not None:
+                if be_proc and not be_reused and be_proc.poll() is None:
+                    print("[INFO] Frontend exited; stopping backend started by this launcher...")
+                    kill_process_tree(be_proc.pid, "backend")
+                    be_proc.wait()
+                break
+            if be_proc and not be_reused and be_proc.poll() is not None:
+                if fe_proc and not fe_reused and fe_proc.poll() is None:
+                    print("[INFO] Backend exited; stopping frontend started by this launcher...")
+                    kill_process_tree(fe_proc.pid, "frontend")
+                    fe_proc.wait()
+                break
+            if not fe_proc and be_proc:
                 be_proc.wait()
+                break
+            if not fe_proc and not be_proc:
+                break
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("\n[INFO] Stopping processes started by this launcher...")
         if be_proc and not be_reused:
-            be_proc.terminate()
+            kill_process_tree(be_proc.pid, "backend")
         if fe_proc and not fe_reused:
-            fe_proc.terminate()
+            kill_process_tree(fe_proc.pid, "frontend")
         if be_proc and not be_reused:
             be_proc.wait()
         if fe_proc and not fe_reused:
@@ -433,6 +540,130 @@ def cmd_clean() -> None:
     print("Clean complete.")
 
 
+def get_process_detail(pid: int) -> dict | None:
+    """Get process details via PowerShell Get-CimInstance."""
+    if not IS_WINDOWS:
+        return None
+    try:
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\" | "
+                "Select-Object ProcessId,ParentProcessId,Name,CommandLine | "
+                "ConvertTo-Json -Compress",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        if result.stdout.strip():
+            try:
+                return json.loads(result.stdout)
+            except Exception:
+                return {"raw": result.stdout}
+    except Exception:
+        pass
+    return None
+
+
+def project_process_match(detail: dict | None) -> bool:
+    if not detail or "raw" in detail:
+        return False
+    command_line = str(detail.get("CommandLine") or "").lower()
+    name = str(detail.get("Name") or "").lower()
+    root = str(ROOT).lower()
+    if root not in command_line:
+        return False
+    process_markers = (
+        "python" in name,
+        "node" in name,
+        "npm" in name,
+        "cmd" in name,
+        "powershell" in name,
+        "uvicorn" in command_line,
+        "vite" in command_line,
+        "app.main:app" in command_line,
+        "npm run dev" in command_line,
+    )
+    return any(process_markers)
+
+
+def find_project_process_root(pid: int) -> int:
+    """Walk upward from a port PID and return the highest related project process."""
+    current_pid = pid
+    best_pid: int | None = None
+    seen: set[int] = set()
+    for _ in range(10):
+        if current_pid in seen or current_pid <= 0:
+            break
+        seen.add(current_pid)
+        detail = get_process_detail(current_pid)
+        if not detail or "raw" in detail:
+            break
+        if project_process_match(detail):
+            best_pid = current_pid
+        try:
+            current_pid = int(detail.get("ParentProcessId") or 0)
+        except Exception:
+            break
+    return best_pid or pid
+
+
+def kill_process_tree(pid: int | str, label: str = "process") -> None:
+    pid_str = str(pid)
+    if IS_WINDOWS:
+        subprocess.run(["taskkill", "/PID", pid_str, "/T", "/F"], check=False)
+        return
+    try:
+        os.kill(int(pid_str), 15)
+    except Exception:
+        pass
+
+
+def stop_port_process(port: int, pid: int | str) -> bool:
+    original_pid = int(pid)
+    if IS_WINDOWS and not pid_is_running(original_pid):
+        print(f"    [WARN] Port {port} is owned by PID {original_pid}, but that PID is not in the process table.")
+        print("    [INFO] This is not a killable process anymore; Windows is still reporting the socket.")
+        print("    [HINT] Wait a moment and recheck. If LISTENING remains, restart Windows or the networking stack.")
+        return False
+    root_pid = find_project_process_root(original_pid)
+    if root_pid != original_pid:
+        print(f"    [INFO] Port PID {original_pid} belongs to project parent PID {root_pid}")
+    print(f"    [WARN] About to kill process tree on port {port}: PID={root_pid}")
+    kill_process_tree(root_pid, f"port {port}")
+    if wait_for_port_free(port):
+        print(f"    [PASS] Port {port} released")
+        return True
+    remaining = find_process_on_port(port)
+    if remaining:
+        pid_after = int(remaining[0]["pid"])
+        print(f"    [WARN] Port {port} still occupied after kill. PID={pid_after}")
+        if IS_WINDOWS and not pid_is_running(pid_after):
+            print("    [INFO] The remaining PID is not in the process table, so taskkill cannot remove it.")
+            print("    [HINT] Wait a moment and recheck. If LISTENING remains, restart Windows or the networking stack.")
+            return False
+        detail = get_process_detail(pid_after)
+        if detail:
+            print("    Process detail:")
+            if "raw" in detail:
+                for line in detail["raw"].splitlines():
+                    print(f"      {line}")
+            else:
+                print(f"      PID: {detail.get('ProcessId', '?')}")
+                print(f"      Name: {detail.get('Name', '?')}")
+                print(f"      Parent PID: {detail.get('ParentProcessId', '?')}")
+                cmdline = detail.get("CommandLine") or "(not available)"
+                print(f"      CommandLine: {cmdline}")
+        retry_root = find_project_process_root(pid_after)
+        print(f"    [HINT] Try: taskkill /PID {retry_root} /T /F")
+    return False
+
+
 def cmd_stop() -> None:
     do_kill = "--kill" in sys.argv
 
@@ -444,17 +675,23 @@ def cmd_stop() -> None:
             for p in procs:
                 print(f"    PID {p['pid']} ({p['name']})")
                 if do_kill:
-                    print(f"    [WARN] About to kill process on port {port}: PID={p['pid']}")
-                    subprocess.run(["taskkill", "//PID", p["pid"], "//F"])
-                    print(f"    [DONE] Kill sent.")
+                    stop_port_process(port, p["pid"])
                 else:
-                    print(f"    Manual kill: taskkill //PID {p['pid']} //F")
+                    pid = int(p["pid"])
+                    if IS_WINDOWS and not pid_is_running(pid):
+                        print("    PID is not in the process table; taskkill cannot remove it.")
+                        print("    Recheck after a moment. If LISTENING remains, restart Windows or the networking stack.")
+                    else:
+                        root_pid = find_project_process_root(pid)
+                        if root_pid != pid:
+                            print(f"    Project parent PID: {root_pid}")
+                        print(f"    Manual kill: taskkill /PID {root_pid} /T /F")
         else:
             print(f"\n  Port {port}: free")
 
     if not do_kill:
-        print("\n(Omit --kill to only inspect, not kill.)")
-        print("Run 'python start.py stop --kill' to stop processes.")
+        print("\nInspect only: no processes were stopped.")
+        print("Run 'python start.py stop --kill' to inspect and stop occupied port processes.")
 
 
 # ── main ─────────────────────────────────────────────────────────────────────

@@ -174,8 +174,11 @@ netstat -ano | findstr :5175
 tasklist /FI "PID eq <PID>"
 
 # 手动 kill（替换 <PID> 为实际进程号）
-taskkill //PID <PID> //F
+# 注意：uvicorn --reload 在 Windows 下有父子进程，优先使用 start.py stop --kill
+taskkill /PID <PID> /T /F
 ```
+
+**说明**：`/T`（tree）参数会终止目标进程及其子进程，但不会向上终止父进程。uvicorn `--reload` 模式在 Windows 下会启动 reloader 父子进程；如果端口 PID 是 worker 子进程，只杀它可能被父进程重新拉起。`python start.py stop --kill` 会先尝试从端口 PID 追到本项目相关的父进程，再终止进程树。
 
 ### Linux / Git Bash 手动排查
 
@@ -187,6 +190,29 @@ ss -tlnp | grep 5175
 # kill
 kill <PID>
 ```
+
+---
+
+## taskkill 显示成功但端口仍被占用
+
+**现象**：`taskkill` 报告进程已终止，但端口仍然 LISTENING。
+
+**常见原因**：
+1. uvicorn `--reload` 父子进程未全部终止（常见于 Windows）
+2. 另一个启动器重新拉起了后端
+3. 杀的是子进程，父进程（reloader）仍在
+
+**处理步骤**：
+1. 重新执行 `netstat -ano | findstr :8777` 查看最新 PID
+2. 优先执行 `python start.py stop --kill`
+3. 再运行 `python start.py stop` 检查端口是否已释放
+4. 如果仍有问题，用 `Get-CimInstance Win32_Process -Filter "ProcessId=<PID>"` 查看进程树关系
+
+**uvicorn --reload 在 Windows 下的进程结构**：
+- 父进程：Python 主进程（reloader monitor）
+- 子进程：实际的 uvicorn worker
+- 只杀子进程时，父进程会重新拉起一个子进程
+- 如果手动处理，应先找到 reloader 父进程，再对父进程执行 `taskkill /PID <PID> /T /F`
 
 ---
 

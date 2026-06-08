@@ -2,17 +2,18 @@
 """Root entry point for m3_model_power.
 
 Usage:
-    python start.py          # dev (default)
-    python start.py dev      # dev mode
-    python start.py doctor   # environment check
-    python start.py install  # install dependencies
-    python start.py check    # run guard scripts
-    python start.py build    # build frontend + compile backend
-    python start.py backend  # start backend only
-    python start.py frontend # start frontend only
-    python start.py clean    # clean runtime artifacts
-    python start.py stop     # show stop instructions
-    python start.py --help   # show this help
+    python start.py             # dev (default)
+    python start.py dev         # dev mode
+    python start.py doctor      # environment check
+    python start.py install     # install dependencies
+    python start.py check       # run guard scripts
+    python start.py build       # build frontend + compile backend
+    python start.py backend     # start backend only
+    python start.py frontend    # start frontend only
+    python start.py clean       # clean runtime artifacts
+    python start.py stop        # inspect occupied ports
+    python start.py stop --kill # inspect and stop occupied port processes
+    python start.py --help      # show this help
 """
 from __future__ import annotations
 
