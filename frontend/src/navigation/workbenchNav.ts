@@ -27,6 +27,7 @@ export const WORKBENCH_NAV: NavGroup[] = [
     items: [
       { to: '/', emoji: '🏠', label: '总览' },
       { to: '/capability-runner', emoji: '⚡', label: '能力体验' },
+      { to: '/project-overview', emoji: '📖', label: '项目说明' },
     ],
   },
   {

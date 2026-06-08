@@ -31,6 +31,7 @@ REQUIRED_GUARD_SCRIPTS = [
     "scripts/check_interaction_regression.py",
     "scripts/check_special_panels_history.py",
     "scripts/check_history_result_summary.py",
+    "scripts/check_project_overview_page.py",
 ]
 
 REQUIRED_CI_TERMS = [
