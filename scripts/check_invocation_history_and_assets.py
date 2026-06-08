@@ -216,6 +216,85 @@ def check_no_runtime_assets_in_repo(errors: list[str], warnings: list[str]) -> N
         )
 
 
+def check_testconsole_reuses_history_panel(errors: list[str], warnings: list[str]) -> None:
+    """检查 TestConsole.tsx 复用了 InvocationHistoryPanel"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(base, "frontend/src/pages/TestConsole.tsx")
+    if not os.path.exists(path):
+        errors.append(f"[UI] TestConsole.tsx not found")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    if "import InvocationHistoryPanel" not in content:
+        errors.append(f"[UI] TestConsole.tsx does not import InvocationHistoryPanel")
+    if "<InvocationHistoryPanel" not in content:
+        errors.append(f"[UI] TestConsole.tsx does not use <InvocationHistoryPanel JSX component")
+
+
+def check_capabilityrunner_has_history(errors: list[str], warnings: list[str]) -> None:
+    """检查 CapabilityRunner.tsx 接入 history panel"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(base, "frontend/src/pages/CapabilityRunner.tsx")
+    if not os.path.exists(path):
+        errors.append(f"[UI] CapabilityRunner.tsx not found")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    checks = [
+        ("getTestConsoleHistory", "getTestConsoleHistory API call"),
+        ("InvocationHistoryPanel", "InvocationHistoryPanel component"),
+        ("capability_id === selected", "capability_id filtering logic"),
+    ]
+    for pattern, label in checks:
+        if pattern not in content:
+            errors.append(f"[UI] CapabilityRunner.tsx missing {label} ('{pattern}')")
+
+
+def check_strong_img_fields_no_generic_urls(errors: list[str], warnings: list[str]) -> None:
+    """检查 _STRONG_IMG_URL_FIELDS 不包含 file_url/download_url"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(base, "backend/app/minimax_core/verification/history_store.py")
+    if not os.path.exists(path):
+        errors.append(f"[BACKEND] {path} not found")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # Find _STRONG_IMG_URL_FIELDS block
+    match = re.search(
+        r'_STRONG_IMG_URL_FIELDS\s*=\s*frozenset\s*\(\s*\{([^}]+)\}',
+        content,
+        re.DOTALL,
+    )
+    if not match:
+        errors.append(f"[BACKEND] _STRONG_IMG_URL_FIELDS definition not found in history_store.py")
+        return
+    fields_block = match.group(1)
+    forbidden = ["file_url", "download_url"]
+    for field in forbidden:
+        if field in fields_block:
+            errors.append(
+                f"[BACKEND] _STRONG_IMG_URL_FIELDS contains '{field}' which is too generic "
+                f"and should be moved to _WEAK_URL_FIELDS with heuristic inference"
+            )
+
+
+def check_no_misleading_copy_in_history_preview(errors: list[str], warnings: list[str]) -> None:
+    """检查 HistoryAssetPreview 中没有'完整结果 JSON'误导文案"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(base, "frontend/src/components/HistoryAssetPreview.tsx")
+    if not os.path.exists(path):
+        errors.append(f"[UI] HistoryAssetPreview.tsx not found")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    if "完整结果 JSON" in content:
+        errors.append(
+            f"[UI] HistoryAssetPreview.tsx contains '完整结果 JSON' which is misleading - "
+            f"the rawResult shown there is a summarized result, not the full original response"
+        )
+
+
 def main():
     errors = []
     warnings = []
@@ -227,6 +306,10 @@ def main():
     check_frontend_ui_labels(errors, warnings)
     check_no_leaky_debug_in_main_ui(errors, warnings)
     check_no_runtime_assets_in_repo(errors, warnings)
+    check_testconsole_reuses_history_panel(errors, warnings)
+    check_capabilityrunner_has_history(errors, warnings)
+    check_strong_img_fields_no_generic_urls(errors, warnings)
+    check_no_misleading_copy_in_history_preview(errors, warnings)
 
     if errors:
         print(f"[FAILED] {len(errors)} error(s):")

@@ -90,7 +90,7 @@ export default function HistoryAssetPreview({ result_summary, rawResult }: Props
       {rawResult && (
         <details className="mt-2">
           <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
-            完整结果 JSON
+            历史记录摘要 JSON
           </summary>
           <pre className="mt-1 text-[10px] bg-slate-100 rounded p-2 overflow-auto max-h-40 whitespace-pre-wrap">
             {JSON.stringify(rawResult, null, 2)}

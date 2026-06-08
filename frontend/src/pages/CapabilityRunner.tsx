@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { invoke, riskCheck, uploadCapability, getRunnerTemplates, type InvokeResult, type RiskCheckResult, type RunnerTemplate } from '../api'
+import { invoke, riskCheck, uploadCapability, getRunnerTemplates, getTestConsoleHistory, type InvokeResult, type RiskCheckResult, type RunnerTemplate, type TestConsoleHistoryItem } from '../api'
 import AssetResultPreview from '../components/AssetResultPreview'
+import InvocationHistoryPanel from '../components/InvocationHistoryPanel'
 import FileResultPreview from '../components/FileResultPreview'
 import AsyncTaskResultPreview from '../components/AsyncTaskResultPreview'
 import ChatResultPreview from '../components/ChatResultPreview'
@@ -1091,12 +1092,14 @@ function CapabilityCard({
   handoffKeys,
   onBack,
   onChainNavigate,
+  onDone,
 }: {
   template: RunnerTemplate
   initialValues?: Record<string, string>
   handoffKeys?: string[]
   onBack: () => void
   onChainNavigate: (capId: string) => void
+  onDone?: () => void
 }) {
   const schema = template.form_schema as FormSchema
   const defaults = getDefaultValues(schema)
@@ -1164,6 +1167,7 @@ function CapabilityCard({
         }
         setResult(res)
         setRunState('done')
+        onDone?.()
         return
       }
 
@@ -1188,6 +1192,7 @@ function CapabilityCard({
 
       setResult(res)
       setRunState('done')
+      onDone?.()
     } catch (e: any) {
       setErrorMessage(e?.message ?? String(e))
       setRunState('error')
@@ -1522,6 +1527,18 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const fromWorkflow = searchParams.get('from_workflow')
   const fromScenario = searchParams.get('from_scenario')
 
+  const [history, setHistory] = useState<TestConsoleHistoryItem[]>([])
+  const [historyErr, setHistoryErr] = useState<string | null>(null)
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+
+  const refreshHistory = () => {
+    getTestConsoleHistory(50)
+      .then(r => { setHistory(r.items); setHistoryErr(null) })
+      .catch((e: any) => setHistoryErr(e.message))
+  }
+
+  useEffect(() => { refreshHistory() }, [])
+
   const handleSelect = (id: string) => {
     setSearchParams({ capability: id })
   }
@@ -1556,6 +1573,11 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   useEffect(() => {
     if (selected) clearHandoff(selectedId)
   }, [selectedId])
+
+  // Filter history to current capability
+  const currentCapabilityHistory = selected
+    ? history.filter(item => item.capability_id === selected)
+    : []
 
   return (
     <div className="p-8 max-w-5xl">
@@ -1601,11 +1623,38 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               handoffKeys={handoffKeys}
               onBack={handleBack}
               onChainNavigate={handleSelect}
+              onDone={refreshHistory}
             />
           ) : (
             <div className="text-sm text-slate-500">
               不支持的 Runner 能力：{selected}（支持的：{supportedCapabilities.join(' / ')}）
             </div>
+          )}
+
+          {/* Current capability history */}
+          {selected && (
+            <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
+                <button
+                  onClick={refreshHistory}
+                  className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+                >
+                  刷新
+                </button>
+              </div>
+
+              {historyErr && (
+                <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+              )}
+
+              <InvocationHistoryPanel
+                items={currentCapabilityHistory}
+                expandedId={expandedHistoryId}
+                onToggleExpand={setExpandedHistoryId}
+                emptyMessage="当前能力暂无调用记录"
+              />
+            </section>
           )}
         </div>
       )}

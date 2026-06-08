@@ -103,12 +103,18 @@ _AUD_EXT_RELS = frozenset({"mp3", "wav", "m4a", "flac", "ogg", "aac"})
 # Fields whose values are semantically image/audio URLs — skip extension check
 _STRONG_IMG_URL_FIELDS = frozenset({
     "image_url", "img_url", "imageUrl", "imageURL",
-    "file_url", "download_url", "image_file",
+    "image_file",
 })
 _STRONG_AUD_URL_FIELDS = frozenset({
     "audio_url", "voice_url", "speech_url", "music_url",
 })
 _STRONG_URL_FIELDS = _STRONG_IMG_URL_FIELDS | _STRONG_AUD_URL_FIELDS
+
+# Generic URL fields that need weak inference (extension + keyword heuristics)
+_WEAK_URL_FIELDS = frozenset({"file_url", "download_url", "url", "content_url"})
+
+_AUDIO_KW = frozenset({"audio", "music", "voice", "speech", "sound", "song", "tts", "asr"})
+_IMAGE_KW = frozenset({"image", "img", "picture", "photo", "pic", "thumbnail"})
 
 _URL_MAX_LEN = 500
 _TEXT_PREVIEW_MAX = 300
@@ -255,6 +261,30 @@ def _is_audio_url(url: str, field_name: str = "") -> bool:
     return ext in _AUD_EXT_RELS if ext else False
 
 
+def _url_type_hint(url: str, field_name: str) -> str | None:
+    """Infer asset type for weak URL fields (file_url, download_url, url, content_url).
+
+    Returns: "image" | "audio" | "file" | None
+    """
+    # 1. Check URL extension first
+    ext = _url_ext(url)
+    if ext:
+        if ext in _AUD_EXT_RELS:
+            return "audio"
+        if ext in _IMG_EXT_RELS:
+            return "image"
+    # 2. Check keywords in field name and URL
+    combined = (field_name + " " + url).lower()
+    has_audio = any(kw in combined for kw in _AUDIO_KW)
+    has_image = any(kw in combined for kw in _IMAGE_KW)
+    if has_audio and not has_image:
+        return "audio"
+    if has_image and not has_audio:
+        return "image"
+    # 3. Default to file
+    return "file"
+
+
 def _safe_str(value: Any, max_len: int) -> str:
     s = str(value)
     return s[:max_len] + ("…" if len(s) > max_len else "")
@@ -353,11 +383,9 @@ def _collect_assets(data: Any, depth: int, assets: list[dict]) -> None:
             })
             return  # file_id is terminal, don't recurse further
 
-        # URL-like string fields
-        for field in ("image_url", "img_url", "imageUrl", "imageURL",
-                      "file_url", "download_url", "image_file",
-                      "audio_url", "voice_url", "speech_url", "music_url",
-                      "url", "audio", "content_url"):
+        # URL-like string fields — strong typed first, then weak inference
+        for field in ("image_url", "img_url", "imageUrl", "imageURL", "image_file",
+                      "audio_url", "voice_url", "speech_url", "music_url"):
             if field in d and isinstance(d[field], str) and d[field].strip():
                 url = d[field]
                 if not (url.startswith("http://") or url.startswith("https://")):
@@ -366,6 +394,22 @@ def _collect_assets(data: Any, depth: int, assets: list[dict]) -> None:
                 if _is_image_url(url, field):
                     assets.append({"type": "image", "url": truncated, "label": field, "file_id": None, "filename": None, "mime_type": None, "content_length": None})
                 elif _is_audio_url(url, field):
+                    assets.append({"type": "audio", "url": truncated, "label": field, "file_id": None, "filename": None, "mime_type": None, "content_length": None})
+                # Continue checking other fields — don't return here
+
+        # Weak URL fields — use extension + keyword heuristics
+        for field in ("file_url", "download_url", "url", "content_url"):
+            if field in d and isinstance(d[field], str) and d[field].strip():
+                url = d[field]
+                if not (url.startswith("http://") or url.startswith("https://")):
+                    continue
+                truncated = url[:_URL_MAX_LEN] + ("…" if len(url) > _URL_MAX_LEN else "")
+                type_hint = _url_type_hint(url, field)
+                if type_hint == "file":
+                    assets.append({"type": "file", "url": truncated, "label": field, "file_id": None, "filename": None, "mime_type": None, "content_length": None})
+                elif type_hint == "image":
+                    assets.append({"type": "image", "url": truncated, "label": field, "file_id": None, "filename": None, "mime_type": None, "content_length": None})
+                elif type_hint == "audio":
                     assets.append({"type": "audio", "url": truncated, "label": field, "file_id": None, "filename": None, "mime_type": None, "content_length": None})
                 # Continue checking other fields — don't return here
 

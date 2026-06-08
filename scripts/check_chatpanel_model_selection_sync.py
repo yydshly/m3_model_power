@@ -38,7 +38,6 @@ def check_sync_pattern(path: str, errors: list[str], warnings: list[str]) -> Non
         content = f.read()
 
     if 'useSyncedModelSelection' in content:
-<<<<<<< HEAD
         # 通过 hook 使用，间接验证了同步逻辑
         return
 
@@ -57,11 +56,7 @@ def check_hook_imported_in_all(paths: list[str], errors: list[str]) -> None:
     """如果 useSyncedModelSelection.ts 存在，三个组件都应该引用它"""
     hook_path = os.path.join(os.path.dirname(paths[0]), '..', 'domain', 'useSyncedModelSelection.ts')
     if not os.path.exists(hook_path):
-<<<<<<< HEAD
         return  # hook 不存在则跳过（说明还用 inline 方式）
-=======
-        return
->>>>>>> 4cb4dd4 (feat: invocation history duration_ms, reusable history panel, debug collapsibles, model sync, CI guardrails)
 
     for path in paths:
         if not os.path.exists(path):
