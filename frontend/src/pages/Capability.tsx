@@ -638,7 +638,7 @@ export default function CapabilityPage() {
             </div>
           )}
           {effectiveMode === 'invoke' && cap.id === 'tts-ws' && (
-            <TtsWsPanel cap={cap} models={models} />
+            <TtsWsPanel cap={cap} models={models} onDone={() => refreshCapabilityHistory({ retry: true })} />
           )}
           {effectiveMode === 'invoke' && cap.has_handler && cap.async_job && cap.category === 'vision' && (
             <AsyncVideoPanel cap={cap} models={models} />

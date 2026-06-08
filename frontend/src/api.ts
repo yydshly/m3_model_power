@@ -287,7 +287,7 @@ export async function getVerificationIndex(): Promise<VerificationIndex> {
 export type TestConsoleHistoryItem = {
   id: string
   created_at: string
-  action: 'risk_check' | 'invoke' | 'stream' | 'upload'
+  action: 'risk_check' | 'invoke' | 'stream' | 'upload' | 'ws'
   capability_id: string
   duration_ms?: number | null
   payload_summary: {

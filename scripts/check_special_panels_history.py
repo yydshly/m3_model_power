@@ -18,6 +18,14 @@ Checks (P1-5):
  14. StreamPanel must NOT call JSON.parse directly in validatePayloadForCapability
  15. StreamPanel must have safe JSON parse (parseBodySafely or equivalent)
  16. UploadPanel error message must be `[status] message` not `[status message`
+ 17. TtsWsPanel must support onDone prop
+ 18. TtsWsPanel must have parameter validation UI
+ 19. TtsWsPanel must NOT default voice_id = 'female-shaonv'
+ 20. Capability.tsx passes onDone to TtsWsPanel
+ 21. backend/app/routers/ws.py must call append_history
+ 22. ws.py must NOT contain localhost:8000 (misleading comment)
+ 23. InvocationHistoryPanel must include ws in ACTION_LABELS
+ 24. api.ts TestConsoleHistoryItem.action must include 'ws'
 """
 import sys
 import re
@@ -208,6 +216,68 @@ def main() -> None:
         else:
             print("FAIL: UploadPanel error message missing closing bracket")
             errors += 1
+
+    # ── 17. TtsWsPanel supports onDone prop ───────────────────────────────
+    tws = FRONTEND_SRC / "components" / "TtsWsPanel.tsx"
+    tws_content = tws.read_text(encoding="utf-8")
+    if "onDone?" in tws_content or "onDone:" in tws_content:
+        pass_check("TtsWsPanel supports onDone prop")
+    else:
+        print("FAIL: TtsWsPanel does not support onDone prop")
+        errors += 1
+
+    # ── 18. TtsWsPanel has parameter validation UI ────────────────────────
+    if "validationIssues" in tws_content and "canStart" in tws_content:
+        pass_check("TtsWsPanel has parameter validation UI")
+    else:
+        print("FAIL: TtsWsPanel does not have parameter validation UI")
+        errors += 1
+
+    # ── 19. TtsWsPanel must NOT default voice_id = 'female-shaonv' ───────
+    if "female-shaonv" in tws_content:
+        print("FAIL: TtsWsPanel still defaults voice_id to 'female-shaonv'")
+        errors += 1
+    else:
+        pass_check("TtsWsPanel does not default voice_id to 'female-shaonv'")
+
+    # ── 20. Capability.tsx passes onDone to TtsWsPanel ──────────────────
+    if re.search(r'<TtsWsPanel[^>]*onDone=', cap_content):
+        pass_check("Capability.tsx passes onDone to TtsWsPanel")
+    else:
+        print("FAIL: Capability.tsx does not pass onDone to TtsWsPanel")
+        errors += 1
+
+    # ── 21. backend/app/routers/ws.py calls append_history ────────────────
+    ws_py = BACKEND_APP / "routers" / "ws.py"
+    ws_content = ws_py.read_text(encoding="utf-8")
+    if "append_history" in ws_content:
+        pass_check("backend/app/routers/ws.py calls append_history")
+    else:
+        print("FAIL: backend/app/routers/ws.py does not call append_history")
+        errors += 1
+
+    # ── 22. ws.py must NOT contain localhost:8000 (misleading comment) ───
+    if "localhost:8000" in ws_content:
+        print("FAIL: ws.py still contains misleading localhost:8000 comment")
+        errors += 1
+    else:
+        pass_check("ws.py does not contain localhost:8000")
+
+    # ── 23. InvocationHistoryPanel includes ws in ACTION_LABELS ───────────
+    if re.search(r'\bws\s*:', labels_block):
+        pass_check("InvocationHistoryPanel ACTION_LABELS includes ws")
+    else:
+        print("FAIL: InvocationHistoryPanel ACTION_LABELS does not include ws")
+        errors += 1
+
+    # ── 24. api.ts TestConsoleHistoryItem.action must include 'ws' ────────
+    api_ts = FRONTEND_SRC / "api.ts"
+    api_content = api_ts.read_text(encoding="utf-8")
+    if re.search(r"'ws'", api_content):
+        pass_check("api.ts TestConsoleHistoryItem.action includes 'ws'")
+    else:
+        print("FAIL: api.ts TestConsoleHistoryItem.action does not include 'ws'")
+        errors += 1
 
     # ── Summary ──────────────────────────────────────────────────────────
     if errors == 0:

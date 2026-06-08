@@ -443,7 +443,7 @@ export default function TestConsole() {
   const [historyErr, setHistoryErr] = useState<string | null>(null)
   const [historyStatus, setHistoryStatus] = useState<HistoryStatusResp | null>(null)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
-  const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'>('all')
+  const [filterHistoryAction, setFilterHistoryAction] = useState<'all'|'risk_check'|'invoke'|'stream'|'upload'|'ws'>('all')
   const [filterHistoryHasAssets, setFilterHistoryHasAssets] = useState(false)
   const [descriptions, setDescriptions] = useState<Record<string, CapabilityDescription>>({})
 

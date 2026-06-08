@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Capability, Model } from '../api'
 
 /**
@@ -9,24 +10,58 @@ import type { Capability, Model } from '../api'
  *   最后 { event: "task_finish" }
  * 上游每来一段音频，data.audio 字段为 hex 字符串，累计后用 Blob 播放。
  */
-export function TtsWsPanel({ cap, models }: { cap: Capability; models: Model[] }) {
+export function TtsWsPanel({
+  cap,
+  models,
+  onDone,
+}: {
+  cap: Capability
+  models: Model[]
+  onDone?: (info?: { capability_id?: string }) => void
+}) {
+  const [searchParams] = useSearchParams()
   const [model, setModel] = useState(models[0]?.id ?? 'speech-02-turbo')
-  const [voiceId, setVoiceId] = useState('female-shaonv')
-  const [text, setText] = useState('你好，欢迎使用 MiniMax 实时语音合成。')
+  const [voiceId, setVoiceId] = useState(searchParams.get('voice_id') || '')
+  const [text, setText] = useState('')
   const [log, setLog] = useState<string[]>([])
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const chunksRef = useRef<Uint8Array[]>([])
+  const finishedRef = useRef(false)
 
   const append = (s: string) => setLog((prev) => [...prev.slice(-200), s])
 
+  // Close WebSocket on unmount
   useEffect(() => () => { wsRef.current?.close() }, [])
 
+  // Derive validation
+  const validationIssues: string[] = []
+  if (!model) validationIssues.push('请选择模型')
+  if (!voiceId.trim()) validationIssues.push('请填写 voice_id，可先通过 voice-list 查询可用音色')
+  if (!text.trim()) validationIssues.push('请填写要合成的文本')
+  const canStart = !running && validationIssues.length === 0
+
+  const finish = () => {
+    if (finishedRef.current) return
+    finishedRef.current = true
+    if (chunksRef.current.length > 0 && !audioUrl) {
+      const blob = new Blob(chunksRef.current as BlobPart[], { type: 'audio/mpeg' })
+      setAudioUrl(URL.createObjectURL(blob))
+    }
+    setRunning(false)
+    onDone?.({ capability_id: cap.id })
+  }
+
   const start = () => {
+    if (validationIssues.length > 0) {
+      append(`✗ 参数检查未通过：${validationIssues.join('；')}`)
+      return
+    }
     setLog([])
     setAudioUrl(null)
     chunksRef.current = []
+    finishedRef.current = false
     setRunning(true)
     const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/api/ws/${cap.id}`)
     wsRef.current = ws
@@ -66,14 +101,6 @@ export function TtsWsPanel({ cap, models }: { cap: Capability; models: Model[] }
     ws.onclose = () => { append('■ 连接关闭'); finish() }
   }
 
-  const finish = () => {
-    if (chunksRef.current.length > 0 && !audioUrl) {
-      const blob = new Blob(chunksRef.current as BlobPart[], { type: 'audio/mpeg' })
-      setAudioUrl(URL.createObjectURL(blob))
-    }
-    setRunning(false)
-  }
-
   const stop = () => { wsRef.current?.close(); setRunning(false) }
 
   return (
@@ -86,16 +113,44 @@ export function TtsWsPanel({ cap, models }: { cap: Capability; models: Model[] }
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-600 mb-1">voice_id</label>
-          <input value={voiceId} onChange={(e) => setVoiceId(e.target.value)} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white" />
+          <label className="block text-xs text-slate-600 mb-1">
+            voice_id
+            <span className="ml-1 text-amber-600 font-normal">（必填）</span>
+          </label>
+          <input
+            value={voiceId}
+            onChange={(e) => setVoiceId(e.target.value)}
+            placeholder="请先通过 voice-list 获取"
+            className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white"
+          />
         </div>
       </div>
       <div>
         <label className="block text-xs text-slate-600 mb-1">文本</label>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} className="w-full border border-slate-300 rounded p-2 text-sm" />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+          placeholder="请填写要合成的文本"
+          className="w-full border border-slate-300 rounded p-2 text-sm"
+        />
       </div>
+
+      {validationIssues.length > 0 && (
+        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside">
+            {validationIssues.map((x) => <li key={x}>{x}</li>)}
+          </ul>
+        </div>
+      )}
+
       <div className="flex gap-2">
-        <button onClick={start} disabled={running} className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm disabled:opacity-50">
+        <button
+          onClick={start}
+          disabled={!canStart}
+          className="px-4 py-1.5 bg-sky-600 text-white rounded text-sm disabled:opacity-50"
+        >
           {running ? '合成中…' : '开始合成'}
         </button>
         {running && <button onClick={stop} className="px-4 py-1.5 bg-slate-200 rounded text-sm">中断</button>}

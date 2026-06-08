@@ -1,17 +1,24 @@
 """WebSocket 反向代理：tts-ws
 
-前端连接 ws://localhost:8000/api/ws/tts-ws，发送 JSON 任务体；
+前端通过 /api/ws/tts-ws 连接 Vite dev server，由前端代理转发到后端 8777。
 后端连接上游 wss://api.minimaxi.com/ws/v1/t2a_v2 并双向透传。
 鉴权与 group id 仍在后端注入，前端不接触 Key。
+
+历史写入（P1-4）：
+- 连接关闭后写入摘要到 history.jsonl（不写完整消息和音频）
+- 摘要包含 client/upstream message count、audio bytes、model、voice_id、duration_ms
 """
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ..config import settings
+from ..minimax_core.verification.history_store import append_history
 from ..registry import get_registry
 
 router = APIRouter()
@@ -47,12 +54,38 @@ async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
     upstream_url = _upstream_ws_url(UPSTREAM_MAP[cap_id])
     headers = [("Authorization", f"Bearer {settings.minimax_effective_api_key}")]
 
+    t0 = time.perf_counter()
+    stats = {
+        "client_message_count": 0,
+        "upstream_message_count": 0,
+        "audio_bytes": 0,
+        "model": None,
+        "voice_id": None,
+        "task_text_preview": "",
+        "finished_ok": False,
+        "error_message": None,
+    }
+
     try:
         async with websockets.connect(upstream_url, additional_headers=headers, max_size=None) as up:
             async def client_to_up() -> None:
                 try:
                     while True:
                         msg = await ws.receive_text()
+                        stats["client_message_count"] += 1
+                        # Extract model/voice_id from task_start, text preview from task_continue
+                        try:
+                            obj = json.loads(msg)
+                            if obj.get("event") == "task_start":
+                                stats["model"] = obj.get("model")
+                                vs = obj.get("voice_setting") or {}
+                                stats["voice_id"] = vs.get("voice_id")
+                            if obj.get("event") == "task_continue":
+                                txt = obj.get("text")
+                                if isinstance(txt, str):
+                                    stats["task_text_preview"] = txt[:200]
+                        except Exception:
+                            pass
                         await up.send(msg)
                 except WebSocketDisconnect:
                     try:
@@ -63,21 +96,60 @@ async def ws_proxy(ws: WebSocket, cap_id: str) -> None:
             async def up_to_client() -> None:
                 try:
                     async for msg in up:
+                        stats["upstream_message_count"] += 1
                         if isinstance(msg, bytes):
                             await ws.send_bytes(msg)
                         else:
+                            # Try to parse event from upstream message for audio_bytes and finish tracking
+                            try:
+                                obj = json.loads(msg)
+                                audio_hex = (obj or {}).get("data", {}).get("audio")
+                                if isinstance(audio_hex, str):
+                                    stats["audio_bytes"] += len(audio_hex) // 2
+                                evt = (obj or {}).get("event") or (obj or {}).get("data", {}).get("event")
+                                if evt in ("task_finished", "task_finish", "finished"):
+                                    stats["finished_ok"] = True
+                                if evt == "task_failed":
+                                    stats["error_message"] = str(obj)
+                            except Exception:
+                                pass
                             await ws.send_text(msg)
                 except Exception:
                     pass
 
             await asyncio.gather(client_to_up(), up_to_client())
     except Exception as e:  # noqa: BLE001
+        stats["error_message"] = str(e)
         try:
             await ws.send_json({"error": "upstream_error", "message": str(e)})
         except Exception:
             pass
     finally:
+        duration_ms = int((time.perf_counter() - t0) * 1000)
         try:
             await ws.close()
         except Exception:
             pass
+        # Write history summary (no full messages, no audio)
+        append_history(
+            action="ws",
+            capability_id=cap_id,
+            payload={
+                "model": stats.get("model"),
+                "voice_setting": {"voice_id": stats.get("voice_id")},
+                "text_preview": stats.get("task_text_preview"),
+            },
+            confirmations={},
+            result={
+                "ok": bool(stats.get("finished_ok")) and not stats.get("error_message"),
+                "data": {
+                    "ws": True,
+                    "client_message_count": stats.get("client_message_count"),
+                    "upstream_message_count": stats.get("upstream_message_count"),
+                    "audio_bytes": stats.get("audio_bytes"),
+                },
+                "error": "ws_error" if stats.get("error_message") else None,
+                "message": stats.get("error_message"),
+            },
+            duration_ms=duration_ms,
+        )

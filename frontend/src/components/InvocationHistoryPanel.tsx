@@ -14,8 +14,8 @@ type Props = {
   items: TestConsoleHistoryItem[]
   expandedId: string | null
   onToggleExpand: (id: string | null) => void
-  filterAction?: 'all' | 'risk_check' | 'invoke'
-  onFilterChange?: (v: 'all' | 'risk_check' | 'invoke') => void
+  filterAction?: 'all' | 'risk_check' | 'invoke' | 'stream' | 'upload' | 'ws'
+  onFilterChange?: (v: 'all' | 'risk_check' | 'invoke' | 'stream' | 'upload' | 'ws') => void
   filterHasAssets?: boolean
   onFilterHasAssetsChange?: (v: boolean) => void
   emptyMessage?: string
@@ -28,6 +28,7 @@ const ACTION_LABELS: Record<string, string> = {
   invoke: '调用',
   stream: '流式',
   upload: '上传',
+  ws: 'WebSocket',
 }
 
 function formatDuration(ms: number | null | undefined): string {
@@ -88,6 +89,7 @@ export default function InvocationHistoryPanel({
               <option value="invoke">调用</option>
               <option value="stream">流式</option>
               <option value="upload">上传</option>
+              <option value="ws">WebSocket</option>
             </select>
           )}
           {onFilterHasAssetsChange && (
@@ -126,6 +128,8 @@ export default function InvocationHistoryPanel({
                     ? 'bg-cyan-100 text-cyan-700'
                     : item.action === 'upload'
                     ? 'bg-rose-100 text-rose-700'
+                    : item.action === 'ws'
+                    ? 'bg-violet-100 text-violet-700'
                     : 'bg-indigo-100 text-indigo-700'
                 }`}
               >
