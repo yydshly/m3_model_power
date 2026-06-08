@@ -15,6 +15,9 @@ Checks (P1-5):
  11. backend/app/routers/stream.py must call append_history
  12. backend/app/routers/upload.py must return history_id in responses
  13. InvocationHistoryPanel must include stream/upload in ACTION_LABELS
+ 14. StreamPanel must NOT call JSON.parse directly in validatePayloadForCapability
+ 15. StreamPanel must have safe JSON parse (parseBodySafely or equivalent)
+ 16. UploadPanel error message must be `[status] message` not `[status message`
 """
 import sys
 import re
@@ -174,6 +177,37 @@ def main() -> None:
             else:
                 print("FAIL: InvocationHistoryPanel ACTION_LABELS does not include upload")
                 errors += 1
+
+    # ── 14. StreamPanel must NOT call JSON.parse directly in validatePayloadForCapability ──
+    # Render-phase unsafe pattern: validatePayloadForCapability(cap.id, JSON.parse(body || '{}'))
+    if re.search(r'validatePayloadForCapability\s*\([^)]*JSON\.parse\s*\(\s*body', content):
+        print("FAIL: StreamPanel calls JSON.parse directly in validatePayloadForCapability (unsafe in render)")
+        errors += 1
+    else:
+        pass_check("StreamPanel does not call JSON.parse directly in validatePayloadForCapability")
+
+    # ── 15. StreamPanel must have safe JSON parse (parseBodySafely or equivalent) ──
+    if "parseBodySafely" in content or re.search(r'function\s+\w*[Pp]arse\w*Body\w*', content):
+        pass_check("StreamPanel has safe JSON parse function")
+    else:
+        print("FAIL: StreamPanel does not have parseBodySafely or equivalent safe parse function")
+        errors += 1
+
+    # ── 16. UploadPanel error message must be `[status] message` (has closing bracket) ──
+    # The fixed pattern: `[${r.status ?? '-'}] ${r.message}`  (has `]` before `}`)
+    # The broken pattern: `[${r.status ?? '-'} ${r.message}`   (missing `]`)
+    if re.search(r'`\[\$\{r\.status\s*\?\?\s*[\'"][^\]]*[\'"]\}\]\s+\$\{r\.message\}`', up_content):
+        pass_check("UploadPanel error message has correct bracket format")
+    elif re.search(r'`\[\$\{r\.status\s*\?\?\s*[\'"][^\]]*[\'"]\}\s+\$\{r\.message\}`', up_content):
+        print("FAIL: UploadPanel error message missing closing bracket")
+        errors += 1
+    else:
+        # Fallback: look for `] ${r.message}` in any setErr call
+        if re.search(r'\]\s+\$\{r\.message\}', up_content):
+            pass_check("UploadPanel error message has correct bracket format")
+        else:
+            print("FAIL: UploadPanel error message missing closing bracket")
+            errors += 1
 
     # ── Summary ──────────────────────────────────────────────────────────
     if errors == 0:

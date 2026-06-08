@@ -5,6 +5,21 @@ import { useSyncedModelSelection } from '../domain/useSyncedModelSelection'
 import { buildDemoPayload } from '../domain/demoPayload'
 import { validatePayloadForCapability } from '../domain/payloadValidation'
 
+function parseBodySafely(text: string): {
+  parsed: Record<string, unknown>
+  error: string | null
+} {
+  try {
+    const value = text.trim() ? JSON.parse(text) : {}
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return { parsed: {}, error: '请求体必须是 JSON 对象' }
+    }
+    return { parsed: value as Record<string, unknown>, error: null }
+  } catch (e) {
+    return { parsed: {}, error: `JSON 解析失败：${e instanceof Error ? e.message : String(e)}` }
+  }
+}
+
 /**
  * 通用流式调用面板。
  * 上游 SSE/chunked 协议由后端 /api/stream/<id> 透传，前端拿到 chunks 直接追加到文本框。
@@ -27,13 +42,9 @@ export function StreamPanel({
   const abortRef = useRef<AbortController | null>(null)
 
   function updateJsonBodyField(bdy: string, key: string, value: unknown): string {
-    try {
-      const parsed = JSON.parse(bdy || '{}')
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return bdy
-      return JSON.stringify({ ...parsed, [key]: value }, null, 2)
-    } catch {
-      return bdy
-    }
+    const safe = parseBodySafely(bdy)
+    if (safe.error || Object.keys(safe.parsed).length === 0) return bdy
+    return JSON.stringify({ ...safe.parsed, [key]: value }, null, 2)
   }
 
   const start = async () => {
@@ -44,13 +55,13 @@ export function StreamPanel({
     if (running) return
     setErr(null)
     setOut('')
-    let parsed: Record<string, unknown>
-    try {
-      parsed = body.trim() ? JSON.parse(body) : {}
-    } catch (e) {
-      setErr(`JSON 解析失败：${e}`)
+
+    const safe = parseBodySafely(body)
+    if (safe.error) {
+      setErr(safe.error)
       return
     }
+    const parsed = safe.parsed
 
     // Validate payload before sending
     const validationResult = validatePayloadForCapability(cap.id, parsed)
@@ -94,7 +105,15 @@ export function StreamPanel({
 
   const stop = () => abortRef.current?.abort()
 
-  const initialValidation = validatePayloadForCapability(cap.id, JSON.parse(body || '{}'))
+  // Safe render-time validation — never throws
+  const safeBody = parseBodySafely(body)
+  const initialValidation = safeBody.error
+    ? {
+        valid: false,
+        issues: [{ field: 'body', message: safeBody.error, severity: 'error' as const }],
+      }
+    : validatePayloadForCapability(cap.id, safeBody.parsed)
+
   const buttonDisabled = running || !initialValidation.valid
 
   return (
@@ -128,6 +147,18 @@ export function StreamPanel({
           className="w-full font-mono text-xs border border-slate-300 rounded p-2"
         />
       </div>
+      {!initialValidation.valid && (
+        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+          <div className="font-semibold mb-1">参数检查未通过：</div>
+          <ul className="list-disc list-inside space-y-0.5">
+            {initialValidation.issues.filter((i) => i.severity === 'error').map((issue, i) => (
+              <li key={i}>
+                <span className="font-mono">{issue.field}</span>：{issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="flex gap-2">
         <button
           onClick={start}

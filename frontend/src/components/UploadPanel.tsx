@@ -32,7 +32,7 @@ export function UploadPanel({
     const r = await uploadCapability(cap.id, file, purpose || undefined, confirmAssetSource)
     setLoading(false)
     if ('error' in r) {
-      setErr(`[${r.status ?? '-'} ${r.message}`)
+      setErr(`[${r.status ?? '-'}] ${r.message}`)
       onDone?.({ history_id: r.history_id ?? null, capability_id: cap.id })
     } else {
       setResult(r.data)
