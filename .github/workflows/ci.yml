@@ -53,6 +53,7 @@ jobs:
           python scripts/check_runtime_smoke.py
           python scripts/check_interaction_regression.py
           python scripts/check_special_panels_history.py
+          python scripts/check_history_result_summary.py
 
       - name: Compile Python
         run: |

@@ -296,6 +296,129 @@ def _safe_str(value: Any, max_len: int) -> str:
     return s[:max_len] + ("…" if len(s) > max_len else "")
 
 
+def _extract_text_preview(value: Any) -> str | None:
+    """Extract text preview from common LLM response shapes."""
+    if value is None:
+        return None
+
+    if isinstance(value, str):
+        s = value.strip()
+        return _safe_str(s, _TEXT_PREVIEW_MAX) if s else None
+
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value[:10]:
+            if isinstance(item, dict) and item.get("type") == "thinking":
+                continue
+            text = _extract_text_preview(item)
+            if text:
+                parts.append(text)
+            if len("".join(parts)) >= _TEXT_PREVIEW_MAX:
+                break
+        joined = "\n".join(parts).strip()
+        return _safe_str(joined, _TEXT_PREVIEW_MAX) if joined else None
+
+    if not isinstance(value, dict):
+        return None
+
+    if value.get("type") == "thinking":
+        return None
+
+    # Direct common fields
+    for key in ("text", "content", "answer", "message", "lyrics"):
+        if key in value:
+            text = _extract_text_preview(value.get(key))
+            if text:
+                return text
+
+    # Anthropic: content: [{type:"text", text:"..."}]
+    content = value.get("content")
+    if isinstance(content, list):
+        text = _extract_text_preview(content)
+        if text:
+            return text
+
+    # OpenAI: choices[].message.content / choices[].delta.content
+    choices = value.get("choices")
+    if isinstance(choices, list):
+        parts: list[str] = []
+        for ch in choices[:5]:
+            if not isinstance(ch, dict):
+                continue
+            for holder in ("message", "delta"):
+                h = ch.get(holder)
+                if isinstance(h, dict):
+                    t = _extract_text_preview(h.get("content"))
+                    if t:
+                        parts.append(t)
+        joined = "\n".join(parts).strip()
+        if joined:
+            return _safe_str(joined, _TEXT_PREVIEW_MAX)
+
+    # Responses API: output[].content[].text
+    output = value.get("output")
+    if isinstance(output, list):
+        text = _extract_text_preview(output)
+        if text:
+            return text
+
+    # Wrapped result.data
+    data = value.get("data")
+    if isinstance(data, (dict, list, str)):
+        text = _extract_text_preview(data)
+        if text:
+            return text
+
+    # Nested result field (e.g. data.result.text)
+    nested_result = value.get("result")
+    if isinstance(nested_result, (dict, list, str)):
+        text = _extract_text_preview(nested_result)
+        if text:
+            return text
+
+    return None
+
+
+def _extract_usage(value: Any) -> dict | None:
+    """Extract token usage from common response shapes."""
+    if not isinstance(value, dict):
+        return None
+
+    candidates: list[dict] = []
+
+    usage = value.get("usage")
+    if isinstance(usage, dict):
+        candidates.append(usage)
+
+    data = value.get("data")
+    if isinstance(data, dict) and isinstance(data.get("usage"), dict):
+        candidates.append(data["usage"])
+
+    for u in candidates:
+        input_tokens = (
+            u.get("input_tokens")
+            or u.get("prompt_tokens")
+            or u.get("input_token_count")
+        )
+        output_tokens = (
+            u.get("output_tokens")
+            or u.get("completion_tokens")
+            or u.get("output_token_count")
+        )
+        total_tokens = (
+            u.get("total_tokens")
+            or ((input_tokens or 0) + (output_tokens or 0) if input_tokens or output_tokens else None)
+        )
+
+        return {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": total_tokens,
+        }
+
+    return None
+
+
 def summarize_result(result: Any) -> dict:
     """Extract a safe, compact summary from an invoke/risk-check result.
 
@@ -311,10 +434,10 @@ def summarize_result(result: Any) -> dict:
     payloads are redacted / truncated. Never writes raw values of sensitive fields.
     """
     if result is None:
-        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": []}
+        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": [], "usage": None}
 
     if not isinstance(result, dict):
-        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": []}
+        return {"ok": None, "output_type": "unknown", "asset_count": 0, "assets": [], "raw_keys": [], "usage": None}
 
     out: dict[str, Any] = {
         "ok": result.get("ok", result.get("allowed")),
@@ -325,6 +448,7 @@ def summarize_result(result: Any) -> dict:
         "assets": [],
         "text_preview": None,
         "raw_keys": [],
+        "usage": None,
     }
 
     # Error / message extraction
@@ -350,20 +474,17 @@ def summarize_result(result: Any) -> dict:
         else:
             out["output_type"] = "unknown"
 
-    # Text preview: look for common text fields
-    for field in ("lyrics", "text", "content", "answer", "message"):
-        if field in result and isinstance(result[field], str) and result[field].strip():
-            out["text_preview"] = _safe_str(result[field], _TEXT_PREVIEW_MAX)
-            if out["output_type"] == "unknown":
-                out["output_type"] = "text"
-            break
-        # Also check nested data.*
-        d = result.get("data")
-        if isinstance(d, dict) and field in d and isinstance(d[field], str) and d[field].strip():
-            out["text_preview"] = _safe_str(d[field], _TEXT_PREVIEW_MAX)
-            if out["output_type"] == "unknown":
-                out["output_type"] = "text"
-            break
+    # Text preview: use the deep extractor
+    text_preview = _extract_text_preview(result)
+    if text_preview:
+        out["text_preview"] = text_preview
+        if out["output_type"] == "unknown":
+            out["output_type"] = "text"
+
+    # Usage extraction
+    usage = _extract_usage(result)
+    if usage:
+        out["usage"] = usage
 
     return out
 

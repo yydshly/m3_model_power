@@ -253,6 +253,20 @@ export default function InvocationHistoryPanel({
                           文本：{item.result_summary.text_preview}
                         </div>
                       )}
+                      {item.result_summary.usage && (
+                        <div className="mt-1 text-xs text-slate-500">
+                          Token：
+                          {item.result_summary.usage.input_tokens != null && (
+                            <span>输入 {item.result_summary.usage.input_tokens}</span>
+                          )}
+                          {item.result_summary.usage.output_tokens != null && (
+                            <span className="ml-2">输出 {item.result_summary.usage.output_tokens}</span>
+                          )}
+                          {item.result_summary.usage.total_tokens != null && (
+                            <span className="ml-2">总计 {item.result_summary.usage.total_tokens}</span>
+                          )}
+                        </div>
+                      )}
                       <HistoryAssetPreview
                         result_summary={item.result_summary}
                         rawResult={item.result ?? undefined}

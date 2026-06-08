@@ -65,16 +65,12 @@ export default function HistoryAssetPreview({ result_summary, rawResult }: Props
   const assets = result_summary?.assets ?? []
 
   if (!assets.length) {
+    if (result_summary?.output_type === 'text' || result_summary?.output_type === 'json') return null
     return (
       <div className="text-xs text-slate-500">
         {result_summary?.output_type && result_summary.output_type !== 'unknown'
           ? `output_type: ${result_summary.output_type}（无资产 URL）`
           : '无资产结果'}
-        {result_summary?.text_preview && (
-          <div className="mt-1 text-slate-600 italic truncate">
-            文本预览：{result_summary.text_preview}
-          </div>
-        )}
       </div>
     )
   }

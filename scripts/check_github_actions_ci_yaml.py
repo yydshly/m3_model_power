@@ -30,6 +30,7 @@ REQUIRED_GUARD_SCRIPTS = [
     "scripts/check_runtime_smoke.py",
     "scripts/check_interaction_regression.py",
     "scripts/check_special_panels_history.py",
+    "scripts/check_history_result_summary.py",
 ]
 
 REQUIRED_CI_TERMS = [

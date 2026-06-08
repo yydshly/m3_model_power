@@ -357,6 +357,11 @@ export type TestConsoleHistoryItem = {
     }>
     text_preview?: string | null
     raw_keys?: string[]
+    usage?: {
+      input_tokens?: number | null
+      output_tokens?: number | null
+      total_tokens?: number | null
+    } | null
   }
 }
 
