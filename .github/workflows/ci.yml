@@ -55,6 +55,8 @@ jobs:
           python scripts/check_special_panels_history.py
           python scripts/check_history_result_summary.py
           python scripts/check_project_overview_page.py
+          python scripts/check_startup_contract.py
+
       - name: Compile Python
         run: |
           python -m compileall backend scripts
