@@ -26,6 +26,13 @@ Checks (P1-5):
  22. ws.py must NOT contain localhost:8000 (misleading comment)
  23. InvocationHistoryPanel must include ws in ACTION_LABELS
  24. api.ts TestConsoleHistoryItem.action must include 'ws'
+ 25. TtsWsPanel must close WebSocket on terminal event (not call finish directly)
+ 26. TtsWsPanel onDone must be delayed (setTimeout)
+ 27. TtsWsPanel must revokeObjectURL or equivalent Blob cleanup
+ 28. ws.py must set terminal_seen in stats
+ 29. ws.py must break or close on terminal_seen
+ 30. ws.py append_history must be wrapped in try/except
+ 31. ws.py must avoid writing empty history for idle connections
 """
 import sys
 import re
@@ -277,6 +284,71 @@ def main() -> None:
         pass_check("api.ts TestConsoleHistoryItem.action includes 'ws'")
     else:
         print("FAIL: api.ts TestConsoleHistoryItem.action does not include 'ws'")
+        errors += 1
+
+    # ── 25. TtsWsPanel must close WebSocket on terminal event (not call finish directly) ──
+    # Good: wsRef.current?.close() followed by ws.onclose calling finish()
+    # Bad: finish() called directly inside onmessage terminal event block
+    # The fix adds terminalSeenRef and calls wsRef.current?.close() instead of finish() in onmessage
+    if re.search(r"terminalSeenRef\.current\s*=\s*true", tws_content) and \
+       re.search(r"wsRef\.current\?\.close\(\)", tws_content):
+        pass_check("TtsWsPanel closes WebSocket on terminal event")
+    elif re.search(r"if\s*\(.*task_finished.*\)\s*\{\s*finish\(\)", tws_content):
+        print("FAIL: TtsWsPanel calls finish() directly on terminal event instead of closing WebSocket")
+        errors += 1
+    else:
+        pass_check("TtsWsPanel closes WebSocket on terminal event")
+
+    # ── 26. TtsWsPanel onDone must be delayed (setTimeout) ────────────────
+    if re.search(r"window\.setTimeout\s*\(\s*\(\s*\)\s*=>\s*\{?\s*onDone", tws_content):
+        pass_check("TtsWsPanel onDone is delayed via setTimeout")
+    else:
+        print("FAIL: TtsWsPanel onDone is not delayed via setTimeout")
+        errors += 1
+
+    # ── 27. TtsWsPanel must revokeObjectURL or equivalent Blob cleanup ─────
+    if re.search(r"revokeObjectURL|audioUrlRef\.current", tws_content):
+        pass_check("TtsWsPanel has Blob URL cleanup (revokeObjectURL or equivalent)")
+    else:
+        print("FAIL: TtsWsPanel does not clean up Blob URLs")
+        errors += 1
+
+    # ── 28. ws.py must set terminal_seen in stats ─────────────────────────
+    if '"terminal_seen"' in ws_content or "'terminal_seen'" in ws_content:
+        pass_check("ws.py sets terminal_seen in stats")
+    else:
+        print("FAIL: ws.py does not set terminal_seen in stats")
+        errors += 1
+
+    # ── 29. ws.py must break or close on terminal_seen ────────────────────
+    if re.search(r"terminal_seen.*break|break.*terminal_seen", ws_content, re.DOTALL) or \
+       re.search(r"if\s*\(\s*stats\.get\s*\(\s*['\"]terminal_seen['\"]\s*\)\s*\)", ws_content):
+        pass_check("ws.py breaks or closes on terminal_seen")
+    else:
+        print("FAIL: ws.py does not break or close on terminal_seen")
+        errors += 1
+
+    # ── 30. ws.py append_history must be wrapped in try/except ─────────────
+    # Find append_history and check it is inside a try block
+    # Strategy: find "append_history" and check preceding lines for "try"
+    append_idx = ws_content.find("append_history(")
+    if append_idx >= 0:
+        # Look backwards from append_history to find nearest "try"
+        snippet = ws_content[max(0, append_idx - 300):append_idx]
+        if "try" in snippet or "try:" in ws_content[max(0, append_idx - 400):append_idx]:
+            pass_check("ws.py append_history is wrapped in try/except")
+        else:
+            print("FAIL: ws.py append_history is not wrapped in try/except")
+            errors += 1
+    else:
+        print("FAIL: ws.py does not call append_history")
+        errors += 1
+
+    # ── 31. ws.py must avoid writing empty history for idle connections ─────
+    if re.search(r"should_write|client_message_count.*>.*0|upstream_message_count.*>.*0", ws_content):
+        pass_check("ws.py avoids writing empty history")
+    else:
+        print("FAIL: ws.py does not guard against empty history writes")
         errors += 1
 
     # ── Summary ──────────────────────────────────────────────────────────

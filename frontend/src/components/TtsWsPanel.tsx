@@ -29,11 +29,24 @@ export function TtsWsPanel({
   const wsRef = useRef<WebSocket | null>(null)
   const chunksRef = useRef<Uint8Array[]>([])
   const finishedRef = useRef(false)
+  const terminalSeenRef = useRef(false)
+  const audioUrlRef = useRef<string | null>(null)
 
   const append = (s: string) => setLog((prev) => [...prev.slice(-200), s])
 
-  // Close WebSocket on unmount
-  useEffect(() => () => { wsRef.current?.close() }, [])
+  function replaceAudioUrl(url: string | null) {
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current)
+    }
+    audioUrlRef.current = url
+    setAudioUrl(url)
+  }
+
+  // Close WebSocket and revoke Blob URL on unmount
+  useEffect(() => () => {
+    wsRef.current?.close()
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current)
+  }, [])
 
   // Derive validation
   const validationIssues: string[] = []
@@ -47,10 +60,13 @@ export function TtsWsPanel({
     finishedRef.current = true
     if (chunksRef.current.length > 0 && !audioUrl) {
       const blob = new Blob(chunksRef.current as BlobPart[], { type: 'audio/mpeg' })
-      setAudioUrl(URL.createObjectURL(blob))
+      replaceAudioUrl(URL.createObjectURL(blob))
     }
     setRunning(false)
-    onDone?.({ capability_id: cap.id })
+    // Delay onDone to avoid racing with backend append_history in finally
+    window.setTimeout(() => {
+      onDone?.({ capability_id: cap.id })
+    }, 300)
   }
 
   const start = () => {
@@ -59,9 +75,10 @@ export function TtsWsPanel({
       return
     }
     setLog([])
-    setAudioUrl(null)
+    replaceAudioUrl(null)
     chunksRef.current = []
     finishedRef.current = false
+    terminalSeenRef.current = false
     setRunning(true)
     const ws = new WebSocket(`${location.origin.replace('http', 'ws')}/api/ws/${cap.id}`)
     wsRef.current = ws
@@ -92,8 +109,14 @@ export function TtsWsPanel({
         ws.send(JSON.stringify({ event: 'task_continue', text }))
         ws.send(JSON.stringify({ event: 'task_finish' }))
       }
-      if (event === 'task_finished' || event === 'task_failed' || payload.is_final) {
-        finish()
+      if ((event === 'task_finished' || event === 'task_failed' || payload.is_final) && !terminalSeenRef.current) {
+        terminalSeenRef.current = true
+        append(`✓ 收到终态事件：${event ?? 'is_final'}`)
+        try {
+          wsRef.current?.close()
+        } catch {
+          // ignore
+        }
       }
     }
 
