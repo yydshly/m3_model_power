@@ -874,6 +874,11 @@ export default function TestConsole() {
                           {item.result_summary.asset_count} asset{item.result_summary.asset_count !== 1 ? 's' : ''}
                         </span>
                       ) : null}
+                      {item.duration_ms != null && (
+                        <span className="shrink-0 text-[10px] text-slate-400">
+                          {item.duration_ms < 1000 ? `${item.duration_ms}ms` : `${(item.duration_ms / 1000).toFixed(1)}s`}
+                        </span>
+                      )}
                       <span className={`ml-auto shrink-0 ${ok ? 'text-green-600' : 'text-red-600'}`}>
                         {ok ? '✓' : '✗'}
                       </span>
@@ -885,46 +890,63 @@ export default function TestConsole() {
                         {!ok && item.result?.error && (
                           <div className="bg-red-50 border border-red-200 rounded p-2 text-red-700">
                             <strong>错误：</strong>{item.result.error}
-                            {item.result.blocked_reasons?.length ? (
-                              <div className="mt-1">阻断原因：{item.result.blocked_reasons.join('；')}</div>
-                            ) : null}
-                            {item.result.required_confirmations?.length ? (
-                              <div className="mt-1">需要确认：{item.result.required_confirmations.join('、')}</div>
-                            ) : null}
                           </div>
                         )}
 
-                        <div>
-                          <p className="font-medium text-slate-700 mb-1">Payload</p>
-                          <div className="bg-slate-100 rounded p-2 space-y-1">
-                            <div>keys: {item.payload_summary.payload_keys.join(', ') || '(无)'}</div>
-                            {item.payload_summary.payload_preview && (
-                              <div className="text-slate-600 font-mono whitespace-pre-wrap break-all">
-                                {item.payload_summary.payload_preview}
+                        <details className="border border-slate-200 rounded">
+                          <summary className="px-2 py-1.5 cursor-pointer text-slate-500 hover:text-slate-700 text-[10px]">
+                            调试信息
+                          </summary>
+                          <div className="px-2 pb-2 space-y-2">
+                            {!ok && item.result?.blocked_reasons?.length ? (
+                              <div className="text-red-600">
+                                <span className="font-medium">阻断原因：</span>
+                                {item.result.blocked_reasons.join('；')}
+                              </div>
+                            ) : null}
+                            {!ok && item.result?.required_confirmations?.length ? (
+                              <div className="text-orange-600">
+                                <span className="font-medium">需要确认：</span>
+                                {item.result.required_confirmations.join('、')}
+                              </div>
+                            ) : null}
+                            <div>
+                              <p className="font-medium text-slate-600 mb-0.5">Payload</p>
+                              <div className="bg-slate-100 rounded p-2 space-y-1">
+                                <div>keys: {item.payload_summary.payload_keys.join(', ') || '(无)'}</div>
+                                {item.payload_summary.payload_preview && (
+                                  <div className="text-slate-600 font-mono whitespace-pre-wrap break-all">
+                                    {item.payload_summary.payload_preview}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {item.confirmations && Object.keys(item.confirmations).length > 0 && (
+                              <div>
+                                <p className="font-medium text-slate-600 mb-0.5">确认项</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(item.confirmations).map(([k, v]) => (
+                                    <span key={k} className={`px-1.5 py-0.5 rounded text-[10px] ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                      {k}: {String(v)}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             )}
+                            {item.result?.warnings?.length ? (
+                              <div className="text-yellow-600">
+                                warnings: {item.result.warnings.join('；')}
+                              </div>
+                            ) : null}
                           </div>
-                        </div>
-
-                        {item.confirmations && Object.keys(item.confirmations).length > 0 && (
-                          <div>
-                            <p className="font-medium text-slate-700 mb-1">确认项</p>
-                            <div className="flex flex-wrap gap-1">
-                              {Object.entries(item.confirmations).map(([k, v]) => (
-                                <span key={k} className={`px-1.5 py-0.5 rounded text-[10px] ${v ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                  {k}: {String(v)}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        </details>
 
                         {item.result_summary && (
                           <div>
                             <p className="font-medium text-slate-700 mb-1">结果摘要</p>
-                            <div className="bg-slate-100 rounded p-2">
+                            <div className="bg-slate-50 rounded p-2">
                               {item.result_summary.output_type && (
-                                <div className="mb-1">output_type: <span className="text-slate-700">{item.result_summary.output_type}</span></div>
+                                <div className="mb-1">类型: <span className="text-slate-700">{item.result_summary.output_type}</span></div>
                               )}
                               {item.result_summary.text_preview && (
                                 <div className="mb-1 text-slate-600 italic truncate">
@@ -933,12 +955,6 @@ export default function TestConsole() {
                               )}
                               <HistoryAssetPreview result_summary={item.result_summary} rawResult={item.result} />
                             </div>
-                          </div>
-                        )}
-
-                        {item.result?.warnings && item.result.warnings.length > 0 && (
-                          <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-yellow-700">
-                            warnings: {item.result.warnings.join('；')}
                           </div>
                         )}
                       </div>

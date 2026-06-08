@@ -6,6 +6,9 @@
 - 鉴权、错误归一化、未实现拦截只写一次
 - RiskGate 门禁：所有能力执行前必须通过风险评估
 """
+from __future__ import annotations
+
+import time
 from pydantic import BaseModel
 
 from fastapi import APIRouter, HTTPException
@@ -23,6 +26,25 @@ router = APIRouter(prefix="/invoke", tags=["invoke"])
 class InvokeRequest(BaseModel):
     payload: dict | None = None
     confirmations: dict | None = None
+
+
+def _append_invoke_history(
+    action: str,
+    cap_id: str,
+    payload: dict,
+    confirmations: dict,
+    result: dict,
+    t0: float,
+) -> None:
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    append_history(
+        action=action,
+        capability_id=cap_id,
+        payload=payload,
+        confirmations=confirmations,
+        result=result,
+        duration_ms=duration_ms,
+    )
 
 
 @router.post("/{cap_id}")
@@ -47,6 +69,8 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
     if handler is None:
         raise HTTPException(501, f"capability {cap_id} 尚未实现 handler")
 
+    t0 = time.perf_counter()
+
     # RiskGate 评估
     caps = get_capability_registry()
     core_cap = caps.by_id(cap_id)
@@ -64,12 +88,9 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
                 "required_confirmations": decision.required_confirmations,
                 "warnings": decision.warnings,
             }
-            append_history(
-                action="invoke",
-                capability_id=cap_id,
-                payload=payload,
-                confirmations=confirmations,
-                result={"ok": False, "allowed": False, **content},
+            _append_invoke_history(
+                "invoke", cap_id, payload, confirmations,
+                {"ok": False, "allowed": False, **content}, t0,
             )
             return JSONResponse(status_code=403, content=content)
 
@@ -77,23 +98,17 @@ async def invoke(cap_id: str, body: InvokeRequest | None = None) -> JSONResponse
         result = await handler(payload)
     except MiniMaxError as e:
         content = {"error": "minimax_error", "status": e.status, "message": e.message}
-        append_history(
-            action="invoke",
-            capability_id=cap_id,
-            payload=payload,
-            confirmations=confirmations,
-            result={"ok": False, "error": "minimax_error", "status": e.status, "message": e.message},
+        _append_invoke_history(
+            "invoke", cap_id, payload, confirmations,
+            {"ok": False, "error": "minimax_error", "status": e.status, "message": e.message}, t0,
         )
         return JSONResponse(
             status_code=502 if e.status >= 500 else e.status,
             content=content,
         )
     content = {"ok": True, "data": result}
-    append_history(
-        action="invoke",
-        capability_id=cap_id,
-        payload=payload,
-        confirmations=confirmations,
-        result={"ok": True, "data": result},
+    _append_invoke_history(
+        "invoke", cap_id, payload, confirmations,
+        {"ok": True, "data": result}, t0,
     )
     return JSONResponse(content=content)

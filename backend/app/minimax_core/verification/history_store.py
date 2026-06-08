@@ -437,6 +437,7 @@ def append_history(
     payload: dict | None,
     confirmations: dict | None,
     result: dict,
+    duration_ms: int | None = None,
 ) -> None:
     """追加一条历史记录到 JSONL 文件。写失败不抛异常。"""
     try:
@@ -445,6 +446,7 @@ def append_history(
             "created_at": datetime.now(timezone.utc).isoformat(),
             "action": action,
             "capability_id": capability_id,
+            "duration_ms": duration_ms,
             "payload_summary": summarize_payload(payload),
             "confirmations": confirmations or {},
             "result": summarize_result_record(result),

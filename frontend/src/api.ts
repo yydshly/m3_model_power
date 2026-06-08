@@ -273,6 +273,7 @@ export type TestConsoleHistoryItem = {
   created_at: string
   action: 'risk_check' | 'invoke'
   capability_id: string
+  duration_ms?: number | null
   payload_summary: {
     payload_keys: string[]
     payload_size_chars: number

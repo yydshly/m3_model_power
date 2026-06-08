@@ -847,12 +847,19 @@ function InvokeResultView({
     return (
       <div className="mt-3 p-3 rounded bg-red-50 border border-red-200 text-xs text-red-700">
         <strong>调用失败：</strong> {result.message}
-        {result.blocked_reasons && result.blocked_reasons.length > 0 && (
-          <div className="mt-1">阻断原因：{result.blocked_reasons.join('；')}</div>
-        )}
-        {result.required_confirmations && result.required_confirmations.length > 0 && (
-          <div className="mt-1">需要确认：{result.required_confirmations.join('、')}</div>
-        )}
+        <details className="mt-1 border border-red-200 rounded">
+          <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
+            调试信息
+          </summary>
+          <div className="px-2 pb-2 space-y-1">
+            {result.blocked_reasons && result.blocked_reasons.length > 0 && (
+              <div>阻断原因：{result.blocked_reasons.join('；')}</div>
+            )}
+            {result.required_confirmations && result.required_confirmations.length > 0 && (
+              <div>需要确认：{result.required_confirmations.join('、')}</div>
+            )}
+          </div>
+        </details>
       </div>
     )
   }
@@ -1373,10 +1380,18 @@ function CapabilityCard({
         )}
         {riskResult && !riskResult.allowed && (
           <div className="mt-3 p-2 rounded bg-red-50 border border-red-200 text-xs text-red-700">
-            <strong>安全检查阻断：</strong> {riskResult.blocked_reasons.join('；')}
-            {riskResult.required_confirmations.length > 0 && (
-              <div className="mt-1">需要确认：{riskResult.required_confirmations.join('、')}</div>
-            )}
+            <strong>安全检查阻断：</strong>
+            <details className="mt-1 border border-red-200 rounded">
+              <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
+                调试信息
+              </summary>
+              <div className="px-2 pb-2 space-y-1">
+                <div>阻断原因：{riskResult.blocked_reasons.join('；')}</div>
+                {riskResult.required_confirmations.length > 0 && (
+                  <div>需要确认：{riskResult.required_confirmations.join('、')}</div>
+                )}
+              </div>
+            </details>
           </div>
         )}
         {result && (

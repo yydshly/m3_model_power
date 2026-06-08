@@ -438,32 +438,39 @@ export default function CapabilityPage() {
                   <div className="font-semibold mb-1">
                     RiskGate 检查结果：{riskCheckResult.allowed ? '✅ 可以执行' : '❌ 已阻断'}
                   </div>
-                  {riskCheckResult.blocked_reasons.length > 0 && (
-                    <div className="mt-1">
-                      <span className="font-medium">阻断原因：</span>
-                      <ul className="list-disc list-inside mt-0.5">
-                        {riskCheckResult.blocked_reasons.map((r, i) => (
-                          <li key={i}>{r}</li>
-                        ))}
-                      </ul>
+                  <details className="mt-1 border border-red-200 rounded">
+                    <summary className="px-2 py-1 cursor-pointer text-[10px] text-red-600 hover:text-red-800">
+                      调试信息
+                    </summary>
+                    <div className="px-2 pb-2 space-y-1">
+                      {riskCheckResult.blocked_reasons.length > 0 && (
+                        <div>
+                          <span className="font-medium">阻断原因：</span>
+                          <ul className="list-disc list-inside">
+                            {riskCheckResult.blocked_reasons.map((r, i) => (
+                              <li key={i}>{r}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {riskCheckResult.required_confirmations.length > 0 && (
+                        <div>
+                          <span className="font-medium">需要确认项：</span>
+                          {riskCheckResult.required_confirmations.join(', ')}
+                        </div>
+                      )}
+                      {riskCheckResult.warnings.length > 0 && (
+                        <div>
+                          <span className="font-medium">警告：</span>
+                          <ul className="list-disc list-inside">
+                            {riskCheckResult.warnings.map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  {riskCheckResult.required_confirmations.length > 0 && (
-                    <div className="mt-1">
-                      <span className="font-medium">需要确认项：</span>
-                      {riskCheckResult.required_confirmations.join(', ')}
-                    </div>
-                  )}
-                  {riskCheckResult.warnings.length > 0 && (
-                    <div className="mt-1">
-                      <span className="font-medium">警告：</span>
-                      <ul className="list-disc list-inside mt-0.5">
-                        {riskCheckResult.warnings.map((w, i) => (
-                          <li key={i}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  </details>
                 </div>
               )}
 
