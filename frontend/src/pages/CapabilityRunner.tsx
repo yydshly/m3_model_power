@@ -1695,31 +1695,56 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
   const [historyFallbackUsed, setHistoryFallbackUsed] = useState(false)
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [sessionDraft, setSessionDraft] = useState<RunnerSession | null>(null)
+  const [globalHistoryCount, setGlobalHistoryCount] = useState<number | null>(null)
+  const [lastGlobalCapabilityIds, setLastGlobalCapabilityIds] = useState<string[]>([])
 
   // Ref for auto-scroll to form when capability changes
   const formRef = useRef<HTMLDivElement>(null)
 
-  const refreshHistory = (capId?: string) => {
+  const refreshHistory = (capId?: string, options?: { retry?: boolean }) => {
     const id = capId ?? selected
     if (!id) return
     setHistoryFallbackUsed(false)
-    getCapabilityHistory(id, 50)
-      .then(r => { setHistory(r.items); setHistoryErr(null) })
-      .catch((e: any) => {
-        // Fallback: fetch global history and filter by capability_id
-        getTestConsoleHistory(200)
-          .then(r => {
-            const filtered = r.items.filter(item => item.capability_id === id)
-            setHistory(filtered)
-            setHistoryErr(null)
-            setHistoryFallbackUsed(true)
-          })
-          .catch(() => {
-            setHistoryErr(
-              `当前能力历史接口不可用：${e instanceof Error ? e.message : String(e)}`
-            )
-          })
-      })
+
+    const doFetch = () => {
+      getCapabilityHistory(id, 50)
+        .then(r => {
+          setHistory(r.items)
+          setHistoryErr(null)
+          if (r.items.length === 0) {
+            return getTestConsoleHistory(20)
+              .then(gr => {
+                setGlobalHistoryCount(gr.items.length)
+                setLastGlobalCapabilityIds(Array.from(new Set(gr.items.map(i => i.capability_id))).slice(0, 8))
+              })
+              .catch(() => {})
+          } else {
+            setGlobalHistoryCount(null)
+            setLastGlobalCapabilityIds([])
+          }
+        })
+        .catch((e: any) => {
+          getTestConsoleHistory(200)
+            .then(r => {
+              const filtered = r.items.filter(item => item.capability_id === id)
+              setHistory(filtered)
+              setHistoryErr(null)
+              setHistoryFallbackUsed(true)
+              setGlobalHistoryCount(r.items.length)
+              setLastGlobalCapabilityIds(Array.from(new Set(r.items.map(i => i.capability_id))).slice(0, 8))
+            })
+            .catch(() => {
+              setHistoryErr(
+                `当前能力历史接口不可用：${e instanceof Error ? e.message : String(e)}`
+              )
+            })
+        })
+    }
+
+    doFetch()
+    if (options?.retry) {
+      window.setTimeout(doFetch, 300)
+    }
   }
 
   // Refresh history and load session draft when capability changes
@@ -1850,7 +1875,7 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
                 handoffKeys={handoffKeys}
                 onBack={handleBack}
                 onChainNavigate={handleSelect}
-                onDone={refreshHistory}
+                onDone={() => refreshHistory(selected, { retry: true })}
                 sessionDraft={sessionDraft}
               />
             </div>
@@ -1883,14 +1908,22 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <h3 className="font-semibold text-slate-800">当前能力最近调用记录</h3>
-                  <p className="text-[10px] text-slate-400">按 capability_id 过滤，不是按模型过滤</p>
+                  <p className="text-[10px] text-slate-400">按 capability_id = {selected} 过滤</p>
                 </div>
-                <button
-                  onClick={() => refreshHistory()}
-                  className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
-                >
-                  刷新
-                </button>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to={`/test-console${selected ? `?capability=${selected}` : ''}`}
+                    className="px-3 py-1 text-xs text-sky-600 hover:underline"
+                  >
+                    查看全部历史 →
+                  </Link>
+                  <button
+                    onClick={() => refreshHistory()}
+                    className="px-3 py-1 text-xs border border-slate-300 rounded bg-white hover:bg-slate-100"
+                  >
+                    刷新
+                  </button>
+                </div>
               </div>
 
               {historyFallbackUsed && !historyErr && (
@@ -1901,6 +1934,14 @@ function CapabilityRunnerLoaded({ templates }: { templates: Record<string, Runne
 
               {historyErr && (
                 <p className="text-xs text-red-600 mb-2">加载失败: {historyErr}</p>
+              )}
+
+              {history.length === 0 && !historyErr && globalHistoryCount != null && (
+                <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+                  {globalHistoryCount > 0
+                    ? `全局最近有 ${globalHistoryCount} 条记录，但没有 capability_id = ${selected} 的记录。最近能力：${lastGlobalCapabilityIds.join('、')}`
+                    : `全局历史暂无记录，当前能力 ${selected} 也无调用记录。`}
+                </div>
               )}
 
               <InvocationHistoryPanel

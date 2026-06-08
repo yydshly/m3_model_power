@@ -21,7 +21,7 @@ export function InvokePanel({
   confirmations: Record<string, boolean>
   riskCheckResult: RiskCheckResult | null
   setRiskCheckResult: (r: RiskCheckResult | null) => void
-  onDone?: () => void
+  onDone?: (info?: { history_id?: string | null; capability_id?: string }) => void
 }) {
   const required = getRequiredConfirmations(cap)
   const allConfirmed = allConfirmationsSatisfied(required, confirmations)
@@ -34,6 +34,8 @@ export function InvokePanel({
   const [result, setResult] = useState<unknown>(null)
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [lastHistoryId, setLastHistoryId] = useState<string | null>(null)
+  const [lastInvokeCapabilityId, setLastInvokeCapabilityId] = useState<string | null>(null)
 
   // Sync body when defaultPayload prop changes (e.g. capability switch)
   const defaultPayloadText = JSON.stringify(defaultPayload ?? {}, null, 2)
@@ -157,10 +159,18 @@ export function InvokePanel({
     } catch (e: any) {
       setLoading(false)
       setErr(`调用失败：${e?.message ?? String(e)}`)
-      onDone?.()
+      setLastHistoryId(null)
+      setLastInvokeCapabilityId(cap.id)
+      onDone?.({ history_id: null, capability_id: cap.id })
       return
     }
     setLoading(false)
+    const histId = 'history_id' in invokeResult && typeof invokeResult.history_id === 'string'
+      ? invokeResult.history_id
+      : null
+    setLastHistoryId(histId)
+    setLastInvokeCapabilityId(cap.id)
+
     if ('error' in invokeResult) {
       setErr(`[${invokeResult.status ?? '-'}]: ${invokeResult.message}`)
       if (invokeResult.blocked_reasons?.length) {
@@ -171,7 +181,7 @@ export function InvokePanel({
           warnings: invokeResult.warnings ?? [],
         })
       }
-      onDone?.()
+      onDone?.({ history_id: histId, capability_id: cap.id })
     } else {
       setResult(invokeResult.data)
       setRiskCheckResult({
@@ -180,7 +190,7 @@ export function InvokePanel({
         required_confirmations: [],
         warnings: [],
       })
-      onDone?.()
+      onDone?.({ history_id: histId, capability_id: cap.id })
     }
   }
 
@@ -406,6 +416,17 @@ export function InvokePanel({
       </div>
 
       {err && <div className="text-sm text-red-600 whitespace-pre-wrap">{err}</div>}
+      {lastHistoryId && (
+        <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700">
+          历史已写入：<span className="font-mono">{lastHistoryId}</span>
+          <span className="ml-2 text-slate-500">capability_id: {lastInvokeCapabilityId}</span>
+        </div>
+      )}
+      {!lastHistoryId && result !== null && (
+        <div className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-500">
+          未收到 history_id，请检查后端是否为最新版本或历史写入是否失败。
+        </div>
+      )}
       {result !== null && (
         <>
           <AudioPreview data={result} />

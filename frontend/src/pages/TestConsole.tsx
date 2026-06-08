@@ -908,6 +908,7 @@ export default function TestConsole() {
             onFilterChange={setFilterHistoryAction}
             filterHasAssets={filterHistoryHasAssets}
             onFilterHasAssetsChange={setFilterHistoryHasAssets}
+            showCapabilityHeader
           />
         )}
       </div>

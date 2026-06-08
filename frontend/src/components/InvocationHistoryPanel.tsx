@@ -124,7 +124,15 @@ export default function InvocationHistoryPanel({
                 {ACTION_LABELS[item.action] ?? item.action}
               </span>
               {showCapabilityHeader && (
-                <span className="font-mono text-slate-700">{item.capability_id}</span>
+                <>
+                  {item.capability_id === 'history-smoke-test' ? (
+                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-500">
+                      测试记录
+                    </span>
+                  ) : (
+                    <span className="font-mono text-slate-700">{item.capability_id}</span>
+                  )}
+                </>
               )}
               {item.result_summary?.output_type && item.result_summary.output_type !== 'unknown' && (
                 <span className="shrink-0 px-1 py-0.5 rounded bg-violet-100 text-violet-700 text-[10px]">
