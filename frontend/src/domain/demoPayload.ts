@@ -2,8 +2,8 @@
  * buildDemoPayload — returns a safe, usable demo payload for each capability.
  *
  * Priority:
- *  1. capability.example if it has meaningful content (non-empty, not just {})
- *  2. Hard-coded safe demo per capability_id
+ *  1. Runner template payload_template + form_schema.default (properly resolved)
+ *  2. Hard-coded safe demo per capability_id (corrected to match real handler formats)
  *  3. Minimal fallback that at least has a model field
  *
  * This prevents TestConsole from showing {} as the payload for capabilities
@@ -11,35 +11,41 @@
  */
 import type { Capability, RunnerTemplate } from '../api'
 
-// Safe demo payloads per capability_id
+// Safe demo payloads per capability_id — all formats match real handler expectations
 const DEMO_PAYLOADS: Record<string, Record<string, unknown>> = {
   'chat-openai': {
-    model: 'MiniMax-M3',
-    prompt: '请用一句话介绍 MiniMax。',
+    model: 'MiniMax-M2.7-highspeed',
+    messages: [{ role: 'user', content: '请用一句话介绍 MiniMax。' }],
     max_tokens: 256,
+    temperature: 0.7,
   },
   'chat-anthropic': {
-    model: 'MiniMax-M3',
-    prompt: '请用一句话介绍 MiniMax。',
+    model: 'MiniMax-M2.7-highspeed',
+    messages: [{ role: 'user', content: '请用一句话介绍 MiniMax。' }],
     max_tokens: 256,
+    stream: false,
   },
   'chat-responses-create': {
     model: 'MiniMax-M3',
     input: '请用一句话介绍 MiniMax。',
     max_output_tokens: 256,
+    stream: false,
   },
   'chat-responses-tokens': {
     model: 'MiniMax-M3',
     input: '你好，请用一句话介绍 MiniMax。',
   },
   'tts-sync': {
-    model: 'speech-02',
+    model: 'speech-02-turbo',
     text: '你好，这是 MiniMax 语音合成测试。',
-    stream: false,
+    voice_setting: {
+      voice_id: '',
+      speed: 1,
+    },
   },
   'voice-list': {},
   'tts-async': {
-    model: 'speech-02',
+    model: 'speech-02-turbo',
     text: '你好，这是异步语音合成测试。',
     mode: 'start',
   },
@@ -48,15 +54,16 @@ const DEMO_PAYLOADS: Record<string, Record<string, unknown>> = {
     prompt: '一只橘色的猫在阳光下打盹，超写实风格',
   },
   'lyrics-gen': {
-    model: 'lyrics-01',
     prompt: '关于夏天的温暖记忆',
     genre: 'pop',
     style: 'warm',
   },
   'music-gen': {
-    model: 'music-01',
+    model: 'music-2.6',
     lyrics: '夏日晚风吹过田野\n我在旧路口等一场落日\n蝉声慢慢落进云里\n心事也变得安静',
-    instrumental: false,
+    prompt: '温柔、怀旧、民谣',
+    title: '夏日晚风',
+    confirm_quota: true,
   },
   'image-i2i': {
     model: 'image-01',
@@ -94,7 +101,6 @@ const REQUIRES_MODEL: Record<string, boolean> = {
   'tts-sync': true,
   'tts-async': true,
   'image-t2i': true,
-  'lyrics-gen': true,
   'music-gen': true,
   'image-i2i': true,
 }
@@ -147,30 +153,38 @@ export function buildDemoPayload(
 
 function _defaultModel(capId: string): string {
   const modelMap: Record<string, string> = {
-    'chat-openai': 'MiniMax-M3',
-    'chat-anthropic': 'MiniMax-M3',
+    'chat-openai': 'MiniMax-M2.7-highspeed',
+    'chat-anthropic': 'MiniMax-M2.7-highspeed',
     'chat-responses-create': 'MiniMax-M3',
     'chat-responses-tokens': 'MiniMax-M3',
-    'tts-sync': 'speech-02',
-    'tts-async': 'speech-02',
+    'tts-sync': 'speech-02-turbo',
+    'tts-async': 'speech-02-turbo',
     'image-t2i': 'image-01',
-    'lyrics-gen': 'lyrics-01',
-    'music-gen': 'music-01',
+    'music-gen': 'music-2.6',
     'image-i2i': 'image-01',
   }
   return modelMap[capId] ?? 'MiniMax-M3'
 }
 
 function buildFromTemplate(template: RunnerTemplate): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
+  // Collect defaults from form_schema first
+  const defaults: Record<string, unknown> = {}
+  const formSchema = template.form_schema
+  if (formSchema) {
+    for (const [key, field] of Object.entries(formSchema)) {
+      if (field.default !== undefined && field.default !== '') {
+        defaults[key] = field.default
+      }
+    }
+  }
 
-  // Start with payload_template
+  // Start with payload_template (may contain {var} placeholders)
+  let result: Record<string, unknown> = {}
   if (template.payload_template && typeof template.payload_template === 'object') {
-    Object.assign(result, template.payload_template)
+    result = resolveTemplateValue(template.payload_template, defaults) as Record<string, unknown>
   }
 
   // Fill in form schema defaults for missing fields
-  const formSchema = template.form_schema
   if (formSchema) {
     for (const [key, field] of Object.entries(formSchema)) {
       if (key in result) continue
@@ -186,4 +200,35 @@ function buildFromTemplate(template: RunnerTemplate): Record<string, unknown> {
   }
 
   return result
+}
+
+/**
+ * Recursively resolve {var} placeholders in a template using defaults map.
+ * - Exact match {var} → defaults[var] ?? original
+ * - Partial {var} inside string → defaults[var] ?? {var}
+ */
+function resolveTemplateValue(
+  val: unknown,
+  defaults: Record<string, unknown>,
+): unknown {
+  if (typeof val === 'string') {
+    const exact = val.match(/^\{(\w+)\}$/)
+    if (exact) return defaults[exact[1]] ?? val
+    return val.replace(/\{(\w+)\}/g, (_, k) => String(defaults[k] ?? `{${k}}`))
+  }
+
+  if (Array.isArray(val)) {
+    return val.map(item => resolveTemplateValue(item, defaults))
+  }
+
+  if (val && typeof val === 'object') {
+    return Object.fromEntries(
+      Object.entries(val as Record<string, unknown>).map(([k, v]) => [
+        k,
+        resolveTemplateValue(v, defaults),
+      ])
+    )
+  }
+
+  return val
 }

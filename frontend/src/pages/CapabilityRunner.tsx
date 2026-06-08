@@ -119,7 +119,7 @@ function extractTextResult(data: unknown): string {
 // Fields whose value is semantically an image URL — don't require extension check
 const STRONG_IMAGE_URL_FIELDS = new Set([
   'image_url', 'img_url', 'imageUrl', 'imageURL',
-  'file_url', 'download_url', 'image_file',
+  'image_file',
 ])
 
 const IMAGE_EXT_PATTERN = /\.(jpg|jpeg|png|webp|gif)(\?|\#|$)/i
@@ -148,7 +148,7 @@ function extractImageUrl(data: unknown): string {
     if (looksLikeImageUrl(u, 'image')) return u
   }
   // Recursive search in nested structures (only strong image URL fields — no extension check needed)
-  const found = findStringField(data, ['image_url', 'img_url', 'image_file', 'file_url', 'download_url', 'imageUrl', 'imageURL'], 0)
+  const found = findStringField(data, ['image_url', 'img_url', 'image_file', 'imageUrl', 'imageURL'], 0)
   if (found) return found
   // Check arrays
   const images = findStringArrayField(data, 'images', 0)
@@ -163,7 +163,7 @@ function extractImageUrl(data: unknown): string {
     for (const item of arr) {
       if (typeof item === 'object' && item !== null) {
         const itemObj = item as Record<string, unknown>
-        for (const urlKey of ['url', 'image_url', 'img_url', 'file_url', 'download_url']) {
+        for (const urlKey of ['url', 'image_url', 'img_url']) {
           if (typeof itemObj[urlKey] === 'string' && itemObj[urlKey]) {
             const u = itemObj[urlKey] as string
             if (looksLikeImageUrl(u, urlKey)) return u
@@ -1315,7 +1315,8 @@ function CapabilityCard({
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-2 text-xs text-sky-700 flex items-start gap-2">
             <span>📝</span>
             <div className="flex-1">
-              <span className="font-medium">检测到上次输入</span>
+              <span className="font-medium">轻量草稿保存</span>
+              <span className="text-slate-500 ml-1">（{new Date(sessionDraft.createdAt).toLocaleString('zh-CN')}）</span>
               <span className="text-slate-500 ml-1">（{new Date(sessionDraft.createdAt).toLocaleString('zh-CN')}）</span>
               {sessionDraft.resultSummary?.textPreview && (
                 <div className="mt-1 text-slate-600 truncate">

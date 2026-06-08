@@ -10,6 +10,11 @@
 6. music-gen lyrics 默认值不是空字符串
 7. TestConsole 中出现"恢复示例 payload"按钮文案
 8. 不出现"Token = 钱"这类错误文案
+9. demoPayload.ts 中不得出现 music-01（应为 music-2.6）
+10. demoPayload.ts 中不得出现 'speech-02' 作为完整模型名（应为 speech-02-turbo）
+11. buildFromTemplate 必须包含 resolveTemplateValue 或等效递归解析
+12. CapabilityRunner.tsx 的 STRONG_IMAGE_URL_FIELDS 不得包含 file_url/download_url
+13. Run Session 文案不得出现"完整恢复"之类表述
 """
 import json
 import os
@@ -157,6 +162,107 @@ def check_no_token_equals_money(errors: list[str], warnings: list[str]) -> None:
                         errors.append(f"[COPY] {fpath}: contains misleading 'Token = 钱' copy")
 
 
+def check_music_01_not_used(errors: list[str], warnings: list[str]) -> None:
+    """检查 demoPayload.ts 中不得出现 music-01（应为 music-2.6）"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    demo_path = os.path.join(base, "frontend/src/domain/demoPayload.ts")
+    if not os.path.exists(demo_path):
+        errors.append(f"[DEMO] demoPayload.ts not found")
+        return
+    with open(demo_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Check for 'music-01' as model name
+    if re.search(r"['\"]?model['\"]?\s*:\s*['\"]music-01['\"]", content):
+        errors.append("[DEMO] demoPayload.ts contains 'music-01' model name (should be music-2.6)")
+    # Also catch inline 'music-01' in payload
+    if "'music-01'" in content or '"music-01"' in content:
+        errors.append("[DEMO] demoPayload.ts contains 'music-01' (should be music-2.6)")
+
+
+def check_speech_02_not_used_as_full_model(errors: list[str], warnings: list[str]) -> None:
+    """检查 demoPayload.ts 中不得出现 'speech-02' 作为完整模型名（应为 speech-02-turbo）"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    demo_path = os.path.join(base, "frontend/src/domain/demoPayload.ts")
+    if not os.path.exists(demo_path):
+        return
+    with open(demo_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Check for 'speech-02' as model value (but not 'speech-02-turbo' or 'speech-02-hd')
+    # Match model: 'speech-02' but not speech-02-turbo
+    if re.search(r"model['\"]?\s*:\s*['\"]speech-02['\"]", content):
+        errors.append("[DEMO] demoPayload.ts contains 'speech-02' as full model name (should be speech-02-turbo)")
+
+
+def check_resolve_template_value_exists(errors: list[str], warnings: list[str]) -> None:
+    """检查 buildFromTemplate 必须包含 resolveTemplateValue 或等效递归解析"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    demo_path = os.path.join(base, "frontend/src/domain/demoPayload.ts")
+    if not os.path.exists(demo_path):
+        errors.append(f"[DEMO] demoPayload.ts not found")
+        return
+    with open(demo_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Must have a recursive resolver function
+    if 'resolveTemplateValue' not in content:
+        errors.append("[DEMO] buildFromTemplate must use resolveTemplateValue for recursive template resolution")
+    # buildFromTemplate must call it (not just define it)
+    idx = content.find('function buildFromTemplate')
+    if idx == -1:
+        errors.append("[DEMO] buildFromTemplate function not found")
+        return
+    snippet = content[idx:idx+1000]
+    if 'resolveTemplateValue' not in snippet and 'defaults' not in snippet:
+        errors.append("[DEMO] buildFromTemplate does not use resolveTemplateValue or defaults resolution")
+
+
+def check_strong_image_url_fields_no_file_url(errors: list[str], warnings: list[str]) -> None:
+    """检查 CapabilityRunner.tsx 的 STRONG_IMAGE_URL_FIELDS 不得包含 file_url/download_url"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(base, "frontend/src/pages/CapabilityRunner.tsx")
+    if not os.path.exists(path):
+        errors.append(f"[UI] CapabilityRunner.tsx not found")
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Find STRONG_IMAGE_URL_FIELDS definition
+    match = re.search(r'STRONG_IMAGE_URL_FIELDS\s*=\s*new\s+Set\(\s*\[(.*?)\]', content, re.DOTALL)
+    if match:
+        fields_str = match.group(1)
+        if 'file_url' in fields_str or 'download_url' in fields_str:
+            errors.append("[UI] CapabilityRunner.tsx STRONG_IMAGE_URL_FIELDS contains file_url or download_url (should not force-image these)")
+
+
+def check_no_full_restore_copy(errors: list[str], warnings: list[str]) -> None:
+    """检查 Run Session 文案不得出现"完整恢复"之类表述"""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    dirs_to_check = [
+        os.path.join(base, "frontend/src/components"),
+        os.path.join(base, "frontend/src/pages"),
+        os.path.join(base, "frontend/src/domain"),
+    ]
+    bad_patterns = [
+        (r"完整恢复", "完整恢复"),
+        (r"完整结果已恢复", "完整结果已恢复"),
+        (r"可继续完整链式", "可继续完整链式"),
+    ]
+    for d in dirs_to_check:
+        if not os.path.exists(d):
+            continue
+        for root, _, files in os.walk(d):
+            for fname in files:
+                if not fname.endswith(('.ts', '.tsx')):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except Exception:
+                    continue
+                for pattern, label in bad_patterns:
+                    if re.search(pattern, content):
+                        errors.append(f"[COPY] {fpath}: contains misleading full-restore copy '{label}'")
+
+
 def check_testconsole_reset_button(errors: list[str], warnings: list[str]) -> None:
     """检查 TestConsole 有"恢复示例 payload"按钮文案"""
     base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -184,6 +290,11 @@ def main():
     check_music_gen_lyrics_not_empty(errors, warnings)
     check_testconsole_reset_button(errors, warnings)
     check_no_token_equals_money(errors, warnings)
+    check_music_01_not_used(errors, warnings)
+    check_speech_02_not_used_as_full_model(errors, warnings)
+    check_resolve_template_value_exists(errors, warnings)
+    check_strong_image_url_fields_no_file_url(errors, warnings)
+    check_no_full_restore_copy(errors, warnings)
 
     if errors:
         print(f"[FAILED] {len(errors)} error(s):")
